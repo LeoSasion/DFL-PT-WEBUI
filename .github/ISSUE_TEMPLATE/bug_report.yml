@@ -1,0 +1,43 @@
+name: 安装或运行问题
+description: 报告预览版中可以复现的安装、启动或功能错误。
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: 版本与安装方式
+      placeholder: 0.1.0-preview / 源码或便携包
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 运行环境
+      description: Windows、显卡/驱动、设备、Python/Node版本；不确定的字段可写未知。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 重现步骤
+      description: 从打开程序开始，列出能够触发问题的最少步骤。
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: 预期与实际行为
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志或校验错误
+      description: 粘贴错误附近的日志；移除私人材料、路径和凭据，无需附整个模型。
+      render: text
+  - type: textarea
+    id: extra
+    attributes:
+      label: 其他信息
+      description: 训练参数、迭代、是否能够保存/停止/恢复，或可以公开的最小示例。

@@ -1,0 +1,39 @@
+.me-training-fields { display: grid; min-width: 0; gap: 12px; margin-top: 16px; }
+.me-training-fields .wizard-field { min-width: 0; font-size: 12px; }
+.me-training-fields .wizard-field input:disabled,
+.me-training-fields .wizard-field select:disabled { color: var(--text-soft); opacity: .7; cursor: not-allowed; }
+.me-training-fields .wizard-toggle.is-disabled { cursor: not-allowed; background: var(--surface); }
+.me-training-fields .wizard-toggle.is-disabled input { cursor: not-allowed; }
+.me-training-fields .wizard-toggle strong { font-size: 12px; }
+.me-presets { display: grid; gap: 8px; }
+.me-presets > span { font-size: 12px; color: var(--text-soft); }
+.me-presets > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.me-presets .button { min-height: 32px; padding: 6px 10px; font-size: 12px; }
+.me-presets > small { color: var(--muted); line-height: 1.6; }
+.me-config-notices { display: grid; gap: 8px; }
+.me-config-notices:empty { display: none; }
+.me-config-note { margin: 0; padding: 10px 12px; border-left: 2px solid var(--border-strong); background: var(--surface-2); color: var(--text-soft); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.me-config-note.is-warning { border-color: var(--amber); color: var(--amber); }
+.me-basic-fields { margin-block: 4px; }
+.me-config-group { min-width: 0; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+.me-config-group > summary { display: flex; align-items: center; gap: 8px; padding: 12px; list-style: none; }
+.me-config-group > summary::-webkit-details-marker { display: none; }
+.me-config-group > summary::before { content: "+"; width: 12px; flex: 0 0 12px; color: var(--green); text-align: center; }
+.me-config-group[open] > summary::before { content: "−"; }
+.me-config-group > summary strong { font-size: 12px; font-weight: 600; }
+.me-config-group > summary span { margin-left: auto; color: var(--muted); font-size: 11px; }
+.me-config-group > p { margin: 0; padding: 0 12px 12px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.me-config-group > .wizard-form-grid { padding: 0 12px 12px; }
+.me-change-summary { padding: 12px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface-highlight); }
+.me-change-summary > strong { color: var(--text); font-size: 12px; }
+.me-change-summary dl { display: grid; gap: 6px; margin: 10px 0 4px; }
+.me-change-summary dl > div { display: flex; justify-content: space-between; gap: 12px; color: var(--text-soft); font-size: 12px; }
+.me-change-summary dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+.me-change-summary dt { min-width: 0; }
+@media (max-width: 700px) {
+  .me-training-fields .wizard-form-grid { grid-template-columns: minmax(0, 1fr); }
+  .me-presets > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .me-presets .button { width: 100%; }
+  .me-change-summary dl > div { flex-wrap: wrap; }
+  .me-change-summary dd { text-align: left; }
+}

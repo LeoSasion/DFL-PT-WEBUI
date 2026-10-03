@@ -1,0 +1,10 @@
+{
+  "lr": 1e-05,
+  "random_warp": false,
+  "eyes_prio": true,
+  "mouth_prio": true,
+  "gan_power": 0.1,
+  "optimizer_on_cpu": false,
+  "lr_dropout": "cpu",
+  "retraining_samples": true
+}

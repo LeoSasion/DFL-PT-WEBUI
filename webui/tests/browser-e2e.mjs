@@ -1,0 +1,191 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { chromium } from "playwright";
+
+const origin = process.env.DFL_WEBUI_ORIGIN ?? "http://127.0.0.1:4173";
+const browserChannel = process.env.DFL_E2E_BROWSER_CHANNEL;
+const mutating = process.env.DFL_E2E_MUTATING === "1";
+const modelName = process.env.DFL_E2E_MODEL_NAME ?? "web-smoke-128";
+const appUrl = new URL(origin);
+appUrl.searchParams.set("lang", "zh");
+
+async function launch() {
+  if (browserChannel) {
+    return chromium.launch({ headless: true, channel: browserChannel });
+  }
+
+  try {
+    return await chromium.launch({ headless: true });
+  } catch (error) {
+    if (!String(error?.message).includes("Executable doesn't exist")) throw error;
+  }
+
+  for (const channel of ["chrome", "msedge"]) {
+    try {
+      return await chromium.launch({ headless: true, channel });
+    } catch {
+      // Continue to the next installed system browser.
+    }
+  }
+
+  throw new Error(
+    "未找到 Playwright Chromium、Chrome 或 Edge；请运行 pnpm exec playwright install chromium",
+  );
+}
+
+async function openApp(browser) {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
+  await page.goto(appUrl.href, { waitUntil: "domcontentloaded" });
+  await page.getByText("本地服务在线", { exact: true }).waitFor({ timeout: 15000 });
+  return { context, page };
+}
+
+test("DFL-PT-WEBUI browser E2E", { timeout: 240000 }, async (suite) => {
+  const browser = await launch();
+  suite.after(() => browser.close());
+
+  await suite.test("刷新、参数向导、工作区与遥测", async () => {
+    const { context, page } = await openApp(browser);
+    try {
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.getByText("本地服务在线", { exact: true }).waitFor();
+      assert.equal(await page.title(), "DFL-PT-WEBUI 管理台");
+
+      await page.getByRole("button", { name: "新建任务", exact: true }).first().click();
+      await page.getByRole("combobox", { name: "任务类型" }).selectOption("src.extract_faces");
+      await page.getByRole("button", { name: "下一步", exact: true }).click();
+      await page.getByRole("combobox", { name: "人脸图片尺寸" }).selectOption("128");
+      await page.getByRole("button", { name: "下一步", exact: true }).click();
+      await page.getByText("前置检查通过", { exact: true }).waitFor();
+      assert.equal(await page.getByRole("button", { name: "启动任务", exact: true }).isEnabled(), true);
+      await page.getByRole("button", { name: "关闭", exact: true }).click();
+
+      await page.getByRole("button", { name: "工作区", exact: true }).click();
+      await page.getByRole("heading", { name: "工作区管理", exact: true }).waitFor();
+      await page.getByText("SRC 源视频", { exact: true }).waitFor();
+      await page.getByText("DST 目标视频", { exact: true }).waitFor();
+      assert.ok((await page.locator(".gpu-summary strong").textContent()).includes("NVIDIA"));
+    } finally {
+      await context.close();
+    }
+  });
+
+  await suite.test("断线后轮询恢复", async () => {
+    const { context, page } = await openApp(browser);
+    let failNextHealth = true;
+    try {
+      await page.route("**/api/health", async (route) => {
+        if (failNextHealth) {
+          failNextHealth = false;
+          await route.fulfill({
+            status: 503,
+            contentType: "application/json",
+            body: JSON.stringify({
+              ok: false,
+              error: { code: "E2E_DISCONNECT", message: "模拟 Runtime 重启" },
+            }),
+          });
+          return;
+        }
+        await route.continue();
+      });
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.getByText("本地服务离线", { exact: true }).first().waitFor({ timeout: 10000 });
+      await page.getByText("本地服务在线", { exact: true }).waitFor({ timeout: 12000 });
+    } finally {
+      await context.close();
+    }
+  });
+
+  await suite.test("SRC / DST 姿态对比保留单库审查", async () => {
+    const { context, page } = await openApp(browser);
+    try {
+      await page.getByRole("button", { name: "工具", exact: true }).click();
+      await page.getByRole("button", { name: "姿态图谱", exact: true }).click();
+      const compare = page.getByRole("button", { name: "对比", exact: true });
+      await compare.waitFor({ state: "visible", timeout: 120000 });
+      assert.equal(await compare.getAttribute("aria-pressed"), "true");
+      await page.getByText("SRC / DST 姿态占比差", { exact: true }).waitFor();
+      await page.getByText("姿态匹配", { exact: true }).waitFor();
+
+      await page.getByRole("button", { name: "SRC", exact: true }).click();
+      await page.getByText("SRC · 左右角 Yaw", { exact: true }).waitFor();
+      await page.getByRole("button", { name: "清晰度", exact: true }).click();
+      assert.equal(
+        await page.getByRole("button", { name: "清晰度", exact: true }).getAttribute("aria-pressed"),
+        "true",
+      );
+    } finally {
+      await context.close();
+    }
+  });
+
+  await suite.test("重复选择当前人脸保留预览与未保存的 XSeg 标注", async (t) => {
+    const { context, page } = await openApp(browser);
+    try {
+      await page.getByRole("button", { name: "SRC 数据", exact: true }).click();
+      await page.getByRole("heading", { name: "SRC 数据集", exact: true }).waitFor();
+      const first = page.locator(".asset-thumbnail.is-active").first();
+      if (!await first.count()) {
+        await page.locator(".asset-thumbnail.is-active, .asset-browser-empty").first().waitFor();
+        if (!await first.count()) return t.skip("requires an aligned SRC image");
+      }
+      await page.locator(".asset-preview-canvas").waitFor();
+      await first.click();
+      await page.locator(".asset-preview-canvas").waitFor();
+      assert.equal(await page.locator(".asset-detail-loading").count(), 0);
+
+      await page.getByRole("button", { name: "XSeg 编辑", exact: true }).click();
+      const canvas = page.locator(".annotation-canvas");
+      await canvas.waitFor();
+      const annotation = await canvas.getAttribute("aria-label");
+      const box = await canvas.boundingBox();
+      await canvas.click({ position: { x: box.width / 2, y: box.height / 2 } });
+      await page.getByText("1 点待闭合", { exact: true }).waitFor();
+      let askedToDiscard = false;
+      page.on("dialog", async dialog => { askedToDiscard = true; await dialog.dismiss(); });
+      await page.locator(".asset-thumbnail.is-active").click();
+      assert.equal(await canvas.getAttribute("aria-label"), annotation);
+      await page.getByText("1 点待闭合", { exact: true }).waitFor();
+      assert.equal(askedToDiscard, false);
+      // The draft remains in memory only; closing this context never writes JPG.
+    } finally { await context.close(); }
+  });
+
+  await suite.test("ME 模型创建、实时预览与保存式停止", { skip: !mutating }, async () => {
+    const { context, page } = await openApp(browser);
+    try {
+      await page.getByRole("button", { name: "新建任务", exact: true }).first().click();
+      await page.getByRole("combobox", { name: "任务类型" }).selectOption("train.me");
+      await page.getByRole("button", { name: "下一步", exact: true }).click();
+      const picker = page.getByRole("combobox", { name: "使用模型" });
+      const existing = await picker.locator("option").evaluateAll((options, name) => options.some(option => option.value === name), modelName);
+      await picker.selectOption(existing ? modelName : "__new__");
+      if (!existing) {
+        await page.getByRole("textbox", { name: "新模型名称" }).fill(modelName);
+        await page.getByRole("combobox", { name: "模型分辨率" }).selectOption("64");
+        await page.getByRole("spinbutton", { name: "Batch size" }).fill("1");
+      }
+      await page.getByRole("spinbutton", { name: "进度估算目标" }).fill("1100");
+      await page.getByRole("combobox", { name: "运行设备" }).selectOption(process.env.DFL_E2E_DEVICE ?? "cpu");
+      assert.equal(await page.getByRole("button", { name: "保留 CLI 问答", exact: true }).isEnabled(), false);
+      await page.getByRole("button", { name: "下一步", exact: true }).click();
+      await page.getByText("前置检查通过", { exact: true }).waitFor();
+      await page.getByRole("button", { name: "启动任务", exact: true }).click();
+      await page.getByRole("button", { name: "总览", exact: true }).click();
+      const trainingPanel = page.locator(".training-panel");
+      await trainingPanel.locator(".status-pill").filter({ hasText: /^\s*运行中\s*$/ }).waitFor({ timeout: 60000 });
+      await trainingPanel.getByRole("img", { name: "ME 最新训练预览" }).waitFor({ timeout: 60000 });
+      await trainingPanel.getByRole("button", { name: "安全停止", exact: true }).click();
+      await page.getByRole("button", { name: "确认安全停止", exact: true }).click();
+      await trainingPanel.locator(".status-pill").filter({ hasText: /^\s*已安全停止\s*$/ }).waitFor({ timeout: 90000 });
+      const collapsedConsole = page.locator(".runtime-console.is-collapsed .console-title-button");
+      if (await collapsedConsole.count()) await collapsedConsole.click();
+      await page.getByRole("tab", { name: /ME.*已安全停止/ }).first().click();
+      assert.match(await page.getByLabel("任务终端输出").innerText(), /任务结束 · cancelled · exit 0/);
+    } finally {
+      await context.close();
+    }
+  });
+});

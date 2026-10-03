@@ -1,0 +1,16 @@
+{
+  "archi": "df-ud",
+  "resolution": 64,
+  "ae_dims": 32,
+  "e_dims": 16,
+  "d_dims": 16,
+  "d_mask_dims": 16,
+  "batch_size": 2,
+  "use_rg": true,
+  "use_fp16": true,
+  "optimizer_on_cpu": true,
+  "gan_power": 0.1,
+  "gan_dims": 4,
+  "gan_patch_size": 8,
+  "true_face_power": 0.1
+}

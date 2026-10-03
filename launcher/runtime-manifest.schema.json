@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DFL-PT-WEBUI local runtime manifest",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "manifestVersion",
+    "components"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 3
+    },
+    "manifestVersion": {
+      "type": "string"
+    },
+    "components": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "required",
+          "install",
+          "validation"
+        ],
+        "properties": {
+          "id": {
+            "enum": [
+              "node",
+              "python",
+              "ffmpeg"
+            ]
+          },
+          "required": {
+            "const": true
+          },
+          "available": {
+            "const": false
+          },
+          "install": {
+            "type": "object",
+            "required": [
+              "relativePath",
+              "layout"
+            ],
+            "properties": {
+              "relativePath": {
+                "enum": [
+                  "_internal/node",
+                  ".venv",
+                  "_internal/ffmpeg"
+                ]
+              },
+              "layout": {
+                "const": "local"
+              }
+            }
+          },
+          "validation": {
+            "type": "object",
+            "required": [
+              "files"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

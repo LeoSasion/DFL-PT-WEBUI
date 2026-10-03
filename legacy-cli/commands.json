@@ -1,0 +1,262 @@
+[
+  {
+    "category": 1,
+    "title": "剪切视频（将视频拖拽到本文件） / cut video (drop video on me)",
+    "file": "1.1)--- 剪切视频（将视频拖拽到本文件）----------- cut video (drop video on me).bat"
+  },
+  {
+    "category": 1,
+    "title": "提取 DST 视频图片帧 / extract images from video data_dst FULL FPS",
+    "file": "1.2)--- 提取 DST 视频图片帧 ------------------------ extract images from video data_dst FULL FPS.bat"
+  },
+  {
+    "category": 1,
+    "title": "提取 SRC 视频图片帧 / extract images from video data_src",
+    "file": "1.2)--- 提取 SRC 视频图片帧 ------------------------ extract images from video data_src.bat"
+  },
+  {
+    "category": 1,
+    "title": "降噪 data_dst 图片帧（可选） / denoise data_dst images",
+    "file": "1.3)--- 降噪 data_dst 图片帧（可选） ------------- denoise data_dst images.bat"
+  },
+  {
+    "category": 2,
+    "title": "切脸 data_src 手动 / data_src faceset extract MANUAL",
+    "file": "2.1)--- 切脸 data_src 手动 ------------------------- data_src faceset extract MANUAL.bat"
+  },
+  {
+    "category": 2,
+    "title": "切脸 data_src 自动 / data_src faceset extract",
+    "file": "2.1)--- 切脸 data_src 自动 ------------------------- data_src faceset extract.bat"
+  },
+  {
+    "category": 2,
+    "title": "SRC-aligned 预览 / data_src view aligned result",
+    "file": "2.2)--- SRC-aligned 预览 -------------------------- data_src view aligned result.bat"
+  },
+  {
+    "category": 2,
+    "title": "SRC-aligned 检查错误 / data_src add landmarks debug images",
+    "file": "2.3)--- SRC-aligned 检查错误 --------------------- data_src add landmarks debug images.bat"
+  },
+  {
+    "category": 2,
+    "title": "SRC-aligned 缩放尺寸 / data_src util faceset resize",
+    "file": "2.3)--- SRC-aligned 缩放尺寸 --------------------- data_src util faceset resize.bat"
+  },
+  {
+    "category": 2,
+    "title": "SRC-aligned 排序 / data_src sort",
+    "file": "2.4)--- SRC-aligned 排序 -------------------------- data_src sort.bat"
+  },
+  {
+    "category": 2,
+    "title": "SRC-aligned 打包 / data_src util faceset pack",
+    "file": "2.5)--- SRC-aligned 打包 -------------------------- data_src util faceset pack.bat"
+  },
+  {
+    "category": 2,
+    "title": "SRC-aligned 解包 / data_src util faceset unpack",
+    "file": "2.5)--- SRC-aligned 解包 -------------------------- data_src util faceset unpack.bat"
+  },
+  {
+    "category": 2,
+    "title": "SRC-aligned 高清修复 / data_src util faceset enhance",
+    "file": "2.6)--- SRC-aligned 高清修复 --------------------- data_src util faceset enhance.bat"
+  },
+  {
+    "category": 2,
+    "title": "SRC-aligned 文件名恢复 / data_src util recover original filename",
+    "file": "2.6)--- SRC-aligned 文件名恢复 ------------------- data_src util recover original filename.bat"
+  },
+  {
+    "category": 2,
+    "title": "SRC-aligned 数据保存 / data_src util faceset metadata save",
+    "file": "2.7)--- SRC-aligned 数据保存 --------------------- data_src util faceset metadata save.bat"
+  },
+  {
+    "category": 2,
+    "title": "SRC-aligned 数据恢复 / data_src util faceset metadata restore",
+    "file": "2.7)--- SRC-aligned 数据恢复 --------------------- data_src util faceset metadata restore.bat"
+  },
+  {
+    "category": 3,
+    "title": "切脸 data_dst 半自动 / data_dst faceset extract + manual fix",
+    "file": "3.1)--- 切脸 data_dst 半自动 ---------------------- data_dst faceset extract + manual fix.bat"
+  },
+  {
+    "category": 3,
+    "title": "切脸 data_dst 手动 / data_dst faceset extract MANUAL",
+    "file": "3.1)--- 切脸 data_dst 手动 ------------------------- data_dst faceset extract MANUAL.bat"
+  },
+  {
+    "category": 3,
+    "title": "切脸 data_dst 自动 / data_dst faceset extract",
+    "file": "3.1)--- 切脸 data_dst 自动 ------------------------- data_dst faceset extract.bat"
+  },
+  {
+    "category": 3,
+    "title": "提取 aligned_debug 删掉的人脸 / data_dst faceset MANUAL RE-EXTRACT DELETED ALIGNED_DEBUG",
+    "file": "3.1)--- 提取 aligned_debug 删掉的人脸 ---------- data_dst faceset MANUAL RE-EXTRACT DELETED ALIGNED_DEBUG.bat"
+  },
+  {
+    "category": 3,
+    "title": "DST-aligned 预览 / data_dst view aligned results",
+    "file": "3.2)--- DST-aligned 预览 -------------------------- data_dst view aligned results.bat"
+  },
+  {
+    "category": 3,
+    "title": "DST-aligned 检查错误 / data_dst add landmarks debug images",
+    "file": "3.3)--- DST-aligned 检查错误 --------------------- data_dst add landmarks debug images.bat"
+  },
+  {
+    "category": 3,
+    "title": "DST-aligned 缩放尺寸 / data_dst util faceset resize",
+    "file": "3.3)--- DST-aligned 缩放尺寸 --------------------- data_dst util faceset resize.bat"
+  },
+  {
+    "category": 3,
+    "title": "DST-aligned 排序 / data_dst sort",
+    "file": "3.4)--- DST-aligned 排序 -------------------------- data_dst sort.bat"
+  },
+  {
+    "category": 3,
+    "title": "DST-aligned 打包 / data_dst util faceset pack",
+    "file": "3.5)--- DST-aligned 打包 -------------------------- data_dst util faceset pack.bat"
+  },
+  {
+    "category": 3,
+    "title": "DST-aligned 解包 / data_dst util faceset unpack",
+    "file": "3.5)--- DST-aligned 解包 -------------------------- data_dst util faceset unpack.bat"
+  },
+  {
+    "category": 3,
+    "title": "DST-aligned 文件名恢复 / data_dst util recover original filename",
+    "file": "3.6)--- DST-aligned 文件名恢复 ------------------- data_dst util recover original filename.bat"
+  },
+  {
+    "category": 4,
+    "title": "DST-aligned 画遮罩 / data_dst mask - edit",
+    "file": "4.1)--- DST-aligned 画遮罩 ----------------------- data_dst mask - edit.bat"
+  },
+  {
+    "category": 4,
+    "title": "SRC-aligned 画遮罩 / data_src mask - edit",
+    "file": "4.1)--- SRC-aligned 画遮罩 ----------------------- data_src mask - edit.bat"
+  },
+  {
+    "category": 4,
+    "title": "SRC+DST 训练遮罩模型 / train Xseg",
+    "file": "4.2)--- SRC+DST 训练遮罩模型 -------------------- train Xseg.bat"
+  },
+  {
+    "category": 4,
+    "title": "DST-aligned 使用内置遮罩 / data_dst whole_face mask - apply",
+    "file": "4.3)--- DST-aligned 使用内置遮罩 ---------------- data_dst whole_face mask - apply.bat"
+  },
+  {
+    "category": 4,
+    "title": "DST-aligned 应用自定遮罩 / data_dst trained mask - apply",
+    "file": "4.3)--- DST-aligned 应用自定遮罩 ---------------- data_dst trained mask - apply.bat"
+  },
+  {
+    "category": 4,
+    "title": "SRC-aligned 使用内置遮罩 / data_src whole_face mask - apply",
+    "file": "4.3)--- SRC-aligned 使用内置遮罩 ---------------- data_src whole_face mask - apply.bat"
+  },
+  {
+    "category": 4,
+    "title": "SRC-aligned 应用自定遮罩 / data_src trained mask - apply",
+    "file": "4.3)--- SRC-aligned 应用自定遮罩 ---------------- data_src trained mask - apply.bat"
+  },
+  {
+    "category": 4,
+    "title": "DST-aligned 移除手绘 / data_dst mask - remove",
+    "file": "4.4)--- DST-aligned 移除手绘 --------------------- data_dst mask - remove.bat"
+  },
+  {
+    "category": 4,
+    "title": "DST-aligned 移除遮罩 / data_dst trained mask - remove",
+    "file": "4.4)--- DST-aligned 移除遮罩 --------------------- data_dst trained mask - remove.bat"
+  },
+  {
+    "category": 4,
+    "title": "SRC-aligned 移除手绘 / data_src mask - remove",
+    "file": "4.4)--- SRC-aligned 移除手绘 --------------------- data_src mask - remove.bat"
+  },
+  {
+    "category": 4,
+    "title": "SRC-aligned 移除遮罩 / data_src trained mask - remove",
+    "file": "4.4)--- SRC-aligned 移除遮罩 --------------------- data_src trained mask - remove.bat"
+  },
+  {
+    "category": 4,
+    "title": "DST-aligned 遮罩提取 / data_dst mask - fetch",
+    "file": "4.5)--- DST-aligned 遮罩提取 --------------------- data_dst mask - fetch.bat"
+  },
+  {
+    "category": 4,
+    "title": "SRC-aligned 遮罩提取 / data_src mask - fetch",
+    "file": "4.5)--- SRC-aligned 遮罩提取 --------------------- data_src mask - fetch.bat"
+  },
+  {
+    "category": 5,
+    "title": "训练 ME 模型 / train ME",
+    "file": "5.2)--- 训练 ME 模型 ------------------------------- train ME.bat"
+  },
+  {
+    "category": 6,
+    "title": "导出 ME 直播模型 / export ME as dfm",
+    "file": "6.1)--- 导出 ME 直播模型 -------------------------- export ME as dfm.bat"
+  },
+  {
+    "category": 6,
+    "title": "模型 ME 合成人脸 / merge ME",
+    "file": "6.2)--- 模型 ME 合成人脸 -------------------------- merge ME.bat"
+  },
+  {
+    "category": 7,
+    "title": "合成 MP4 视频 / merged to mp4",
+    "file": "7.1)--- 合成 MP4 视频 ----------------------------- merged to mp4.bat"
+  },
+  {
+    "category": 7,
+    "title": "合成 MP4 无损视频 / merged to mp4 lossless",
+    "file": "7.1)--- 合成 MP4 无损视频 ------------------------- merged to mp4 lossless.bat"
+  },
+  {
+    "category": 7,
+    "title": "合成 AVI 视频 / merged to avi",
+    "file": "7.2)--- 合成 AVI 视频 ------------------------------ merged to avi.bat"
+  },
+  {
+    "category": 7,
+    "title": "合成 MOV 无损视频 / merged to mov lossless",
+    "file": "7.2)--- 合成 MOV 无损视频 ----------------------- merged to mov lossless.bat"
+  },
+  {
+    "category": 8,
+    "title": "Landmarks自动识错 / Landmarks auto check",
+    "file": "8.1)--- Landmarks自动识错 ------------------------ Landmarks auto check.bat"
+  },
+  {
+    "category": 8,
+    "title": "VisiPics 查重 / VisiPics",
+    "file": "8.1)--- VisiPics 查重 --------------------------- VisiPics.bat"
+  },
+  {
+    "category": 8,
+    "title": "启动EBS / start EBSynth",
+    "file": "8.2)--- 启动EBS ------------------------------------- start EBSynth.bat"
+  },
+  {
+    "category": 8,
+    "title": "Aligned 角度分布 / aligned tools by marsmana1",
+    "file": "8.3)--- Aligned 角度分布 --------------------------- aligned tools by marsmana1.bat"
+  },
+  {
+    "category": 8,
+    "title": "Aligned 角度整理 / aligned tools by yangala",
+    "file": "8.3)--- Aligned 角度整理 --------------------------- aligned tools by yangala.bat"
+  }
+]
