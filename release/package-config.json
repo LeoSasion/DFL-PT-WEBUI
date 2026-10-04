@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "genericXSegManifest": "release/generic-xseg.json",
-  "sourceExclude": ["webui/.openai/hosting.json", "launcher/ui/.openai/hosting.json"],
+  "sourceExclude": ["webui/.openai/hosting.json", "launcher/ui/.openai/hosting.json", "webui/.runtime/**"],
   "portableExclude": [
     "**/tests/**", "**/test/**", "**/.openai/**", "requirements-test.txt",
     "webui/design/**", "webui/design-qa.md", "launcher/design/**",
@@ -20,6 +20,7 @@
     {"source": "launcher/vendor/webview2/1.0.4129.50/NOTICE.txt", "target": "THIRD-PARTY-LICENSES/WebView2/NOTICE.txt"}
   ],
   "runtimeExclude": [
+    "webui/.runtime/**",
     "**/__pycache__/**", "**/.pytest_cache/**", "**/.cache/**", "**/.npm/**", "**/.pnpm-store/**",
     "**/tests/**", "**/test/**", "**/examples/**", "**/.github/**",
     "**/*.pyc", "**/*.pyo", "**/*.log", "**/*.tmp", ".venv/Lib/site-packages/*.whl", "**/*.test.js", "**/*.test.js.map",
