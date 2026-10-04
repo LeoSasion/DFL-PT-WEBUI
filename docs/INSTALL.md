@@ -1,18 +1,18 @@
 # Windows 安装与首次启动
 
-0.1.0-preview 提供源码安装和 Windows x64 便携包。运行环境固定 Python 3.12.14、PyTorch 2.9.1 + CUDA 12.8、Node.js 24.19.0；驱动由系统提供，CUDA/cuDNN 随 PyTorch wheel 提供，不需要安装旧 TensorFlow/CUDA 11 环境。
+0.1.1-preview 提供源码安装和 Windows x64 便携包。运行环境固定 Python 3.12.14、PyTorch 2.9.1 + CUDA 12.8、Node.js 24.19.0；驱动由系统提供，CUDA/cuDNN 随 PyTorch wheel 提供，不需要安装旧 TensorFlow/CUDA 11 环境。
 
 建议安装到独立目录，例如 `C:\DFL-PT-WEBUI`，保留足够空间容纳下载、解压和 PyTorch 依赖。个人视频、aligned、模型和任务状态在本机项目工作区创建，发行包不提供这些材料。
 
 ## 方式一：便携包
 
-从 [发行页](https://github.com/LeoSasion/DFL-PT-WEBUI/releases/tag/v0.1.0-preview) 下载便携包的全部 `.zip.partNNN`、对应 `.archive.json`、`.manifest.json`、`SHA256SUMS` 和 `restore-release.ps1`，放在同一目录。小于分卷阈值的版本会提供单个 `.zip`，恢复脚本同样适用。
+从 [发行页](https://github.com/LeoSasion/DFL-PT-WEBUI/releases/tag/v0.1.1-preview) 下载便携包的全部 `.zip.partNNN`、对应 `.archive.json`、`.manifest.json`、`SHA256SUMS` 和 `restore-release.ps1`，放在同一目录。小于分卷阈值的版本会提供单个 `.zip`，恢复脚本同样适用。
 
 在下载目录打开 PowerShell：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\restore-release.ps1 `
-  -ArchiveIndex .\DFL-PT-WEBUI-0.1.0-preview-portable.archive.json `
+  -ArchiveIndex .\DFL-PT-WEBUI-0.1.1-preview-portable.archive.json `
   -Destination .\unpacked
 ```
 
@@ -34,7 +34,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File launcher\install-source.ps1
 
 源码安装需要访问 GitHub、Node.js、PyTorch wheel index 和 Python/Node 包仓库。如果 node-pty 在当前环境不能使用预构建原生模块，npm 的构建错误可能要求 Microsoft C++ Build Tools；将完整安装日志和 Node/Windows 版本附在反馈中。使用便携包可复用本次附带的原生模块。
 
-专用参数、离线 archive/wheelhouse 放置方法与 `-SkipVisionAssets` 的影响见 [运行环境说明](../launcher/runtime-README.md)。没有辅助权重时，人脸提取、增强和人物分组可能不可用；通用预训练 XSeg 权重未附带，可以自行训练兼容的 XSeg。
+专用参数、离线 archive/wheelhouse 放置方法与 `-SkipVisionAssets` 的影响见 [运行环境说明](../launcher/runtime-README.md)。通用 XSeg 推理权重、WF 元数据及来源许可已随两类发行包提供，无需另外下载发行页的同名权重资产；Git 克隆安装会获取相同的固定权重。若主动跳过其他辅助材料，人脸提取、增强和人物分组可能不可用。
 
 ## 启动和使用
 

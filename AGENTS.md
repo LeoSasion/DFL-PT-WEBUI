@@ -15,6 +15,13 @@ directories are reference sources only; all implementation belongs here.
   `_internal/python_base`; Node and FFmpeg are project-local runtimes.
 - User media and model checkpoints stay in ignored `workspace`/`workspaces`.
 - Reach for CodeGraph before code search only when `.codegraph` exists.
+- Ship the verified generic XSeg inference weights in both source and portable
+  release archives, with pinned hashes and original source/license records.
+  Never substitute random or locally trained QA checkpoints.
+- Prefer native WebUI aligned viewing and similarity review over installing
+  XnViewMP or VisiPics. Keep the first-500 similarity limit visible. EbSynth
+  temporal keyframe propagation is a future native capability candidate;
+  do not add an external installer flow for these tools.
 - Validate actual training, saving, stopping, resuming and prediction when
   changing the ME bridge, using the bounded development scope below.
   Backend/frontend unit tests alone do not prove integration.

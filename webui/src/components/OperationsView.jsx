@@ -1600,8 +1600,8 @@ export function SettingsView({ health, jobs, onRetry, onError, onNotice, onSwitc
       <section className="deferred-section">
         <IconX size={18} />
         <div>
-          <strong>{t("本轮明确不接入")}</strong>
-          <p>{t("独立闭源 EXE、EBSynth 与第三方角度工具保持外部运行；不会在 Web 中伪造控制或状态。")}</p>
+          <strong>{t("WebUI 替代与待补能力")}</strong>
+          <p>{t("aligned 浏览与日常相似图审查优先使用 WebUI，相似组每次仅预检前 500 张。EbSynth 的关键帧结果传播尚未实现，列为后续原生功能候选；已有外部程序可选配置。")}</p>
         </div>
       </section>
     </section>

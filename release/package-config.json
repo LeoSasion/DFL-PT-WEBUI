@@ -1,5 +1,6 @@
 {
   "schemaVersion": 1,
+  "genericXSegManifest": "release/generic-xseg.json",
   "sourceExclude": ["webui/.openai/hosting.json", "launcher/ui/.openai/hosting.json"],
   "portableExclude": [
     "**/tests/**", "**/test/**", "**/.openai/**", "requirements-test.txt",

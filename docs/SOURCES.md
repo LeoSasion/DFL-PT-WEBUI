@@ -14,6 +14,7 @@ Node、Python、PyTorch、FFmpeg 和第三方 Python/JavaScript 包适用各自�
 | 资产 | 固定公开来源与说明 |
 |---|---|
 | S3FD、2DFAN、3DFAN、FaceEnhancer | [iperov/DeepFaceLab 的固定提交](https://github.com/iperov/DeepFaceLab/tree/e4b7543ffa1d73b26fce1e31852727f658ba490c/facelib)。该提交根目录附 GPL-3.0，未发现这四份权重的单独许可证；发布保留原始文件、项目 GPL 和本来源记录。 |
+| 通用 XSeg | [iperov 固定 README](https://github.com/iperov/DeepFaceLab/blob/e4b7543ffa1d73b26fce1e31852727f658ba490c/README.md) 链接的 [官方 Mega 目录](https://mega.nz/folder/Po0nGQrA#dbbttiNWojCt8jzD4xYaPw)中 `DeepFaceLab_DirectX12_build_05_04_2022.exe` 的 `_internal/model_generic_xseg/XSeg_256.npy`，WF、584205 次迭代。官方包附 GPL-3.0，模型目录没有单独许可证；原包许可副本为 `tools/licenses/GenericXSeg-DeepFaceLab-GPL-3.0.txt`，原摘要及精确来源在 `release/generic-xseg*`。 |
 | SFace | [OpenCV Zoo 的固定模型目录](https://github.com/opencv/opencv_zoo/tree/47534e27c9851bb1128ccc0102f1145e27f23f98/models/face_recognition_sface)，Apache-2.0 文本随源码和运行材料保留。 |
 | NotoSans-Medium.ttf | 字体文件保留原 2015 Google 版权信息；[Noto Fonts 固定官方 LICENSE](https://github.com/googlefonts/noto-fonts/blob/3858576a0eec798d752be1ce0f9b121705091122/LICENSE) 为 SIL OFL 1.1，副本在 `tools/licenses/NotoFonts-OFL-1.1.txt`。 |
 | FFmpeg 9.0.1 essentials | [GyanD 官方发行包](https://github.com/GyanD/codexffmpeg/releases/tag/9.0.1)，保留 LICENSE、README、doc 和 presets；发行 README 指定对应 [FFmpeg 源码提交 bf1b838f2a](https://github.com/FFmpeg/FFmpeg/commit/bf1b838f2a)。 |
@@ -25,4 +26,6 @@ Node、Python、PyTorch、FFmpeg 和第三方 Python/JavaScript 包适用各自�
 
 `docs/demo-assets/fictional-identities` 中三张演示图为人工生成的虚构成年人物及演示预览，来源说明随图保留；演示预览不是附带训练检查点的输出。旧真实素材截图、本机部署绑定、QA 文件及个人工作区不随公开分发。
 
-检测/FAN/FaceEnhancer 权重和 SFace/FFmpeg 的固定来源及 SHA-256 在 `tools/prepare-vision-runtime.ps1`；Node 和 Python/PyTorch 的安装版本在启动器配置和根 `requirements.txt`。权重沿用原始序列化格式，不意味着使用 TensorFlow 执行网络。
+通用 XSeg 原件 SHA-256 为 `5eb6c5b67a84ca4bbdbddb036011b488c03abde0c1e45ad700d290666a43faa5`；转换后 `XSeg_256.pth` 为 `26e45677ef3136e0327f0fd51e452cbea81a703ee7fea9121b01ba58da65c385`。转换严格验证全部 222 个张量的名称、形状及有限值，按当前 PyTorch 卷积布局复制，并验证保存后的数值完全一致；没有重新训练。包内 `XSeg_data.dat` 只写入可信的 WF 类型元数据，原始训练状态、样本及优化器均不导入。两类发行包均包含此权重；额外的同名下载资产供 Git 克隆安装使用。
+
+检测/FAN/FaceEnhancer 权重和 SFace/FFmpeg 的固定来源及 SHA-256 在 `tools/prepare-vision-runtime.ps1`；通用 XSeg 在 `release/generic-xseg.json`；Node 和 Python/PyTorch 的安装版本在启动器配置和根 `requirements.txt`。保留或转换 NumPy 张量序列化不意味着使用 TensorFlow 执行网络。

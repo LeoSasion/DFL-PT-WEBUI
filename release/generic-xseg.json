@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "resolution": 256,
+  "faceType": "wf",
+  "inferenceOnly": true,
+  "licenseStatus": "verified",
+  "licenseBasis": "The iperov/DeepFaceLab repository and the owner-linked official build contain GPL-3.0; the generic model folder has no separate license. Original GPL text and upstream summary are retained.",
+  "original": {
+    "repository": "https://github.com/iperov/DeepFaceLab",
+    "revision": "e4b7543ffa1d73b26fce1e31852727f658ba490c",
+    "readmeUrl": "https://github.com/iperov/DeepFaceLab/blob/e4b7543ffa1d73b26fce1e31852727f658ba490c/README.md",
+    "ownerLinkedDirectory": "https://mega.nz/folder/Po0nGQrA#dbbttiNWojCt8jzD4xYaPw",
+    "build": "DeepFaceLab_DirectX12_build_05_04_2022.exe",
+    "buildBytes": 2783049668,
+    "megaNode": "agsjBQTD",
+    "member": "_internal/model_generic_xseg/XSeg_256.npy",
+    "sha256": "5eb6c5b67a84ca4bbdbddb036011b488c03abde0c1e45ad700d290666a43faa5",
+    "size": 70289792,
+    "crc32": "a2931826",
+    "trainedIterations": 584205
+  },
+  "converted": {
+    "path": "_internal/model_generic_xseg/XSeg_256.pth",
+    "sha256": "26e45677ef3136e0327f0fd51e452cbea81a703ee7fea9121b01ba58da65c385",
+    "size": 70287795,
+    "format": "DFL PyTorch helper param_N NumPy mapping (pickle protocol 4)",
+    "tensorCount": 222,
+    "conversionTool": "tools/convert-generic-xseg.py",
+    "downloadUrl": "https://github.com/LeoSasion/DFL-PT-WEBUI/releases/download/v0.1.1-preview/XSeg_256.pth"
+  },
+  "metadata": {
+    "source": "release/generic-xseg-data.dat",
+    "path": "_internal/model_generic_xseg/XSeg_data.dat",
+    "sha256": "bbf5ca3f3177e901c9486281c4a41989d679f6d6a67959e9b6de539d9baf29a4",
+    "purpose": "Inference face type only. Original training state, samples, history and optimizer are not imported."
+  },
+  "license": {
+    "source": "tools/licenses/GenericXSeg-DeepFaceLab-GPL-3.0.txt",
+    "path": "_internal/model_generic_xseg/LICENSE.txt",
+    "sha256": "0b383d5a63da644f628d99c33976ea6487ed89aaa59f0b3257992deac1171e6b"
+  },
+  "summary": {
+    "source": "release/generic-xseg-original-summary.txt",
+    "path": "_internal/model_generic_xseg/XSeg_original_summary.txt",
+    "sha256": "414d713a6de485ae796e216c64d962afaa6b6593762431aa543e72edc159d962"
+  },
+  "validation": "Pinned original SHA and archive CRC; restricted NumPy unpickling; strict complete tensor name/shape/finite checks; exact converted tensor serialization round-trip. No retraining or inference acceptance."
+}

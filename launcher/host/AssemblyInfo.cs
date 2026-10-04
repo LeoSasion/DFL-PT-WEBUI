@@ -8,5 +8,5 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyCopyright("DFL-PT-WEBUI contributors")]
 [assembly: ComVisible(false)]
 [assembly: Guid("5e7bd74b-cbbd-495b-aaed-2b3021045073")]
-[assembly: AssemblyVersion("0.1.0.0")]
-[assembly: AssemblyFileVersion("0.1.0.0")]
+[assembly: AssemblyVersion("0.1.1.0")]
+[assembly: AssemblyFileVersion("0.1.1.0")]

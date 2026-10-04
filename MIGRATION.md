@@ -12,7 +12,7 @@ ME 使用整份 `me.pt` 原生检查点，包含生成器、判别器、优化�
 
 原生续训严格核对配置；JSON 可以是部分配置，但实际改动必须加 `--allow-config-change`。网络结构字段不能在续训中改变。更换优化器类型或已存在判别器的形状需 `--reset-optimizer`；重置时保留网络及兼容的判别器权重，优化器更新计数重新开始，显示迭代数保留。更换数据集需 `--reset-data-state`。Web 切换预训练阶段时同样要求重置采样状态，并清空困难样本回放。预训练转微调可继续同一模型；“从现有模型初始化”则只复制当前项目来源模型的网络权重，新模型的优化器与迭代从零开始。命令及配置见 [ME 后端说明](_internal/DeepFaceLab/ME_README.md)。
 
-XSeg 使用 `XSeg_data.dat`、`XSeg_256.pth` 和 `XSeg_256_opt.pth`，作为固定的辅助模型实例。旧 TF `.npy` XSeg 文件不能通过重命名转换为 PyTorch 权重。ME 合成通过专用推理适配器接入原有 Merger；DFM 由 ME 原生 PyTorch 网络导出。
+项目 XSeg 使用 `XSeg_data.dat`、`XSeg_256.pth` 和 `XSeg_256_opt.pth`，作为固定的辅助模型实例。内置通用模型随包保存在 `_internal/model_generic_xseg`，仅含转换后的推理权重、WF 类型元数据和来源许可；没有训练样本、历史或优化器。`tools/convert-generic-xseg.py` 按原始 SHA 校验、受限 NumPy 反序列化和严格张量映射转换官方权重，转换无需 TensorFlow。兼容加载器也能识别完整的旧命名 `.npy` 张量；重命名本身不做数据转换。ME 合成通过专用推理适配器接入原有 Merger；DFM 由 ME 原生 PyTorch 网络导出。
 
 ## Web 训练配置
 
@@ -45,7 +45,7 @@ ME 向导已接入完整后端选项，按网络结构、优化与训练、显�
 
 ## 外部材料边界
 
-原材料没有 XnViewMP、VisiPics、EbSynth 的可运行程序，也没有通用 XSeg 权重。菜单保留外部工具入口及明确的缺失提示；可用项目配置或环境变量指向本机程序（字段见 `legacy-cli/external-tools.ps1`）。人脸浏览和相似图片可直接使用 Web 工具。
+aligned 浏览和日常相似组清洗默认使用 WebUI，无需安装 XnViewMP 或 VisiPics。相似组目前只分析前 500 张，暂不支持切换批次或跨批查重；EbSynth 关键帧传播尚无 Web 实现，作为后续原生功能候选，不新增安装流程。菜单保留已有外部程序的可选适配入口。官方通用 XSeg 推理权重已加入源码包和便携包。
 
 旧 latent CLI 本身是占位实验，没有完整图像编辑工作流；新版本明确报告尚未支持。高级 ME 参数与阶段转换已接入 WebUI。多 GPU 调度和界面选择均已实现，但本机只有一张物理 GPU，真实多卡仍待验收；长期真人质量未验收。具体证据见 [ME 训练验证](docs/ME_TRAINING_VALIDATION.md)，首轮迁移记录见 [验证记录](docs/VALIDATION.md)。
 
@@ -53,4 +53,4 @@ ME 向导已接入完整后端选项，按网络结构、优化与训练、显�
 
 Python、Node、FFmpeg 和辅助权重都是本目录的独立文件。大体积运行材料及模型不提交 Git；源码包与完整运行包应分开，完整运行包必须包含 Python base 与 venv。路径迁移时会修复 venv 的 base 路径，不能只复制 `.venv`。
 
-本地仓库尚无远端。启动器只检查、修复和启动本地项目，不会更新旧仓库或从旧地址替换新程序。
+公开源码与 preview 位于 [DFL-PT-WEBUI](https://github.com/LeoSasion/DFL-PT-WEBUI)。启动器只检查、修复和启动本地项目，在线自动更新关闭。

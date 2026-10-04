@@ -262,6 +262,18 @@ def plan_release(kind: str, config: dict, commit: str, weights: str) -> Plan:
         if kind_name != "blob" or mode not in {"100644", "100755"}:
             raise ReleaseError(f"Git links/submodules require an explicit distribution policy: {name}")
         plan.add(Entry(name, int(size), "source", blob=oid))
+    # Generic XSeg is an inference asset required in both source and portable
+    # archives. It must never disappear behind the optional helper-weight flag.
+    generic_bytes = git("show", commit + ":" + config["genericXSegManifest"])
+    generic = json.loads(generic_bytes)
+    if generic.get("schemaVersion") != 1 or generic.get("licenseStatus") != "verified":
+        raise ReleaseError("Generic XSeg source/license review is incomplete")
+    plan.file(generic["converted"]["path"], category="generic-xseg-weight", expected=generic["converted"]["sha256"])
+    plan.file(generic["metadata"]["source"], generic["metadata"]["path"], "generic-xseg-metadata", expected=generic["metadata"]["sha256"])
+    plan.add(Entry("_internal/model_generic_xseg/SOURCE.json", len(generic_bytes), "generic-xseg-source", data=generic_bytes))
+    for key, category in (("license", "third-party-license"), ("summary", "generic-xseg-source")):
+        item = generic[key]
+        plan.file(item["source"], item["path"], category, expected=item["sha256"])
     if kind == "source":
         return plan
     for name in config["runtimeTrees"]:
@@ -293,7 +305,7 @@ def plan_release(kind: str, config: dict, commit: str, weights: str) -> Plan:
              "Microsoft Edge WebView2 Runtime and an appropriate NVIDIA driver are host prerequisites.\n"
              "Auxiliary weight policy: " + weights + ".\n"
              + ("Obtain auxiliary weights: powershell -NoProfile -ExecutionPolicy Bypass -File .\\tools\\prepare-vision-runtime.ps1\n" if weights == "download" else "")
-             + "A generic XSeg checkpoint is not included. Supply your own appropriately licensed model when needed.\n"
+             + "Verified generic XSeg inference weights are included under _internal/model_generic_xseg in both archive kinds.\n"
              "Packaging and file integrity checks do not constitute functional, training, dual-GPU or visual-quality validation.\n").encode("utf-8")
     plan.add(Entry("RELEASE-RUNTIME-NOTES.txt", len(notes), "release-note", data=notes))
     plan.npm()
@@ -303,7 +315,9 @@ def plan_release(kind: str, config: dict, commit: str, weights: str) -> Plan:
                 "_internal/ffmpeg/ffmpeg.exe", "_internal/ffmpeg/ffprobe.exe", "_internal/ffmpeg/LICENSE",
                 "webui/dist/client/index.html", "webui/dist/.build-provenance.json", "webui/node_modules/ws/package.json",
                 "webui/node_modules/vite/bin/vite.js", "webui/node_modules/node-pty/package.json",
-                "launcher/bin/DFL-PT-WEBUI.Launcher.exe", "tools/licenses/NotoFonts-OFL-1.1.txt"]
+                "launcher/bin/DFL-PT-WEBUI.Launcher.exe", "tools/licenses/NotoFonts-OFL-1.1.txt",
+                "_internal/model_generic_xseg/XSeg_256.pth", "_internal/model_generic_xseg/XSeg_data.dat",
+                "_internal/model_generic_xseg/SOURCE.json", "_internal/model_generic_xseg/LICENSE.txt"]
     for name in required:
         if name not in plan.entries:
             raise ReleaseError(f"Portable inventory omitted a required artifact: {name}")
@@ -611,12 +625,25 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     if (output / "SHA256SUMS").exists() or (output / "restore-release.ps1").exists():
         raise ReleaseError("Output already has a checksum/restore file; use a fresh output directory")
+    generic_entries = [entry for entry in plans[0].entries.values() if entry.category == "generic-xseg-weight"]
+    if len(generic_entries) != 1:
+        raise ReleaseError("Release must have exactly one pinned generic XSeg inference weight")
+    generic_entry = generic_entries[0]
+    generic_asset = output / PurePosixPath(generic_entry.path).name
+    if generic_asset.exists():
+        raise ReleaseError("Standalone XSeg asset already exists; use a fresh output directory")
     if shutil.disk_usage(output).free < 2 * sum(p.summary()["totalBytes"] for p in plans):
         raise ReleaseError("Insufficient free space for archive creation and part splitting (reserve twice the payload size)")
     indices = [build(plan, output, version, hashlib.sha256(config_bytes).hexdigest(), args.max_part_mib * 1024**2,
                      zipfile.ZIP_STORED if args.compression == "stored" else zipfile.ZIP_DEFLATED, source_commit, source_tree) for plan in plans]
+    # Git-clone installation fetches the same byte-identical inference model.
+    # Archive users already receive this asset inside either package.
+    with generic_entry.content() as source, generic_asset.open("xb") as target:
+        shutil.copyfileobj(source, target, CHUNK)
+    if generic_asset.stat().st_size != generic_entry.size or digest_file(generic_asset) != generic_entry.expected_sha256:
+        raise ReleaseError("Standalone XSeg asset differs from the pinned archive weight")
     write_new(output / "restore-release.ps1", local("tools/restore-release.ps1").read_bytes())
-    names = {"restore-release.ps1"}
+    names = {"restore-release.ps1", generic_asset.name}
     for index in indices:
         names.add(index["manifestFile"])
         names.add(index["archiveFile"].removesuffix(".zip") + ".archive.json")

@@ -28,17 +28,18 @@ JavaScript 依赖从 `webui/package.json` 的 `dependencies` 和已安装的 opt
 .\_internal\python_base\python.exe tools\build-release.py build --kind both --output-dir release-output --max-part-mib 1900
 ```
 
-版本从该提交的 `release/version.json` 读取。对于 `0.1.0-preview`，输出名称如下：
+版本从该提交的 `release/version.json` 读取。对于 `0.1.1-preview`，输出名称如下：
 
 ```text
-DFL-PT-WEBUI-0.1.0-preview-source.zip
-DFL-PT-WEBUI-0.1.0-preview-source.manifest.json
-DFL-PT-WEBUI-0.1.0-preview-source.archive.json
-DFL-PT-WEBUI-0.1.0-preview-portable.zip.part001
-DFL-PT-WEBUI-0.1.0-preview-portable.zip.part002
+DFL-PT-WEBUI-0.1.1-preview-source.zip
+DFL-PT-WEBUI-0.1.1-preview-source.manifest.json
+DFL-PT-WEBUI-0.1.1-preview-source.archive.json
+DFL-PT-WEBUI-0.1.1-preview-portable.zip.part001
+DFL-PT-WEBUI-0.1.1-preview-portable.zip.part002
 ...
-DFL-PT-WEBUI-0.1.0-preview-portable.manifest.json
-DFL-PT-WEBUI-0.1.0-preview-portable.archive.json
+DFL-PT-WEBUI-0.1.1-preview-portable.manifest.json
+DFL-PT-WEBUI-0.1.1-preview-portable.archive.json
+XSeg_256.pth
 restore-release.ps1
 SHA256SUMS
 ```
@@ -53,14 +54,14 @@ SHA256SUMS
 .\_internal\python_base\python.exe tools\build-release.py build --kind both --source-commit <public-root-commit> --source-repository <public-snapshot-repository> --output-dir release-output
 ```
 
-辅助权重的路径与固定 SHA 在配置中逐项列出。四个 `.npy` 的来源审查确认它们存在于固定 iperov/DeepFaceLab 上游树、该仓库根许可为 GPL-3.0；没有发现单独的权重许可文本。`licenseStatus: verified` 表示上游来源和仓库许可依据已核对，不表示存在单独的权重授权声明。SFace 使用专门的 Apache-2.0 文本。配置记录审查依据，禁止在来源审查尚未确认时静默捆绑。`--weights download` 可生成省略四个 `.npy` 的运行包，用户首次使用提取/增强前需执行现有下载准备脚本；脚本按 SHA 检查下载文件。通用 XSeg checkpoint 不在本次包中，需用户自行提供合法来源的模型。
+辅助权重的路径与固定 SHA 在配置中逐项列出。四个 `.npy` 的来源审查确认它们存在于固定 iperov/DeepFaceLab 上游树、该仓库根许可为 GPL-3.0；没有发现单独的权重许可文本。`licenseStatus: verified` 表示上游来源和仓库许可依据已核对，不表示存在单独的权重授权声明。SFace 使用专门的 Apache-2.0 文本。配置记录审查依据，禁止在来源审查尚未确认时静默捆绑。`--weights download` 可生成省略四个 `.npy` 的运行包，用户首次使用提取/增强前需执行现有下载准备脚本；脚本按 SHA 检查下载文件。通用 XSeg 推理权重是两类发行包的必需资产，由 `release/generic-xseg.json` 固定来源、完整张量转换及散列；即使使用 `--weights download`，也必须将它实际放入源码包和便携包。缺失或散列不符会阻止构建。原包 GPL 许可、摘要及 WF 类型元数据一并保留。发行页另附同一个 `XSeg_256.pth`，供 Git 克隆安装按 SHA 获取；下载源码或便携包无需另下此资产。
 
 ## 用户恢复与展开
 
 下载同一种包的全部 `.partNNN`（或单个 `.zip`）、对应 `.archive.json` / `.manifest.json`，以及 `restore-release.ps1` 和 `SHA256SUMS`，放在同一个目录。该脚本只要求本次包的相关文件；源码和便携包可以分别下载。运行一条命令：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\restore-release.ps1 -ArchiveIndex .\DFL-PT-WEBUI-0.1.0-preview-portable.archive.json -Destination .\unpacked
+powershell -NoProfile -ExecutionPolicy Bypass -File .\restore-release.ps1 -ArchiveIndex .\DFL-PT-WEBUI-0.1.1-preview-portable.archive.json -Destination .\unpacked
 ```
 
 脚本校验索引、manifest、每个分卷和重组 ZIP，再检查 ZIP 文件路径和尺寸，展开至 `unpacked/DFL-PT-WEBUI`。目标目录须不存在或为空；已有文件不覆盖。恢复脚本不启动程序。临时重组 ZIP 会在结束后删除，下载的分卷保留。源码包同样使用此命令，修改索引文件名即可。
@@ -68,7 +69,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\restore-release.ps1 -Archi
 ## 从清单只读核验
 
 ```powershell
-.\_internal\python_base\python.exe tools\build-release.py verify --archive-index release-output\DFL-PT-WEBUI-0.1.0-preview-portable.archive.json --sha256sums release-output\SHA256SUMS
+.\_internal\python_base\python.exe tools\build-release.py verify --archive-index release-output\DFL-PT-WEBUI-0.1.1-preview-portable.archive.json --sha256sums release-output\SHA256SUMS
 ```
 
 核验器直接读取单 ZIP 或分卷，不重组、不解压、不改文件。它检查每卷和完整 ZIP 的哈希、manifest 一致性、唯一文件路径、精确文件集合、尺寸、逐 payload SHA-256 与清单总数。`--sha256sums` 可选；指定时会检查该文件列出的所有已发布材料，因此该只读命令需要其列出的源码与便携材料都已下载。只下载一种包时省略此参数，其归档索引仍覆盖该包的所有分卷及 manifest。

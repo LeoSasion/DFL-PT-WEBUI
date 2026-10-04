@@ -6,4 +6,6 @@
 
 直接使用某些配套工具时，可通过工具 BAT 提供相应输入参数；数据默认位于 workspace。WebUI 工具面板提供更完整的参数与可恢复操作。
 
-XnViewMP、EbSynth 和 VisiPics 是可配置的外部程序。aligned 浏览已有 WebUI 替代；这三项的缺失程序不会被报告为已安装。使用 external-tools.ps1 的 Tool、ExecutablePath、ConfigureOnly 参数保存实际程序位置，配置保存在项目 .launcher-install/external-tools.json。原工作区的 VisiPics 安装包保留在 _internal/installers/VisiPics-setup.exe，没有自动安装。
+aligned 预览与清洗默认使用 WebUI 的 SRC/DST 人脸浏览器，无需安装 XnViewMP。日常相似图审查默认使用“工具实验室 → 数据审计 → 相似组清洗”，无需另装 VisiPics；每次仅分析当前 aligned 的前 500 张，需人工复核并保留代表图，暂不支持切换批次或跨批查重。
+
+EbSynth 的关键帧结果传播尚未实现，列为后续 WebUI 功能候选；现有场景检测和分段提帧不包含这项能力。传统菜单保留这三项已有外部程序的可选适配入口，缺失程序不会被报告为已安装，也不属于 WebUI 安装要求。需要使用已有程序时，可通过 external-tools.ps1 的 Tool、ExecutablePath、ConfigureOnly 参数保存实际程序位置，配置保存在项目 .launcher-install/external-tools.json。

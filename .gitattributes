@@ -17,3 +17,8 @@
 *.html text eol=lf
 *.css text eol=lf
 *.sh text eol=lf
+
+# Keep upstream bytes stable for the recorded model asset checksums.
+release/generic-xseg-data.dat -text
+release/generic-xseg-original-summary.txt -text whitespace=cr-at-eol
+tools/licenses/GenericXSeg-DeepFaceLab-GPL-3.0.txt -text whitespace=cr-at-eol

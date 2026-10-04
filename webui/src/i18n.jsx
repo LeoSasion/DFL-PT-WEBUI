@@ -971,8 +971,9 @@ const EN = {
   "已从 {source} 创建新任务 {target}": "Created task {target} from {source}",
   "重试": "Retry",
   "没有可恢复的历史任务。": "No recoverable task history.",
-  "本轮明确不接入": "Explicitly out of scope",
-  "独立闭源 EXE、EBSynth 与第三方角度工具保持外部运行；不会在 Web 中伪造控制或状态。": "Standalone closed-source EXEs, EBSynth, and third-party angle tools remain external; the Web UI does not fake their controls or state.",
+  "WebUI 替代与待补能力": "Web UI replacements and remaining capabilities",
+  "aligned 浏览与日常相似图审查优先使用 WebUI，相似组每次仅预检前 500 张。EbSynth 的关键帧结果传播尚未实现，列为后续原生功能候选；已有外部程序可选配置。": "Use the Web UI for aligned browsing and routine similarity review; each similarity scan checks only the first 500 images. EbSynth-style keyframe propagation is not implemented and is a candidate for a future native feature; existing external applications remain optional.",
+  "数据量超过 500 张；当前仅预检前 500 张，暂不支持切换批次或跨批查重。": "The dataset exceeds 500 images. This preview checks only the first 500; batch selection and cross-batch duplicate search are not supported yet.",
 
   "关闭提示": "Dismiss notification",
   "本地 DeepFaceLab 固定工作流": "Fixed local DeepFaceLab workflow",

@@ -2,9 +2,9 @@
 
 Windows 本地工作台：**ME PyTorch 训练 + WebUI + 数据处理、XSeg、合成和视频工具**。
 
-**0.1.0-preview** 面向用户实测反馈。换脸训练使用 ME/PyTorch，XSeg 是辅助遮罩模型；旧 ME 网络权重可以通过显式导入命令迁移。运行环境与项目材料保持独立。
+**0.1.1-preview** 面向用户实测反馈。换脸训练使用 ME/PyTorch，XSeg 是辅助遮罩模型；旧 ME 网络权重可以通过显式导入命令迁移。运行环境与项目材料保持独立。
 
-- [下载预览版](https://github.com/LeoSasion/DFL-PT-WEBUI/releases/tag/v0.1.0-preview)：源码包和 Windows x64 便携包。
+- [下载预览版](https://github.com/LeoSasion/DFL-PT-WEBUI/releases/tag/v0.1.1-preview)：源码包和 Windows x64 便携包，均随包提供通用 XSeg 推理权重。
 - [完整安装步骤](docs/INSTALL.md)、[版本说明](docs/RELEASE_NOTES.md)、[已知限制](docs/KNOWN_ISSUES.md)。
 - [反馈问题](https://github.com/LeoSasion/DFL-PT-WEBUI/issues/new/choose)；反馈需要的信息见 [FEEDBACK.md](docs/FEEDBACK.md)。
 
@@ -51,9 +51,11 @@ ME 向导提供“默认训练”“RG + FP16”“预训练”“后期微调�
 
 保留视频提帧/封装、S3FD 切脸、2D/3D FAN、错脸筛选、排序、姿态筛选、PAK/ZIP 打包解包、FaceEnhancer、重设尺寸、DFL 元数据和 XSeg 工具，以及 Web 的人物选择、审核、修复、标注、相似度、回收恢复、诊断、日志和任务管理。详细映射见 [迁移说明](MIGRATION.md)。
 
-ME 训练直接读取带 DFL 元数据的 aligned JPG/JPEG，以及 PAK/ZIP 打包人脸和人物子目录。预训练通用 XSeg 权重没有随原材料提供，可以自行训练 XSeg 或放入兼容的 PyTorch 权重。
+ME 训练直接读取带 DFL 元数据的 aligned JPG/JPEG，以及 PAK/ZIP 打包人脸和人物子目录。通用 XSeg 推理权重随源码包和便携包提供，位于 `_internal/model_generic_xseg`，可直接使用“内置遮罩应用”；Git 克隆安装会按固定散列获取相同文件。权重来自官方 DFL 通用模型，保留 WF 人脸类型并转换全部张量供 PyTorch 加载；它不是项目 XSeg 的完整训练状态，专用遮罩仍可在项目内标注和训练。来源、许可证和转换记录见 [来源与许可](docs/SOURCES.md)。
 
-XnViewMP、VisiPics、EbSynth 仅保留可配置的外部入口，原材料没有它们的可运行程序。Web 人脸浏览和相似图片工具可处理前两者的主要工作；EbSynth 需要另行安装。外部工具配置见 `legacy-cli/external-tools.ps1`。
+aligned 预览与清洗默认使用 WebUI 的 SRC/DST 人脸浏览器，可检查定位点、标注和遮罩，并隔离或恢复素材，无需安装 XnViewMP。日常相似图审查默认使用“工具实验室 → 数据审计 → 相似组清洗”，无需另装 VisiPics；候选由本地 DCT、色彩和边缘描述子生成，需人工复核并保留代表图。每次仅分析当前 aligned 的前 500 张，暂不支持切换批次或跨批查重。
+
+EbSynth 的关键帧结果传播尚未实现，列为后续 WebUI 功能候选；现有场景检测和分段提帧不包含这项能力。这三项外部工具仍保留可选适配入口，供已有程序的用户通过 `legacy-cli/external-tools.ps1` 配置，不作为 WebUI 安装要求。
 
 ## ME 范围与验证
 

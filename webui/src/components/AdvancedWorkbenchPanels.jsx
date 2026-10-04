@@ -144,7 +144,7 @@ function SimilarityAuditPanel({ side, refreshVersion, onError, onNotice, onNavig
         <div><span>{t("已分析")}</span><strong>{data.analyzedCount}</strong></div>
         <div><span>{t("候选组")}</span><strong>{data.groupCount}</strong></div>
         <div><span>{t("已选择隔离")}</span><strong>{selected.length}</strong></div>
-        <p>{data.truncated ? t("数据量超过 500 张；当前结果是有界预检，可分批复核。") : t("当前 aligned 已完整分析。")}</p>
+        <p>{data.truncated ? t("数据量超过 500 张；当前仅预检前 500 张，暂不支持切换批次或跨批查重。") : t("当前 aligned 已完整分析。")}</p>
       </div>
       {data.groups.length ? (
         <div className="similarity-groups">

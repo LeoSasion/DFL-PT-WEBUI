@@ -8,7 +8,7 @@
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\launcher\install-source.ps1
 ```
 
-安装完成后使用根目录的 `启动 WebUI.bat`。安装入口会准备独立 Python base、项目 `.venv`、Node、FFmpeg、提取/增强/人物分组辅助权重，以及锁定的 WebUI 依赖和首次前端构建。安装本身不启动 WebUI，不训练、合成或下载用户的视频、数据集和 ME 模型。系统需有适合 CUDA 12.8 的 NVIDIA 驱动；CUDA/cuDNN DLL 由 PyTorch wheel 提供，无需另装 CUDA Toolkit。
+安装完成后使用根目录的 `启动 WebUI.bat`。安装入口会准备独立 Python base、项目 `.venv`、Node、FFmpeg、提取/增强/人物分组辅助权重和通用 XSeg 推理权重，以及锁定的 WebUI 依赖和首次前端构建。安装本身不启动 WebUI，不训练、合成或下载用户的视频、数据集和 ME 模型。系统需有适合 CUDA 12.8 的 NVIDIA 驱动；CUDA/cuDNN DLL 由 PyTorch wheel 提供，无需另装 CUDA Toolkit。
 
 ## 运行时与来源
 
@@ -20,7 +20,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\launcher\install-sourc
 | Node | 24.19.0，[Node 官方发行目录](https://nodejs.org/dist/v24.19.0/) | `_internal/node/bin` |
 | pnpm | 11.19.0，由项目内 Node 的 Corepack 获取，[npm 官方 registry](https://registry.npmjs.org/) | `.launcher-install/source/corepack` |
 | FFmpeg | 9.0.1 essentials，[GyanD 固定发行版](https://github.com/GyanD/codexffmpeg/releases/tag/9.0.1)，该 Windows 构建方由 [FFmpeg 下载页](https://ffmpeg.org/download.html)列出 | `_internal/ffmpeg` |
-| 辅助权重 | 固定上游提交及 SHA-256，见 `tools/prepare-vision-runtime.ps1` | `facelib/*.npy`、`_internal/vision_models` |
+| 辅助权重 | 固定上游提交及 SHA-256，见 `tools/prepare-vision-runtime.ps1` | `facelib/*.npy`、`_internal/vision_models`、`_internal/model_generic_xseg` |
 
 Python 便携构建包含标准库、`venv` 和 `ensurepip`，无需注册到系统或修改全局 PATH。Python base 已存在时接受有效的独立 Python 3.12 x64；安装入口不会把现有 3.12.x 强制替换为 3.12.14。所有运行时目录和用户工作区均被 Git 忽略。
 
@@ -58,9 +58,11 @@ Python 和 FFmpeg 散列来自相应 GitHub 上游发行资产的 SHA-256 digest
 .\install-source.bat -NoNetwork -ArchiveDirectory D:\DFL-offline\runtimes -WheelhousePath D:\DFL-offline\wheels
 ```
 
-`-WheelhousePath` 一旦指定，Python 包安装仅使用该目录，即使没有 `-NoNetwork` 也不访问包索引。仍需准备 WebUI 依赖与辅助权重。视觉权重可以预先安装到它们的目标路径，或放到 `.launcher-install/vision` 缓存；缓存名为 `S3FD.npy`、`2DFAN.npy`、`3DFAN.npy`、`FaceEnhancer.npy`、`sface-2021dec.onnx`，仍执行散列校验。
+`-WheelhousePath` 一旦指定，Python 包安装仅使用该目录，即使没有 `-NoNetwork` 也不访问包索引。仍需准备 WebUI 依赖与辅助权重。视觉权重可以预先安装到它们的目标路径，或放到 `.launcher-install/vision` 缓存；缓存名为 `S3FD.npy`、`2DFAN.npy`、`3DFAN.npy`、`FaceEnhancer.npy`、`sface-2021dec.onnx`、`XSeg_256.pth`，仍执行散列校验。
 
-如果已有 ME 训练材料，并明确暂不使用提取、增强、人物分组，可选择 `-SkipVisionAssets`。它不下载辅助权重，也不保证这些工具可用。`-SkipWebuiBuild` 只跳过首次构建；正常启动所需的 WebUI 依赖仍须就绪。
+源码包和便携包已经含通用 XSeg 推理权重、WF 元数据及来源许可，不依赖首次联网下载。仅 Git 克隆需要安装入口从本项目固定发行资产获取相同权重，并校验 `release/generic-xseg.json` 中的 SHA。它没有原训练状态或优化器，项目专用 XSeg 仍需标注和训练。
+
+如果已有 ME 训练材料，并明确暂不使用提取、增强、人物分组和通用 XSeg，可选择 `-SkipVisionAssets`。它不下载辅助权重，也不保证这些工具可用。`-SkipWebuiBuild` 只跳过首次构建；正常启动所需的 WebUI 依赖仍须就绪。
 
 ## WebUI 原生依赖
 

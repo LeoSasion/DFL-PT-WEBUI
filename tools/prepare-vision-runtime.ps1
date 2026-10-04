@@ -70,6 +70,27 @@ foreach ($model in $models) {
     }
     Install-Verified $source "_internal/DeepFaceLab/facelib/$($model.Name)" $model.Hash
 }
+# This fixed trained inference model is also physically present in both release
+# archives. Git clones fetch the identical, hash-pinned converted asset.
+$genericManifest = Resolve-VisionPath 'release/generic-xseg.json'
+$generic = Get-Content -LiteralPath $genericManifest -Raw | ConvertFrom-Json
+if ($generic.schemaVersion -ne 1 -or $generic.licenseStatus -ne 'verified') {
+    throw 'Generic XSeg source/license record is incomplete'
+}
+$genericTarget = Resolve-VisionPath $generic.converted.path
+if ($PreserveExisting -and (Test-Path -LiteralPath $genericTarget) -and -not (Test-Hash $genericTarget $generic.converted.sha256)) {
+    throw "Existing generic XSeg weight checksum differs and will not be replaced: $genericTarget"
+}
+$genericSource = $genericTarget
+if (-not (Test-Hash $genericSource $generic.converted.sha256)) {
+    $genericSource = Get-Verified 'XSeg_256.pth' $generic.converted.downloadUrl $generic.converted.sha256
+}
+Install-Verified $genericSource $generic.converted.path $generic.converted.sha256
+Install-Verified (Resolve-VisionPath $generic.metadata.source) $generic.metadata.path $generic.metadata.sha256
+Install-Verified $genericManifest '_internal/model_generic_xseg/SOURCE.json' (Get-FileHash -LiteralPath $genericManifest -Algorithm SHA256).Hash
+foreach ($record in @($generic.license, $generic.summary)) {
+    Install-Verified (Resolve-VisionPath $record.source) $record.path $record.sha256
+}
 $sface = '_internal/vision_models/face_recognition_sface_2021dec.onnx'
 $sfaceHash = '0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79'
 Install-Verified (Resolve-VisionPath 'tools/licenses/SFace-Apache-2.0.txt') '_internal/vision_models/SFace-LICENSE.txt' 'cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30'
@@ -122,5 +143,5 @@ if (-not $SkipFFmpeg -and -not ($ffmpegBinariesReady -and $ffmpegDocumentationRe
         Install-Verified $file.FullName ('_internal/ffmpeg/' + $relative) $resourceHash
     }
 }
-if ($SkipFFmpeg) { Write-Host 'Helper weights verified: S3FD, 2DFAN, 3DFAN, FaceEnhancer, SFace. FFmpeg left to the caller.' }
-else { Write-Host 'Visual dependencies verified: FFmpeg, S3FD, 2DFAN, 3DFAN, FaceEnhancer, SFace.' }
+if ($SkipFFmpeg) { Write-Host 'Helper weights verified: S3FD, 2DFAN, 3DFAN, FaceEnhancer, generic XSeg, SFace. FFmpeg left to the caller.' }
+else { Write-Host 'Visual dependencies verified: FFmpeg, S3FD, 2DFAN, 3DFAN, FaceEnhancer, generic XSeg, SFace.' }
