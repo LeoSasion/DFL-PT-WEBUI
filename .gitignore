@@ -23,6 +23,7 @@ launcher/ui/node_modules/
 launcher/ui/dist/
 launcher/vendor/
 launcher/bin/
+DFL-PT-WEBUI.exe
 launcher/bin-host-verify/
 .launcher-install/
 .runtime/

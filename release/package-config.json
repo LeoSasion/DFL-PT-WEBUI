@@ -13,7 +13,7 @@
   "runtimeFiles": [
     ".venv/Scripts/python.exe", ".venv/Scripts/pythonw.exe",
     "_internal/vision_models/face_recognition_sface_2021dec.onnx", "_internal/vision_models/SFace-LICENSE.txt",
-    "launcher/bin/DFL-PT-WEBUI.Launcher.exe", "tools/licenses/NotoFonts-OFL-1.1.txt"
+    "launcher/bin/DFL-PT-WEBUI.Launcher.exe", "DFL-PT-WEBUI.exe", "tools/licenses/NotoFonts-OFL-1.1.txt"
   ],
   "licenseCopies": [
     {"source": "launcher/vendor/webview2/1.0.4129.50/LICENSE.txt", "target": "THIRD-PARTY-LICENSES/WebView2/LICENSE.txt"},

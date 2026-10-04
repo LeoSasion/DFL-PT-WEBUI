@@ -145,7 +145,6 @@ function ActionRow({
 }
 
 function ReadySidebar({ state, busyAction, onAction }) {
-  const updateTitle = state.updateAvailable ? "下载并更新项目" : "检查项目更新";
   const webuiAction = state.webuiRunning ? "stopWebUi" : "startWebUi";
   const webuiPid = Number.isInteger(state.webuiPid) && state.webuiPid > 0
     ? `PID ${state.webuiPid}`
@@ -180,7 +179,7 @@ function ReadySidebar({ state, busyAction, onAction }) {
         <h2>环境工具</h2>
         <div className="action-stack action-stack--compact">
           <ActionRow icon={IconSettings} title="首次配置 / 重新检测" busy={busyAction === "runFirstSetup"} onClick={() => onAction("runFirstSetup")} />
-          <ActionRow icon={IconCloudDownload} title="本地仓库 · 未配置远端" subtitle="在线更新已停用" disabled />
+          <ActionRow icon={IconCloudDownload} title="下载新版启动器" subtitle="通过发行页升级；不会自动更新" onClick={() => onAction("openExternal", { url: "https://github.com/LeoSasion/DFL-PT-WEBUI/releases" })} />
           <ActionRow icon={IconShieldCheck} title="修复依赖" busy={busyAction === "repairDependencies"} onClick={() => onAction("repairDependencies")} />
           <ActionRow icon={IconGlobe} title="PyTorch 官方运行包" subtitle="CUDA 12.8 随 PyTorch wheel 安装" disabled />
         </div>
@@ -189,7 +188,7 @@ function ReadySidebar({ state, busyAction, onAction }) {
       <section className="project-facts">
         <dl>
           <div><dt>项目目录</dt><dd title={state.projectDir}>{state.projectDir}</dd></div>
-          <div><dt>镜像源</dt><dd>{state.mirrorLabel || "自动选择"}</dd></div>
+          <div><dt>安装来源</dt><dd>官方固定来源</dd></div>
           <div><dt>最后检查</dt><dd>{state.lastCheck || "尚未检查"}</dd></div>
         </dl>
       </section>

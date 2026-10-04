@@ -7,14 +7,19 @@ Describe "first-install destination selection" {
             "namespace DflPtWebUi.Launcher", "namespace InstallPathTests")
         $source = $source.Replace("internal static class ProjectLocator", "public static class ProjectLocator")
         $source += 'namespace InstallPathTests { public class LauncherSettings { public string ProjectRoot { get; set; } } }'
-        Add-Type -TypeDefinition $source
+        Add-Type -TypeDefinition $source -ReferencedAssemblies System.Web.Extensions
     }
 
     function New-TestProject([string]$Path) {
-        foreach ($part in @('.git', 'webui', '_internal/DeepFaceLab')) {
+        foreach ($part in @('.git', 'webui/scripts', '_internal/DeepFaceLab/me_backend', 'release')) {
             New-Item -ItemType Directory -Path (Join-Path $Path $part) -Force | Out-Null
         }
         [IO.File]::WriteAllText((Join-Path $Path '_internal/DeepFaceLab/me.py'), '# ME entry')
+        [IO.File]::WriteAllText((Join-Path $Path '_internal/DeepFaceLab/me_backend/engine.py'), '# ME engine')
+        [IO.File]::WriteAllText((Join-Path $Path '_internal/DeepFaceLab/me_backend/network.py'), '# ME network')
+        [IO.File]::WriteAllText((Join-Path $Path 'webui/package.json'), '{}')
+        [IO.File]::WriteAllText((Join-Path $Path 'webui/scripts/local-manager.mjs'), '// manager')
+        [IO.File]::WriteAllText((Join-Path $Path 'release/version.json'), '{"schemaVersion":1,"product":"DFL-PT-WEBUI","version":"0.1.1-preview"}')
     }
 
     It "resumes an owned install workspace without adding another folder" {
@@ -119,5 +124,52 @@ Describe "first-install destination selection" {
         { [InstallPathTests.ProjectLocator]::SelectInstallPath($file) } | Should Throw
         { [InstallPathTests.ProjectLocator]::AssertInstallTarget($destination) } | Should Throw
         [IO.File]::ReadAllText($file) | Should Be 'keep'
+    }
+
+    It "bounds writable paths to the selected project" {
+        $project = Join-Path $TestDrive 'write-paths'
+        New-TestProject $project
+        [InstallPathTests.ProjectLocator]::AssertWritableChildPath($project, 'webui/dist') | Should Be (Join-Path $project 'webui/dist')
+        { [InstallPathTests.ProjectLocator]::AssertWritableChildPath($project, '../outside') } | Should Throw
+        { [InstallPathTests.ProjectLocator]::AssertWritableChildPath($project, $TestDrive) } | Should Throw
+    }
+
+    It "rejects linked output directories while allowing internal pnpm links" {
+        $project = Join-Path $TestDrive 'linked-webui'
+        New-TestProject $project
+        $outside = Join-Path $TestDrive 'outside-output'
+        New-Item -ItemType Directory -Path $outside | Out-Null
+        [IO.File]::WriteAllText((Join-Path $outside 'keep.txt'), 'keep')
+        foreach ($relative in @('webui/node_modules', 'webui/dist')) {
+            $link = Join-Path $project $relative
+            New-Item -ItemType Junction -Path $link -Target $outside | Out-Null
+            try {
+                { [InstallPathTests.ProjectLocator]::AssertWritableChildPath($project, $relative) } | Should Throw
+            } finally { [IO.Directory]::Delete($link) }
+        }
+        $modules = Join-Path $project 'webui/node_modules'
+        New-Item -ItemType Directory -Path $modules | Out-Null
+        $internalLink = Join-Path $modules 'fixture-package'
+        New-Item -ItemType Junction -Path $internalLink -Target $outside | Out-Null
+        try {
+            [InstallPathTests.ProjectLocator]::AssertWritableChildPath($project, 'webui/node_modules') | Should Be $modules
+        } finally { [IO.Directory]::Delete($internalLink) }
+        [IO.File]::ReadAllText((Join-Path $outside 'keep.txt')) | Should Be 'keep'
+    }
+
+    It "rejects linked projects and ancestor directories before writes" {
+        $project = Join-Path $TestDrive 'project-link-target'
+        New-TestProject $project
+        $link = Join-Path $TestDrive 'project-link'
+        New-Item -ItemType Junction -Path $link -Target $project | Out-Null
+        try {
+            { [InstallPathTests.ProjectLocator]::AssertWritableChildPath($link, 'webui/dist') } | Should Throw
+        } finally { [IO.Directory]::Delete($link) }
+        $ancestor = Join-Path $TestDrive 'ancestor-link'
+        New-Item -ItemType Junction -Path $ancestor -Target $TestDrive | Out-Null
+        try {
+            $nested = Join-Path $ancestor 'project-link-target'
+            { [InstallPathTests.ProjectLocator]::AssertWritableChildPath($nested, 'webui/dist') } | Should Throw
+        } finally { [IO.Directory]::Delete($ancestor) }
     }
 }

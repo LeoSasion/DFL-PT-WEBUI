@@ -264,6 +264,82 @@ if (-not (Test-Path -LiteralPath $CoreAssembly -PathType Leaf) -or
     }
 }
 
+$UiRuntimePackages = @(
+    [PSCustomObject]@{ Name = 'react'; Version = '19.2.0' },
+    [PSCustomObject]@{ Name = 'react-dom'; Version = '19.2.0' },
+    [PSCustomObject]@{ Name = 'scheduler'; Version = '0.27.0' },
+    [PSCustomObject]@{ Name = '@tabler/icons-react'; Version = '3.35.0' },
+    [PSCustomObject]@{ Name = '@xterm/xterm'; Version = '6.0.0' },
+    [PSCustomObject]@{ Name = '@xterm/addon-fit'; Version = '0.11.0' }
+)
+# npm lockfiles include a packages[""] root entry. Windows PowerShell 5.1's
+# PSCustomObject JSON converter cannot represent an empty property name.
+Add-Type -AssemblyName System.Web.Extensions
+$uiLockReader = New-Object System.Web.Script.Serialization.JavaScriptSerializer
+$uiLockReader.MaxJsonLength = 8388608
+$uiLock = $uiLockReader.DeserializeObject([IO.File]::ReadAllText((Join-Path $LauncherRoot 'ui\package-lock.json')))
+$uiRuntimeLicenseSources = @()
+$uiRuntimeInputFiles = @()
+foreach ($runtimePackage in $UiRuntimePackages) {
+    $packageRoot = Join-Path (Join-Path $LauncherRoot 'ui\node_modules') $runtimePackage.Name
+    $packageManifest = Join-Path $packageRoot 'package.json'
+    $license = Join-Path $packageRoot 'LICENSE'
+    if (-not (Test-Path -LiteralPath $packageManifest -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $license -PathType Leaf)) {
+        throw "Missing required bundled UI package or license: $($runtimePackage.Name)."
+    }
+    $metadata = Get-Content -LiteralPath $packageManifest -Raw -Encoding UTF8 | ConvertFrom-Json
+    $locked = $uiLock['packages'][('node_modules/' + $runtimePackage.Name)]
+    if ($null -eq $locked -or $metadata.name -ne $runtimePackage.Name -or
+        $metadata.version -ne $runtimePackage.Version -or $metadata.license -ne 'MIT' -or
+        $locked['version'] -ne $runtimePackage.Version -or $locked['license'] -ne 'MIT') {
+        throw "Bundled UI package does not match its pinned MIT dependency: $($runtimePackage.Name)."
+    }
+    $licenseText = Get-Content -LiteralPath $license -Raw -Encoding UTF8
+    if ($licenseText.Length -lt 700 -or $licenseText.Length -gt 65536 -or
+        $licenseText.Substring(0, [Math]::Min(2048, $licenseText.Length)) -notmatch '(?i)copyright\s+\(c\)' -or
+        -not $licenseText.Contains('Permission is hereby granted, free of charge') -or
+        -not $licenseText.Contains('THE SOFTWARE IS PROVIDED "AS IS"')) {
+        throw "Bundled UI license is missing its MIT text or copyright notice: $($runtimePackage.Name)."
+    }
+    $uiRuntimeInputFiles += (Get-Item -LiteralPath $packageManifest), (Get-Item -LiteralPath $license)
+    $uiRuntimeLicenseSources += [PSCustomObject]@{
+        RelativePath = 'licenses/UI/' + $runtimePackage.Name + '.txt'
+        FilePath = $license
+    }
+}
+
+function Get-LauncherBuildSources {
+    $buildSourceFiles = @(Get-ChildItem -LiteralPath $HostRoot -File) + @(
+        (Get-Item -LiteralPath $PSCommandPath),
+        (Get-Item -LiteralPath (Join-Path $LauncherRoot 'ui\package.json')),
+        (Get-Item -LiteralPath (Join-Path $LauncherRoot 'ui\package-lock.json')),
+        (Get-Item -LiteralPath (Join-Path $LauncherRoot 'ui\vite.config.mjs')),
+        (Get-Item -LiteralPath (Join-Path $LauncherRoot 'ui\index.html')),
+        (Get-Item -LiteralPath (Join-Path $LauncherRoot 'ui\scripts\prepare-sites-build.mjs')))
+    $buildSourceFiles += $uiRuntimeInputFiles
+    if (Test-Path -LiteralPath (Join-Path $LauncherRoot 'ui\.npmrc')) {
+        $buildSourceFiles += Get-Item -LiteralPath (Join-Path $LauncherRoot 'ui\.npmrc')
+    }
+    foreach ($sourceRoot in @((Join-Path $LauncherRoot 'ui\src'), (Join-Path $LauncherRoot 'ui\public'))) {
+        if (Test-Path -LiteralPath $sourceRoot) {
+            $buildSourceFiles += Get-ChildItem -LiteralPath $sourceRoot -File -Recurse
+        }
+    }
+    return @($buildSourceFiles | Sort-Object FullName -Unique | ForEach-Object {
+        [PSCustomObject]@{
+            path = $_.FullName.Substring($RepositoryRoot.TrimEnd('\', '/').Length + 1).Replace('\', '/')
+            sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            bytes = $_.Length
+        }
+    })
+}
+# Bind both the UI compiler and the host compiler to the same source snapshot.
+# A reused dist can still be built for local diagnostics, but its receipt must
+# never claim that this invocation compiled the corresponding UI sources.
+$buildSources = Get-LauncherBuildSources
+$buildSourceSnapshot = $buildSources | ConvertTo-Json -Depth 4 -Compress
+$uiBuildPerformed = $false
 if (-not $SkipUiBuild) {
     $UiRoot = Join-Path $LauncherRoot "ui"
     $ViteEntry = Join-Path $UiRoot "node_modules\vite\bin\vite.js"
@@ -281,6 +357,10 @@ if (-not $SkipUiBuild) {
         if ($LASTEXITCODE -ne 0) {
             throw "Launcher UI build failed with exit code $LASTEXITCODE."
         }
+        if ((Get-LauncherBuildSources | ConvertTo-Json -Depth 4 -Compress) -ne $buildSourceSnapshot) {
+            throw 'Launcher sources changed during the UI build; the previous executable was preserved.'
+        }
+        $uiBuildPerformed = $true
     } finally {
         Pop-Location
     }
@@ -296,11 +376,15 @@ $OutputExe = Join-Path $OutputDirectory "DFL-PT-WEBUI.Launcher.exe"
 $BootstrapScript = Join-Path $LauncherRoot "bootstrap.ps1"
 $RuntimeManifest = Join-Path $LauncherRoot "runtime-manifest.json"
 $RuntimeSetup = Join-Path $LauncherRoot "setup-runtime.ps1"
+$ProjectSetup = Join-Path $LauncherRoot "install-project.ps1"
+$SourceSetup = Join-Path $LauncherRoot "install-source.ps1"
 $TerminalBridgeEntry = Join-Path $LauncherRoot "server\index.mjs"
 $TerminalBridgeCore = Join-Path $LauncherRoot "server\terminal-bridge.mjs"
 if (-not (Test-Path -LiteralPath $BootstrapScript -PathType Leaf) -or
     -not (Test-Path -LiteralPath $RuntimeManifest -PathType Leaf) -or
-    -not (Test-Path -LiteralPath $RuntimeSetup -PathType Leaf)) {
+    -not (Test-Path -LiteralPath $RuntimeSetup -PathType Leaf) -or
+    -not (Test-Path -LiteralPath $ProjectSetup -PathType Leaf) -or
+    -not (Test-Path -LiteralPath $SourceSetup -PathType Leaf)) {
     throw "Launcher local runtime setup files are incomplete."
 }
 if (-not (Test-Path -LiteralPath $TerminalBridgeEntry -PathType Leaf) -or
@@ -335,9 +419,14 @@ $payloadSources = @(
     [PSCustomObject]@{ RelativePath = "bootstrap/bootstrap.ps1"; FilePath = $BootstrapScript },
     [PSCustomObject]@{ RelativePath = "bootstrap/runtime-manifest.json"; FilePath = $RuntimeManifest },
     [PSCustomObject]@{ RelativePath = "bootstrap/setup-runtime.ps1"; FilePath = $RuntimeSetup },
+    [PSCustomObject]@{ RelativePath = "bootstrap/install-project.ps1"; FilePath = $ProjectSetup },
+    [PSCustomObject]@{ RelativePath = "bootstrap/install-source.ps1"; FilePath = $SourceSetup },
+    [PSCustomObject]@{ RelativePath = "licenses/WebView2/LICENSE.txt"; FilePath = (Join-Path $SdkRoot "LICENSE.txt") },
+    [PSCustomObject]@{ RelativePath = "licenses/WebView2/NOTICE.txt"; FilePath = (Join-Path $SdkRoot "NOTICE.txt") },
     [PSCustomObject]@{ RelativePath = "terminal/index.mjs"; FilePath = $TerminalBridgeEntry },
     [PSCustomObject]@{ RelativePath = "terminal/terminal-bridge.mjs"; FilePath = $TerminalBridgeCore }
 )
+$payloadSources += $uiRuntimeLicenseSources
 $uiPrefixLength = $UiBuild.TrimEnd('\', '/').Length + 1
 foreach ($uiFile in Get-ChildItem -LiteralPath $UiBuild -Recurse -File | Sort-Object FullName) {
     $uiRelative = $uiFile.FullName.Substring($uiPrefixLength).Replace('\', '/')
@@ -418,6 +507,9 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "C# compilation failed with exit code $LASTEXITCODE."
     }
+    if ((Get-LauncherBuildSources | ConvertTo-Json -Depth 4 -Compress) -ne $buildSourceSnapshot) {
+        throw 'Launcher sources changed during compilation; the previous executable was preserved.'
+    }
     Publish-LauncherExecutable -StagedExecutable $StagedOutputExe -Destination $OutputExe
 } finally {
     Remove-PrivateStagingDirectory -Path $payloadTempRoot
@@ -425,6 +517,27 @@ try {
 
 if (-not (Test-Path -LiteralPath $OutputExe -PathType Leaf)) {
     throw "Launcher output executable was not published: $OutputExe"
+}
+
+# Record compiler inputs separately from embedded UI/runtime resources so the
+# standalone release verifier can reject an executable built from stale host code.
+$buildReceipt = [PSCustomObject]@{
+    schemaVersion = 1
+    product = 'DFL-PT-WEBUI Launcher'
+    executable = [PSCustomObject]@{
+        file = [IO.Path]::GetFileName($OutputExe)
+        sha256 = (Get-FileHash -LiteralPath $OutputExe -Algorithm SHA256).Hash.ToLowerInvariant()
+        bytes = (Get-Item -LiteralPath $OutputExe).Length
+    }
+    payloadBuildId = $BuildId
+    uiBuildPerformed = $uiBuildPerformed
+    sourceSnapshotBeforeUiBuild = $true
+    sources = $buildSources
+}
+[IO.File]::WriteAllText((Join-Path $OutputDirectory 'launcher-build.json'),
+    ($buildReceipt | ConvertTo-Json -Depth 8), (New-Object Text.UTF8Encoding($false)))
+if ([String]::Equals($OutputDirectory.TrimEnd('\', '/'), (Join-Path $LauncherRoot 'bin').TrimEnd('\', '/'), [StringComparison]::OrdinalIgnoreCase)) {
+    Publish-LauncherExecutable -StagedExecutable $OutputExe -Destination (Join-Path $RepositoryRoot 'DFL-PT-WEBUI.exe')
 }
 
 Write-Step "Built single EXE: $OutputExe"

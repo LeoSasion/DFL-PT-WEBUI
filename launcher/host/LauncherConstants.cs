@@ -5,7 +5,10 @@ namespace DflPtWebUi.Launcher
     internal static class LauncherConstants
     {
         public const string ProductName = "DFL-PT-WEBUI Launcher";
-        // A new local repository has no published source or release channel.
+        // First installation uses the official source ZIP without requiring Git.
+        // Source and executable auto-updates remain disabled.
+        public const string ProjectHomeUrl = "https://github.com/LeoSasion/DFL-PT-WEBUI";
+        public static readonly bool OnlineInstallationEnabled = true;
         public static readonly bool OnlineUpdatesEnabled = false;
         public const string GitRemote = "";
         public const string GitFallbackMirror = "";

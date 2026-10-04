@@ -218,6 +218,25 @@ namespace DflPtWebUi.Launcher
             return Directory.Exists(path) && Directory.GetFileSystemEntries(path).Length == 0;
         }
 
+        public static string AssertWritableChildPath(string projectRoot, string relativePath)
+        {
+            if (String.IsNullOrWhiteSpace(relativePath) || Path.IsPathRooted(relativePath))
+                throw new IOException("项目写入路径必须是相对路径。");
+            string root = Path.GetFullPath(projectRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string target = Path.GetFullPath(Path.Combine(root, relativePath));
+            if (!target.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                throw new IOException("写入路径越出了项目目录：" + target);
+            // Check the target and its ancestors, including the project root.
+            // Do not scan package contents: pnpm uses legitimate internal links.
+            for (string ancestor = target; !String.IsNullOrEmpty(ancestor); ancestor = Path.GetDirectoryName(ancestor))
+            {
+                if ((Directory.Exists(ancestor) || File.Exists(ancestor))
+                    && (File.GetAttributes(ancestor) & FileAttributes.ReparsePoint) != 0)
+                    throw new IOException("项目写入路径不能包含链接或重解析点：" + ancestor);
+            }
+            return target;
+        }
+
         private static string FindFrom(string startingPath)
         {
             if (String.IsNullOrWhiteSpace(startingPath))

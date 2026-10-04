@@ -18,7 +18,6 @@ namespace DflPtWebUi.Launcher
         private readonly GitService git;
         private readonly TerminalBridgeService terminal;
         private readonly SemaphoreSlim operationGate = new SemaphoreSlim(1, 1);
-        private volatile bool webUiActivatedInSession;
 
         public event Action<object> ProgressChanged;
 
@@ -82,17 +81,17 @@ namespace DflPtWebUi.Launcher
                 ? await Task.Run(delegate { return WebUiDependencies.Inspect(projectRoot, null); })
                 : new WebUiDependencyHealth { Ready = false, Detail = "等待项目与 Node.js 就绪。" };
             bool buildReady = File.Exists(webuiBuild);
-            bool webUiServicesOnline = await AreWebUiServicesOnlineAsync();
-            bool webuiRunning = webUiActivatedInSession && webUiServicesOnline;
+            bool webUiServicesOnline = await AreWebUiServicesOnlineAsync(projectRoot);
+            bool webuiRunning = webUiServicesOnline;
             int? webUiPid = webuiRunning ? TryReadManagedWebUiPid(projectRoot) : null;
             GitStatus gitStatus = ProjectLocator.IsGitRepository(projectRoot)
                 ? await git.InspectAsync(projectRoot, false)
                 : new GitStatus();
             gitStatus.UpdateAvailable = LauncherConstants.OnlineUpdatesEnabled && gitStatus.UpdateAvailable;
 
-            string mirrorLabel = GetMirrorLabel(snapshot.Mirror);
+            string mirrorLabel = "官方固定来源";
             List<object> runtimeItems = new List<object>();
-            runtimeItems.Add(RuntimeItem("project", "本地项目", projectReady, projectReady ? "ME PyTorch 源码已就绪" : "请选择完整的 DFL-PT-WEBUI 项目", projectRoot, "本地仓库", null));
+            runtimeItems.Add(RuntimeItem("project", "PT 项目源码", projectReady, projectReady ? "ME PyTorch 源码已就绪" : "开始安装以获取官方 PT 源码，或选择已有 PT 项目", projectRoot, "官方 GitHub / 本地项目", null));
             runtimeItems.Add(RuntimeItem("node", "Node.js", nodeRuntime.Ready, RuntimeDetail(nodeRuntime), nodeRuntime.TargetPath, mirrorLabel, null));
             runtimeItems.Add(RuntimeItem("python", "Python", pythonRuntime.Ready, RuntimeDetail(pythonRuntime), pythonRuntime.TargetPath, "项目运行环境", null));
             runtimeItems.Add(RuntimeItem("ffmpeg", "FFmpeg", ffmpegRuntime.Ready, RuntimeDetail(ffmpegRuntime), ffmpegRuntime.TargetPath, "项目运行环境", null));
@@ -124,6 +123,7 @@ namespace DflPtWebUi.Launcher
             result["runtimeManifest"] = runtimeValidation.Loaded ? "validated" : runtimeValidation.Error;
             result["projectDir"] = projectRoot;
             result["projectReady"] = projectReady;
+            result["onlineInstallationEnabled"] = LauncherConstants.OnlineInstallationEnabled;
             result["lastCheck"] = snapshot.LastCheck;
             result["terminalUrl"] = terminal.CurrentUrl;
             result["terminalRunning"] = terminal.IsRunning;
@@ -234,18 +234,42 @@ namespace DflPtWebUi.Launcher
             await operationGate.WaitAsync();
             try
             {
-                string projectRoot = RequireProjectRoot();
-                if (repair && await IsUrlOnlineAsync(LauncherConstants.WebUiUrl))
+                string projectRoot = ProjectLocator.Resolve(settings.Current);
+                ProjectLocator.AssertInstallTarget(projectRoot);
+                ProjectLocator.AssertWritableChildPath(projectRoot, ".launcher-install");
+                if (await HasRunningWebUiAsync())
                     throw new InvalidOperationException("WebUI 正在运行。请先停止 WebUI，再修复依赖。");
                 logs.SetDirectory(Path.Combine(ProjectLocator.PrepareInstallWorkspace(projectRoot), "logs"));
+                if (!ProjectLocator.IsProject(projectRoot))
+                {
+                    if (!LauncherConstants.OnlineInstallationEnabled)
+                        throw new InvalidOperationException("请先下载并解压 DFL-PT-WEBUI 源码或便携包。");
+                    ReportProgress("project", "正在获取 DFL-PT-WEBUI 官方源码…", "downloading", 1, 4);
+                    string sourceInstaller = Path.Combine(LauncherPayload.GetPath("bootstrap"), "install-project.ps1");
+                    await RunSetupScriptAsync(sourceInstaller, projectRoot, "源码安装失败");
+                    if (!ProjectLocator.IsProject(projectRoot))
+                        throw new InvalidOperationException("源码获取后未通过 PT 项目身份检查。");
+                    settings.Update(delegate(LauncherSettings value) { value.ProjectRoot = projectRoot; });
+                    ReportProgress("project", "PT 项目源码已就绪。", "complete", 2, 4);
+                }
                 ReportProgress("dependencies", "正在校验本地 PyTorch 运行环境…", "active", 2, 4);
                 RuntimeBootstrapResources resources = RuntimeBootstrapLocator.Resolve(projectRoot, LauncherPayload.GetPath("bootstrap"));
                 await RunBootstrapScriptAsync(projectRoot, resources, repair);
                 ReportProgress("finish", "正在检查 WebUI 构建…", "active", 3, 4);
-                await BuildWebUiIfPossibleAsync(projectRoot, false);
+                await BuildWebUiIfPossibleAsync(projectRoot, repair);
                 object state = await GetStateAsync();
                 if (!String.Equals(Convert.ToString(((Dictionary<string, object>)state)["environmentStatus"]), "ready", StringComparison.Ordinal))
                     throw new InvalidOperationException("本地健康检查未通过，请查看组件检测结果。");
+                try
+                {
+                    string installed = LauncherInstallation.CopyVerified(
+                        System.Reflection.Assembly.GetExecutingAssembly().Location, projectRoot);
+                    logs.Add("launcher", "项目启动入口已保存：" + installed, "success");
+                }
+                catch (IOException error)
+                {
+                    logs.Add("launcher", "运行环境已就绪，但已有启动器文件已保留：" + error.Message, "warning");
+                }
                 ReportProgress("finish", "环境检查完成。", "complete", 4, 4);
                 return state;
             }
@@ -275,7 +299,7 @@ namespace DflPtWebUi.Launcher
             try
             {
                 string root = RequireGitProjectRoot();
-                if (await IsUrlOnlineAsync(LauncherConstants.WebUiUrl))
+                if (await HasRunningWebUiAsync())
                 {
                     throw new InvalidOperationException("WebUI 正在运行。请先停止 WebUI，再更新项目，以免运行中的文件被锁定。");
                 }
@@ -311,7 +335,6 @@ namespace DflPtWebUi.Launcher
                 environment["DFL_UI_LANG"] = "zh";
                 CommandResult result = await runner.RunAsync(node, ProcessRunner.Quote(manager) + " start", root, environment, "webui");
                 EnsureSuccess(result, "WebUI 启动失败");
-                webUiActivatedInSession = true;
                 OpenUrl(LauncherConstants.WebUiUrl);
                 return await GetStateAsync();
             }
@@ -331,7 +354,6 @@ namespace DflPtWebUi.Launcher
                 string manager = Path.Combine(root, "webui", "scripts", "local-manager.mjs");
                 if (!File.Exists(node) || !File.Exists(manager))
                 {
-                    webUiActivatedInSession = false;
                     return await GetStateAsync();
                 }
                 IDictionary<string, string> environment = PortableNodeEnvironment.Ensure(
@@ -340,7 +362,6 @@ namespace DflPtWebUi.Launcher
                 environment["DFL_UI_LANG"] = "zh";
                 CommandResult result = await runner.RunAsync(node, ProcessRunner.Quote(manager) + " stop", root, environment, "webui");
                 EnsureSuccess(result, "WebUI 停止失败");
-                webUiActivatedInSession = false;
                 return await GetStateAsync();
             }
             finally
@@ -355,10 +376,7 @@ namespace DflPtWebUi.Launcher
             int? managedPid = ProjectLocator.IsProject(projectRoot)
                 ? TryReadManagedWebUiPid(projectRoot)
                 : null;
-            Task<bool> web = IsUrlOnlineAsync(LauncherConstants.WebUiUrl);
-            Task<bool> runtime = IsUrlOnlineAsync(LauncherConstants.WebUiRuntimeHealthUrl);
-            await Task.WhenAll(web, runtime);
-            return managedPid.HasValue || web.Result || runtime.Result;
+            return managedPid.HasValue || await IsOwnedRuntimeOnlineAsync(projectRoot);
         }
 
         public async Task<object> StartTerminalAsync()
@@ -480,7 +498,7 @@ namespace DflPtWebUi.Launcher
                 + ProcessRunner.Quote(resources.ScriptPath)
                 + " -ProjectRoot " + ProcessRunner.Quote(projectRoot)
                 + " -ManifestPath " + ProcessRunner.Quote(resources.ManifestPath)
-                + " -Mirror " + ProcessRunner.Quote(settings.Current.Mirror);
+                + " -Mirror official";
             if (repair)
             {
                 arguments += " -Repair";
@@ -502,8 +520,32 @@ namespace DflPtWebUi.Launcher
             EnsureBootstrapSuccess(result, "依赖安装失败", failureMessage);
         }
 
+        private async Task RunSetupScriptAsync(string script, string projectRoot, string failureLabel)
+        {
+            if (!File.Exists(script)) throw new FileNotFoundException("启动器内嵌安装资源不完整。", script);
+            JavaScriptSerializer serializer = new JavaScriptSerializer();
+            string failureMessage = null;
+            CommandResult result = await runner.RunAsync(
+                "powershell.exe",
+                "-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "
+                    + ProcessRunner.Quote(script) + " -ProjectRoot " + ProcessRunner.Quote(projectRoot),
+                projectRoot,
+                MirrorEnvironment(null),
+                "bootstrap",
+                delegate(string line)
+                {
+                    string candidate = TryGetBootstrapFailureMessage(line, serializer);
+                    if (!String.IsNullOrWhiteSpace(candidate)) failureMessage = candidate;
+                    return TryForwardBootstrapProgress(line, serializer);
+                });
+            EnsureBootstrapSuccess(result, failureLabel, failureMessage);
+        }
+
         private async Task BuildWebUiIfPossibleAsync(string projectRoot, bool force)
         {
+            ProjectLocator.AssertWritableChildPath(projectRoot, "webui/node_modules");
+            ProjectLocator.AssertWritableChildPath(projectRoot, "webui/dist");
+            string corepackCache = ProjectLocator.AssertWritableChildPath(projectRoot, ".launcher-install/source/corepack");
             string node = Path.Combine(projectRoot, "_internal", "node", "bin", "node.exe");
             string corepack = Path.Combine(projectRoot, "_internal", "node", "bin", "node_modules", "corepack", "dist", "corepack.js");
             string webuiRoot = Path.Combine(projectRoot, "webui");
@@ -518,6 +560,8 @@ namespace DflPtWebUi.Launcher
                 DflEnvironment.Load(projectRoot, logs),
                 node);
             environment = MirrorEnvironment(environment);
+            environment["COREPACK_HOME"] = corepackCache;
+            environment["COREPACK_ENABLE_DOWNLOAD_PROMPT"] = "0";
             bool dependencyTreePresent = Directory.Exists(Path.Combine(webuiRoot, "node_modules"));
             bool dependencyFilesPresent = WebUiDependencies.EntryPointsPresent(projectRoot);
             bool dependenciesLoad = dependencyFilesPresent
@@ -597,22 +641,12 @@ namespace DflPtWebUi.Launcher
                 }
             }
 
-            string mirror = settings.Current.Mirror;
-            environment["DFL_MIRROR"] = mirror;
-            if (!String.Equals(mirror, "official", StringComparison.OrdinalIgnoreCase))
-            {
-                environment["NPM_CONFIG_REGISTRY"] = "https://registry.npmmirror.com";
-                environment["COREPACK_NPM_REGISTRY"] = "https://registry.npmmirror.com";
-                environment["PIP_INDEX_URL"] = "https://pypi.tuna.tsinghua.edu.cn/simple";
-                environment["PIP_TRUSTED_HOST"] = "pypi.tuna.tsinghua.edu.cn";
-            }
-            else if (String.Equals(mirror, "official", StringComparison.OrdinalIgnoreCase))
-            {
-                environment["NPM_CONFIG_REGISTRY"] = "https://registry.npmjs.org";
-                environment["COREPACK_NPM_REGISTRY"] = "https://registry.npmjs.org";
-                environment["PIP_INDEX_URL"] = "https://pypi.org/simple";
-                environment.Remove("PIP_TRUSTED_HOST");
-            }
+            // Match the fixed registries used by the PT source installer.
+            environment["DFL_MIRROR"] = "official";
+            environment["NPM_CONFIG_REGISTRY"] = "https://registry.npmjs.org";
+            environment["COREPACK_NPM_REGISTRY"] = "https://registry.npmjs.org";
+            environment["PIP_INDEX_URL"] = "https://pypi.org/simple";
+            environment["PIP_TRUSTED_HOST"] = String.Empty;
             return environment;
         }
 
@@ -629,7 +663,7 @@ namespace DflPtWebUi.Launcher
         private string RequireGitProjectRoot()
         {
             if (!LauncherConstants.OnlineUpdatesEnabled)
-                throw new InvalidOperationException("预览版通过发行页手动安装和升级，启动器在线安装与更新未启用。");
+                throw new InvalidOperationException("预览版的 Git 更新未启用，请通过发行页手动升级。");
             string root = RequireProjectRoot();
             if (!ProjectLocator.IsGitRepository(root))
                 throw new InvalidOperationException("当前项目来自源码或便携发行包，没有 Git 元数据，不能执行 Git 更新。");
@@ -721,10 +755,43 @@ namespace DflPtWebUi.Launcher
             });
         }
 
-        private static async Task<bool> AreWebUiServicesOnlineAsync()
+        private static async Task<bool> IsOwnedRuntimeOnlineAsync(string projectRoot)
+        {
+            return await Task.Run(delegate
+            {
+                try
+                {
+                    HttpWebRequest request = (HttpWebRequest)WebRequest.Create(LauncherConstants.RuntimeHealthUrl);
+                    request.Timeout = 1500;
+                    request.ReadWriteTimeout = 1500;
+                    request.AllowAutoRedirect = false;
+                    request.Proxy = null;
+                    Stopwatch elapsed = Stopwatch.StartNew();
+                    using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
+                    using (Stream stream = response.GetResponseStream())
+                    using (MemoryStream body = new MemoryStream())
+                    {
+                        if (response.StatusCode != HttpStatusCode.OK) return false;
+                        byte[] buffer = new byte[4096];
+                        int count;
+                        while ((count = stream.Read(buffer, 0, buffer.Length)) > 0)
+                        {
+                            if (body.Length + count > RuntimeServiceIdentity.MaxHealthBytes
+                                || elapsed.ElapsedMilliseconds > 2500) return false;
+                            body.Write(buffer, 0, count);
+                        }
+                        return RuntimeServiceIdentity.Matches(
+                            System.Text.Encoding.UTF8.GetString(body.ToArray()), projectRoot);
+                    }
+                }
+                catch { return false; }
+            });
+        }
+
+        private static async Task<bool> AreWebUiServicesOnlineAsync(string projectRoot)
         {
             Task<bool> web = IsUrlOnlineAsync(LauncherConstants.WebUiUrl);
-            Task<bool> runtime = IsUrlOnlineAsync(LauncherConstants.WebUiRuntimeHealthUrl);
+            Task<bool> runtime = IsOwnedRuntimeOnlineAsync(projectRoot);
             await Task.WhenAll(web, runtime);
             return web.Result && runtime.Result;
         }
@@ -748,6 +815,9 @@ namespace DflPtWebUi.Launcher
                 JavaScriptSerializer serializer = new JavaScriptSerializer();
                 Dictionary<string, object> status = serializer.Deserialize<Dictionary<string, object>>(
                     File.ReadAllText(statusPath));
+                if (status == null || !status.ContainsKey("projectRoot")
+                    || !RuntimeServiceIdentity.SameProjectPath(Convert.ToString(status["projectRoot"]), projectRoot))
+                    return null;
                 int supervisorPid = status != null && status.ContainsKey("supervisorPid")
                     ? Convert.ToInt32(status["supervisorPid"])
                     : 0;
@@ -761,7 +831,8 @@ namespace DflPtWebUi.Launcher
 
                 using (Process process = Process.GetProcessById(pid))
                 {
-                    if (process.HasExited || !String.Equals(process.ProcessName, "node", StringComparison.OrdinalIgnoreCase))
+                    if (process.HasExited || !RuntimeServiceIdentity.SameProjectPath(
+                        process.MainModule.FileName, Path.Combine(projectRoot, "_internal", "node", "bin", "node.exe")))
                     {
                         return null;
                     }

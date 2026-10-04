@@ -5,12 +5,13 @@ Windows 本地工作台：**ME PyTorch 训练 + WebUI + 数据处理、XSeg、�
 **0.1.1-preview** 面向用户实测反馈。换脸训练使用 ME/PyTorch，XSeg 是辅助遮罩模型；旧 ME 网络权重可以通过显式导入命令迁移。运行环境与项目材料保持独立。
 
 - [下载预览版](https://github.com/LeoSasion/DFL-PT-WEBUI/releases/tag/v0.1.1-preview)：源码包和 Windows x64 便携包，均随包提供通用 XSeg 推理权重。
+- [下载一键启动器 EXE](https://github.com/LeoSasion/DFL-PT-WEBUI/releases/download/launcher-v0.1.2-preview/DFL-PT-WEBUI.Launcher.exe)：双击、选择空目录并开始安装，无需先安装 Git、Python 或 Node；详见[启动器说明](docs/LAUNCHER.md)。
 - [完整安装步骤](docs/INSTALL.md)、[版本说明](docs/RELEASE_NOTES.md)、[已知限制](docs/KNOWN_ISSUES.md)。
 - [反馈问题](https://github.com/LeoSasion/DFL-PT-WEBUI/issues/new/choose)；反馈需要的信息见 [FEEDBACK.md](docs/FEEDBACK.md)。
 
 ## 启动
 
-双击根目录 **`启动 WebUI.bat`**，打开 <http://127.0.0.1:4173>。需要传统命令工具时双击 **`传统命令菜单.bat`**。
+首次使用可双击下载的 **`DFL-PT-WEBUI.Launcher.exe`**，选择独立空目录并开始安装。完成后启动器保留在项目根目录 **`DFL-PT-WEBUI.exe`**，以后双击它，再点击“启动 WebUI”，打开 <http://127.0.0.1:4173>。原有 **`启动 WebUI.bat`** 和 **`传统命令菜单.bat`** 仍可使用。
 
 便携包带独立 Python 3.12.14、PyTorch 2.9.1 + CUDA 12.8、Node.js 24.19.0、FFmpeg 和必要辅助权重。源码安装可在仓库根目录运行 `install-source.bat`，自动准备这些材料、安装依赖并构建 WebUI。需要 Windows x64；GPU 训练需要支持 CUDA 12.8 的 NVIDIA 驱动。Python base 在 `_internal/python_base`，venv 在 `.venv`。
 
@@ -22,7 +23,7 @@ Set-Location C:\DFL-PT-WEBUI
 powershell -NoProfile -ExecutionPolicy Bypass -File launcher\bootstrap.ps1 -ProjectRoot C:\DFL-PT-WEBUI -NoNetwork
 ```
 
-源码 Git 不提交运行时、辅助权重、依赖包、个人素材和模型；克隆后先执行安装入口。便携包不带个人素材、训练检查点、本机任务状态或旧工作台截图。源码安装支持准备离线材料，详见 [运行环境说明](launcher/runtime-README.md)。启动器在线自动更新仍关闭，升级通过发行页下载。
+启动器从本项目官方 GitHub `main` 下载源码，再调用 PT 源码安装入口准备独立运行环境和固定通用 XSeg 权重。原版 DFL-WEBUI 与本项目必须使用不同安装目录；两个项目默认使用相同本地端口，切换时先停止另一项目的 WebUI，启动器不会结束其他项目的服务。源码 Git 不提交运行时、辅助权重、依赖包、个人素材和模型；克隆后先执行安装入口。便携包不带个人素材、训练检查点、本机任务状态或旧工作台截图。源码安装支持准备离线材料，详见 [运行环境说明](launcher/runtime-README.md)。启动器在线自动更新仍关闭，升级通过发行页下载。
 
 当前开发证据覆盖单卡、小参数的保存、停止、恢复和初步收敛趋势。正式案例画质、真实双卡和新用户不同机器上的完整流程等待实测反馈，详见 [短程验收](docs/ME_SHORT_RUN_ACCEPTANCE.md)。
 
@@ -49,7 +50,7 @@ ME 向导提供“默认训练”“RG + FP16”“预训练”“后期微调�
 
 ## 配套工具
 
-下一版源码新增“工具实验室 → 图像工具”的奇智 API 接入：申请入口、本机 Key 配置、文生图/图像编辑/参考图合成、后台进度与结果保存。当前 0.1.1-preview 发行包尚不含这项功能，使用与能力边界见 [图像服务说明](docs/IMAGE_SERVICE.md)。
+当前 `main` 源码包含“工具实验室 → 图像工具”的奇智 API 接入：申请入口、本机 Key 配置、文生图/图像编辑/参考图合成、后台进度与结果保存。一键启动器安装当前 `main`；现有 0.1.1-preview 源码包和便携包尚不含这项功能，使用与能力边界见 [图像服务说明](docs/IMAGE_SERVICE.md)。
 
 保留视频提帧/封装、S3FD 切脸、2D/3D FAN、错脸筛选、排序、姿态筛选、PAK/ZIP 打包解包、FaceEnhancer、重设尺寸、DFL 元数据和 XSeg 工具，以及 Web 的人物选择、审核、修复、标注、相似度、回收恢复、诊断、日志和任务管理。详细映射见 [迁移说明](MIGRATION.md)。
 
@@ -76,7 +77,7 @@ CLI 保留 `--config 文件.json`，并支持 `--config-json '<JSON 对象>'`；
 | `_internal/DeepFaceLab/me_backend` | ME 网络、损失、优化器、数据、检查点、Web 控制桥和 DFM |
 | `_internal/DeepFaceLab` | 配套 PyTorch 人脸工具、XSeg、Merger 与 CLI |
 | `webui` | React 界面、本地服务、固定命令注册表和 Python 数据工具 |
-| `launcher` | 本地运行环境检查、修复和 Windows 启动器 |
+| `launcher` | 在线首次安装、本地运行环境检查、修复和 Windows 启动器 |
 | `legacy-cli` | 传统命令菜单和工具入口 |
 | `tools` | 运行检查、依赖准备、构建和打包 |
 | `workspace` / `workspaces` | 忽略的用户素材、模型、输出和任务记录 |

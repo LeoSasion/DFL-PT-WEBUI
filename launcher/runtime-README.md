@@ -8,7 +8,7 @@
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\launcher\install-source.ps1
 ```
 
-安装完成后使用根目录的 `启动 WebUI.bat`。安装入口会准备独立 Python base、项目 `.venv`、Node、FFmpeg、提取/增强/人物分组辅助权重和通用 XSeg 推理权重，以及锁定的 WebUI 依赖和首次前端构建。安装本身不启动 WebUI，不训练、合成或下载用户的视频、数据集和 ME 模型。系统需有适合 CUDA 12.8 的 NVIDIA 驱动；CUDA/cuDNN DLL 由 PyTorch wheel 提供，无需另装 CUDA Toolkit。
+可从发行页单独下载 `DFL-PT-WEBUI.Launcher.exe`，选择独立空目录并点击“开始安装”。启动器获取本项目官方源码，再调用上述固定版本安装入口；不需要预装 Git。安装完成后在项目根目录保存 `DFL-PT-WEBUI.exe`，也可继续使用 `启动 WebUI.bat`。安装入口会准备独立 Python base、项目 `.venv`、Node、FFmpeg、提取/增强/人物分组辅助权重和通用 XSeg 推理权重，以及锁定的 WebUI 依赖和首次前端构建。安装本身不启动 WebUI，不训练、合成或下载用户的视频、数据集和 ME 模型。系统需有适合 CUDA 12.8 的 NVIDIA 驱动；CUDA/cuDNN DLL 由 PyTorch wheel 提供，无需另装 CUDA Toolkit。
 
 ## 运行时与来源
 
@@ -64,6 +64,8 @@ Python 和 FFmpeg 散列来自相应 GitHub 上游发行资产的 SHA-256 digest
 
 如果已有 ME 训练材料，并明确暂不使用提取、增强、人物分组和通用 XSeg，可选择 `-SkipVisionAssets`。它不下载辅助权重，也不保证这些工具可用。`-SkipWebuiBuild` 只跳过首次构建；正常启动所需的 WebUI 依赖仍须就绪。
 
+`-SkipWebuiPreparation` 是启动器修复流程的内部参数，将 WebUI 依赖修复与强制构建交给启动器处理；Python、Node、FFmpeg 和辅助权重仍由安装入口准备、验证。
+
 ## WebUI 原生依赖
 
 WebUI 依赖由项目内 Node/Corepack 执行 `pnpm install --frozen-lockfile`，保持仓库的 `pnpm-workspace.yaml` 构建许可。固定的 `node-pty` 1.1.0 发布包包含 Windows x64 预编译模块，脚本优先复用它，并在安装后检查模块是否能加载。
@@ -79,6 +81,6 @@ WebUI 依赖由项目内 Node/Corepack 执行 `pnpm install --frozen-lockfile`�
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\launcher\bootstrap.ps1 -ProjectRoot . -NoNetwork
 ```
 
-`setup-runtime.ps1 -InstallDependencies` 是原有显式包修复接口，需要先有 `_internal/python_base`；新用户使用上面的 `install-source.bat` 完成独立环境准备。启动器在线项目克隆、Git 更新和自更新继续受本项目的发布策略控制；运行时安装入口不配置 Git 远端或更新通道。
+`setup-runtime.ps1 -InstallDependencies` 是原有显式包修复接口，需要先有 `_internal/python_base`；新用户可使用启动器或上面的 `install-source.bat` 完成独立环境准备。启动器使用官方源码 ZIP 进行首次安装；Git 更新和 EXE 自动更新仍关闭，运行时安装入口不配置 Git 远端或更新通道。
 
-本轮交付仅对安装脚本做静态语法与来源检查，没有执行新安装、下载运行时、启动程序或功能验收。具体新机安装和功能使用结果需由开源用户实测反馈。
+本轮已实测官方 GitHub 源码获取，完成 Windows PowerShell 5.1/7 的离线安装路由与保护测试、已有环境的 `-NoNetwork` 验证，以及完整 UI/native 构建和打包校验；尚未在全新的 Windows 环境下载整套多 GB 运行时并完成启动、训练验收。

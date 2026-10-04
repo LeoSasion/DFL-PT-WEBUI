@@ -1,11 +1,12 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot),
     [switch]$NoNetwork,
     [string]$ArchiveDirectory = '',
     [string]$WheelhousePath = '',
     [switch]$SkipVisionAssets,
-    [switch]$SkipWebuiBuild
+    [switch]$SkipWebuiBuild,
+    [switch]$SkipWebuiPreparation
 )
 
 # Windows PowerShell 5.1 / PowerShell 7. No global Python, npm or PATH changes.
@@ -157,9 +158,10 @@ try {
         'webui\pnpm-lock.yaml', 'webui\pnpm-workspace.yaml', 'release\version.json', 'tools\prepare-vision-runtime.ps1')) {
         if (-not (Test-Path -LiteralPath (Join-Path $root $relative) -PathType Leaf)) { throw "Not a complete source checkout: missing $relative" }
     }
-    foreach ($path in @($cache, $session, $base, $venv, $nodeRoot, $ffmpegRoot, $modules, $dist,
+    $runtimePaths = @($cache, $session, $base, $venv, $nodeRoot, $ffmpegRoot, $modules, $dist,
         (Join-Path $root '.launcher-install\vision'), (Join-Path $root '_internal\DeepFaceLab\facelib'),
-        (Join-Path $root '_internal\vision_models'))) {
+        (Join-Path $root '_internal\vision_models'))
+    foreach ($path in $runtimePaths) {
         Assert-ProjectPath $path | Out-Null
     }
     # Use this shell's modules, including when PS5 inherits PS7's module paths.
@@ -278,6 +280,7 @@ try {
         & (Join-Path $root 'tools\prepare-vision-runtime.ps1') -ProjectRoot $root -NoNetwork:$NoNetwork -SkipFFmpeg -PreserveExisting
         if (-not $?) { throw 'Preparing verified helper weights failed.' }
     } else { Write-Host '[source-install] Helper weights explicitly skipped; extraction / enhancement / grouping may be unavailable.' }
+    if (-not $SkipWebuiPreparation) {
     Set-InstallEnvironment 'PATH' ($nodeBin + [IO.Path]::PathSeparator + $env:PATH)
     Set-InstallEnvironment 'COREPACK_HOME' (Join-Path $cache 'corepack')
     Set-InstallEnvironment 'COREPACK_ENABLE_NETWORK' $(if ($NoNetwork) { '0' } else { '1' })
@@ -319,6 +322,9 @@ try {
             Assert-Exit 'WebUI build provenance'
         }
     } finally { Pop-Location }
+    } else {
+        Write-Host '[source-install] WebUI dependency preparation and build delegated to launcher repair.'
+    }
     $succeeded = $true
     Write-Host '[source-install] Source runtime ready. Start the root WebUI BAT when you want to run the application.'
 } catch {

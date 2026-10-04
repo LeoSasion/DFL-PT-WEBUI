@@ -60,13 +60,11 @@ Describe "launcher self-update metadata" {
             [Version]"0.2.0.0") | Should Be $false
     }
 
-    It "keeps the new repository unpublished with an explicitly disabled update channel" {
+    It "keeps automatic updates disabled while the launcher is distributed separately" {
         $channelJson = Get-Content -LiteralPath $channelPath -Raw -Encoding UTF8
         $channel = $channelJson | ConvertFrom-Json
         $channel.enabled | Should Be $false
         @($channel.sources).Count | Should Be 0
-        $assemblyInfo = Get-Content -LiteralPath $assemblyInfoPath -Raw -Encoding UTF8
-        $assemblyInfo | Should Match 'AssemblyVersion\("0\.1\.0\.0"\)'
         { [DflPtWebUi.Launcher.LauncherUpdateManifest]::Parse($channelJson) } | Should Throw
     }
 }

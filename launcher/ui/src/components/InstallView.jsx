@@ -1,10 +1,8 @@
-import { useEffect, useState } from "react";
 import {
   IconArrowRight,
   IconBrandGithub,
   IconBrandNodejs,
   IconCheck,
-  IconChevronDown,
   IconChevronRight,
   IconCloudDownload,
   IconCpu2,
@@ -114,7 +112,7 @@ function RuntimeRow({ item }) {
       </div>
       <div className="runtime-row__source">
         <small>来源</small>
-        <span>{item.source || "项目镜像"}</span>
+        <span>{item.source || "官方固定来源"}</span>
       </div>
       <div className="runtime-row__evidence">
         {working ? (
@@ -153,21 +151,6 @@ function InstallLog({ logs, onClear }) {
 
 export function InstallView({ state, logs, busy, onAction, onClearLogs }) {
   const hasError = state.runtimeItems.some((item) => item.status === "error");
-  const [networkOpen, setNetworkOpen] = useState(false);
-  const [proxyMode, setProxyMode] = useState(state.gitProxyMode || "auto");
-  const [proxy, setProxy] = useState(state.gitProxy || "");
-  const [gitMirror, setGitMirror] = useState(state.gitMirror || "");
-
-  useEffect(() => {
-    setProxyMode(state.gitProxyMode || "auto");
-    setProxy(state.gitProxy || "");
-    setGitMirror(state.gitMirror || "");
-  }, [state.gitProxyMode, state.gitProxy, state.gitMirror]);
-
-  const saveGitNetwork = async () => {
-    const saved = await onAction("setGitNetwork", { mode: proxyMode, proxy, mirror: gitMirror });
-    if (saved) setNetworkOpen(false);
-  };
 
   return (
     <div className="install-layout">
@@ -176,7 +159,7 @@ export function InstallView({ state, logs, busy, onAction, onClearLogs }) {
         <div className="install-main__intro">
           <p className="eyebrow">首次运行 · 本地部署</p>
           <h1>准备本地运行环境</h1>
-          <p>检查本地 ME PyTorch 项目与独立运行环境；本仓库尚未配置在线发布源。</p>
+          <p>首次安装会获取 DFL-PT-WEBUI 官方源码并准备独立运行环境；已有项目可直接检查或修复。</p>
         </div>
 
         <section className="runtime-list panel-line" aria-label="运行环境组件">
@@ -188,7 +171,7 @@ export function InstallView({ state, logs, busy, onAction, onClearLogs }) {
         <footer className="install-footer">
           <div className="install-setting">
             <IconSettings size={17} />
-            <span>本地项目目录</span>
+            <span>安装目录</span>
             <code title={state.installPath}>{state.installPath}</code>
             <button disabled={busy} onClick={() => onAction("chooseInstallPath")}>更改</button>
           </div>
@@ -197,26 +180,21 @@ export function InstallView({ state, logs, busy, onAction, onClearLogs }) {
             <span>源码</span>
             <button
               className="select-like"
-              title={state.gitNetworkLabel}
-              aria-expanded={networkOpen}
-              aria-controls="git-network-settings"
               disabled
             >
-              本地 Git 仓库
-              <IconChevronDown size={14} />
+              官方 GitHub 源码
             </button>
           </div>
           <div className="install-setting install-setting--mirror">
             <IconGlobe size={17} />
             <span>运行包</span>
             <button className="select-like" disabled>
-              PyTorch 官方 cu128
-              <IconChevronDown size={14} />
+              官方固定来源
             </button>
           </div>
           <button className="primary-action" disabled={busy} onClick={() => onAction(hasError ? "retryBootstrap" : "runBootstrap")}>
             {busy && <IconLoader2 className="spin" size={17} />}
-            {hasError ? "重新检测" : "检测本地环境"}
+            {hasError ? "重试安装" : state.projectReady ? "检查并准备环境" : "开始安装"}
             {!busy && <IconArrowRight size={17} />}
           </button>
           <p className="install-path-hint">项目文件将直接安装到以上目录。选择空文件夹时直接使用；选择磁盘根目录或非空文件夹时，自动使用 DFL-PT-WEBUI 子文件夹。已有项目将继续使用。</p>
