@@ -47,8 +47,10 @@ test("installation verifies source bytes and marks changed or missing source unv
   await mkdir(path.join(root, "webui", "src"), { recursive: true });
   const source = path.join(root, "webui", "src", "App.jsx");
   await writeFile(source, "approved");
+  await mkdir(path.join(root, "_internal", "DeepFaceLab"), { recursive: true });
+  await writeFile(path.join(root, "_internal", "DeepFaceLab", "LICENSE"), "license\r\ntext\r\n");
   await writeFile(path.join(root, "release", "version.json"), JSON.stringify({ version: "0.1.2-preview", launcherVersion: "0.1.3-preview" }));
-  await writeFile(path.join(root, "release", "source-files.json"), JSON.stringify({ product: "DFL-PT-WEBUI", files: [{ path: "webui/src/App.jsx", sha256: createHash("sha256").update("approved").digest("hex") }] }));
+  await writeFile(path.join(root, "release", "source-files.json"), JSON.stringify({ product: "DFL-PT-WEBUI", files: [{ path: "webui/src/App.jsx", sha256: createHash("sha256").update("approved").digest("hex") }, { path: "_internal/DeepFaceLab/LICENSE", sha256: createHash("sha256").update("license\ntext\n").digest("hex") }] }));
   assert.equal((await inspectInstallation(root)).source.verified, true);
   await writeFile(source, "changed");
   assert.equal((await inspectInstallation(root)).source.status, "modified-or-incomplete");

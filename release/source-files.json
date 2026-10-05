@@ -24,7 +24,7 @@
     },
     {
       "path": "_internal/DeepFaceLab/LICENSE",
-      "sha256": "0b383d5a63da644f628d99c33976ea6487ed89aaa59f0b3257992deac1171e6b"
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
     },
     {
       "path": "_internal/DeepFaceLab/ME_README.md",
@@ -1348,7 +1348,7 @@
     },
     {
       "path": "release/source-integrity.mjs",
-      "sha256": "9fa3e1fafbb9ad995d5b9b75685a5678a3b49cda97e209a8d74891da68f4a8d2"
+      "sha256": "328aee136a03011148eee7879034fa00770ac28d0a1bce353856ef6379c9977b"
     },
     {
       "path": "release/version.json",
