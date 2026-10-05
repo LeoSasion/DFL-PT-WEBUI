@@ -952,7 +952,7 @@
     },
     {
       "path": "launcher/host/app.manifest",
-      "sha256": "8aa4d48c26273912c77f411464f05236093eb8a67812155ec6afe94796c9f345"
+      "sha256": "3f615d599eaf33dc062f4fd7b421add73d649c3f70068365ff3fe2ff9c6e3fd7"
     },
     {
       "path": "launcher/host/brand-mark.ico",
@@ -1008,7 +1008,7 @@
     },
     {
       "path": "launcher/ui/.npmrc",
-      "sha256": "4b86f5f917232873bbf42e48812de3a2869a739df361ffa4a3b117a9f4ff65aa"
+      "sha256": "f7dbda001b627b3a792fb6929303b517f047f03916f2c55227e81216d38a2008"
     },
     {
       "path": "launcher/ui/AGENTS.md",
@@ -1348,7 +1348,7 @@
     },
     {
       "path": "release/source-integrity.mjs",
-      "sha256": "328aee136a03011148eee7879034fa00770ac28d0a1bce353856ef6379c9977b"
+      "sha256": "6647e3af508c034283b58aa830dd6182905d7b06aeafd3d9815e9d6e4f026267"
     },
     {
       "path": "release/version.json",
