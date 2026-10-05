@@ -7,7 +7,7 @@ const toolsRoot = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(toolsRoot, "..");
 const read = (relative) => readFile(path.join(repositoryRoot, relative), "utf8");
 
-if (versionSource.schemaVersion !== 1 || !/^\d+\.\d+\.\d+$/.test(versionSource.version)) {
+if (versionSource.schemaVersion !== 1 || !/^\d+\.\d+\.\d+(?:-preview)?$/.test(versionSource.version)) {
   throw new Error("release/version.json is invalid");
 }
 if (!/^\d+\.\d+\.\d+$/.test(versionSource.nodeVersion)) {
@@ -24,15 +24,15 @@ const [assemblyInfo, channel, installer, launcherBat, webuiPackage, appServer] =
 ]);
 
 const errors = [];
-const assemblyVersion = `${versionSource.version}.0`;
+const assemblyVersion = `${(versionSource.launcherVersion || versionSource.version).split('-')[0]}.0`;
 if (!assemblyInfo.includes(`AssemblyVersion("${assemblyVersion}")`)) {
   errors.push(`launcher AssemblyVersion must be ${assemblyVersion}`);
 }
 if (!assemblyInfo.includes(`AssemblyFileVersion("${assemblyVersion}")`)) {
   errors.push(`launcher AssemblyFileVersion must be ${assemblyVersion}`);
 }
-if (channel.version !== versionSource.version) {
-  errors.push(`launcher/update-channel.json version must be ${versionSource.version}`);
+if (channel.version !== (versionSource.launcherVersion || versionSource.version)) {
+  errors.push(`launcher/update-channel.json version must match launcherVersion`);
 }
 if (versionSource.product !== "DFL-PT-WEBUI") {
   errors.push("release/version.json product must be DFL-PT-WEBUI");

@@ -33,6 +33,14 @@ FIXED_PAYLOAD = {
     "bootstrap/setup-runtime.ps1": "launcher/setup-runtime.ps1",
     "bootstrap/install-project.ps1": "launcher/install-project.ps1",
     "bootstrap/install-source.ps1": "launcher/install-source.ps1",
+    "bootstrap/upgrade-project.ps1": "launcher/upgrade-project.ps1",
+    "bootstrap/source-pin.json": "release/source-pin.json",
+    "bootstrap/version.json": "release/version.json",
+    "bootstrap/version.mjs": "release/version.mjs",
+    "bootstrap/feedback.mjs": "release/feedback.mjs",
+    "bootstrap/feedback-template.json": "release/feedback-template.json",
+    "bootstrap/installation.mjs": "release/installation.mjs",
+    "bootstrap/source-integrity.mjs": "release/source-integrity.mjs",
     "terminal/index.mjs": "launcher/server/index.mjs",
     "terminal/terminal-bridge.mjs": "launcher/server/terminal-bridge.mjs",
 }
@@ -355,6 +363,15 @@ def package(root: Path, source_revision: str, version: str, output: Path) -> dic
     inspection = inspect_assembly(executable)
     build_id, entries = verify_payload(inspection, payload_sources(root), version)
     compiler_sources = verify_build_receipt(root, executable, build_id)
+    application_pin = None
+    pin_path = root / "release/source-pin.json"
+    if pin_path.exists():
+        application_pin = json.loads(pin_path.read_text(encoding="utf-8-sig"))
+        if (application_pin.get("product") != "DFL-PT-WEBUI"
+                or not re.fullmatch(r"[0-9a-f]{40}", application_pin.get("sourceCommit", ""))
+                or not re.fullmatch(r"[0-9a-f]{64}", application_pin.get("archiveSha256", ""))
+                or application_pin.get("archiveRoot") != "DFL-PT-WEBUI-" + application_pin["sourceCommit"]):
+            raise PackageError("Launcher network installation must pin a public application commit and official archive SHA-256.")
     output = output.resolve()
     release_root = (root / "release-output").resolve()
     if not output.is_relative_to(release_root) or output == release_root:
@@ -367,6 +384,7 @@ def package(root: Path, source_revision: str, version: str, output: Path) -> dic
         "schemaVersion": 1, "product": PRODUCT, "version": version,
         "releaseTag": "launcher-v" + version,
         "createdUtc": datetime.now(timezone.utc).isoformat(), "source": source,
+        "applicationSource": application_pin,
         "launcher": {"file": FILE_NAME, "size": executable.stat().st_size,
                      "sha256": executable_hash, "machine": "AMD64", "format": "PE32+",
                      "assemblyVersion": inspection["assemblyVersion"],
@@ -403,7 +421,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-revision", required=True,
                         help="Reviewed sanitized public commit whose tree matches this checkout.")
-    parser.add_argument("--version", default="0.1.2-preview")
+    parser.add_argument("--version", default="0.1.3-preview")
     parser.add_argument("--output", type=Path)
     arguments = parser.parse_args()
     output = arguments.output or ROOT / "release-output" / ("launcher-v" + arguments.version)

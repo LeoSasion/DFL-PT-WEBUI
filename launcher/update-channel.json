@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "enabled": false,
-  "version": "0.1.0",
+  "version": "0.1.3-preview",
   "sources": [],
   "reason": "Preview releases are distributed manually through GitHub Releases; automatic launcher updates remain disabled."
 }

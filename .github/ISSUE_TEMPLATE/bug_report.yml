@@ -7,7 +7,7 @@ body:
     id: version
     attributes:
       label: 版本与安装方式
-      placeholder: 0.1.0-preview / 源码或便携包
+      placeholder: 应用 0.1.2-preview / 启动器 0.1.3-preview / 来源、固定提交与校验状态
     validations:
       required: true
   - type: textarea
@@ -34,7 +34,7 @@ body:
     id: logs
     attributes:
       label: 日志或校验错误
-      description: 粘贴错误附近的日志；移除私人材料、路径和凭据，无需附整个模型。
+      description: 可粘贴程序“准备反馈信息”的预览，补充失败步骤；原始日志请先移除私人材料、路径和凭据，无需附整个模型。
       render: text
   - type: textarea
     id: extra

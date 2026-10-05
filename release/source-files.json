@@ -1,0 +1,1862 @@
+{
+  "schemaVersion": 1,
+  "product": "DFL-PT-WEBUI",
+  "files": [
+    {
+      "path": "_internal/DeepFaceLab/DFLIMG/DFLIMG.py",
+      "sha256": "5626708916f9564a9787ac3e4153601ab3e61d22d9fe52b546d659a06f1a4c68"
+    },
+    {
+      "path": "_internal/DeepFaceLab/DFLIMG/DFLJPG.py",
+      "sha256": "25cc73a0f35e932a6b9cf17cc6d01897e2d7278a37ea30a9d6abd999a313d98f"
+    },
+    {
+      "path": "_internal/DeepFaceLab/DFLIMG/__init__.py",
+      "sha256": "728e48a835d31d264f1892f3d20637f66721b4ed468576610c749eb6980d8fdb"
+    },
+    {
+      "path": "_internal/DeepFaceLab/ErrFaceFilter/CL.json",
+      "sha256": "0ddb97887c63e2666058bd341cb21e4b113d90e2bb25a0cb8556c67c87491775"
+    },
+    {
+      "path": "_internal/DeepFaceLab/ErrFaceFilter/ErrFaceFilter.py",
+      "sha256": "dbe1215860de8ce8b7f23cf5b6f68de44b1a7fc99419a67273c518da627580cb"
+    },
+    {
+      "path": "_internal/DeepFaceLab/LICENSE",
+      "sha256": "0b383d5a63da644f628d99c33976ea6487ed89aaa59f0b3257992deac1171e6b"
+    },
+    {
+      "path": "_internal/DeepFaceLab/ME_README.md",
+      "sha256": "ec3f04299a7fdccaafaa25cfe7bf3226bd1f4d1606cb24051cbf46972e73bbe7"
+    },
+    {
+      "path": "_internal/DeepFaceLab/ME_VALIDATION.md",
+      "sha256": "21cf312cf297a7aef6431c27aa024df2cbab5ea36718d21339d64f6b24a65b30"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/QCursorDB.py",
+      "sha256": "5c881bc6dba5ead201251bac0dbb5108b3a60fe8e01a42c6c963489fade5d21d"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/QIconDB.py",
+      "sha256": "3e7eeee17d6595e57431e0661610662b4d07d9054ddf2cb992d296d8ac92112c"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/QImageDB.py",
+      "sha256": "10325059d95da7230f62246afc14ed72f32f2a7089b54dbcb87be4ed8114d2bb"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/QStringDB.py",
+      "sha256": "94978f15a7f00b6d30f4eb66bed2292975c55d860d3cbab4d8edb5a8f544447f"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/XSegEditor.py",
+      "sha256": "7bb4acfafd8457190c061b3b589e3ff7b0b4553222837fb5317a3c7fdfe0a8fa"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/cursors/cross_blue.png",
+      "sha256": "57bb7efb442ef7bf1819ca2be6c56d55828e6c07fde2daaf235e313904ea73cc"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/cursors/cross_green.png",
+      "sha256": "3dbf93a40cf10804b61cc91fb0084455726c917d8e9a719a57a15dd7c270760a"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/cursors/cross_red.png",
+      "sha256": "224c61e676fe6da23c979fc8c06e3e6ea9d7fd496b65811ce571eb211631826e"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/fonts/NotoSans-Medium.ttf",
+      "sha256": "c801b8d2522fb554678f17f4597158b1af3f9be3abd6ce35d5a3112a81e2bf39"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/icons/app_icon.png",
+      "sha256": "2027a6ada812b170d1d23fd96e16628f6b468e362800fac3c181359196c4132e"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/icons/delete_poly.png",
+      "sha256": "9ca5e7e2019ae4a1687bc69c24f74a21d242685a7eaaf74f6bbd0a55044a2780"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/icons/down.png",
+      "sha256": "a59e22629acb6bf639b24c86dcf7a57fb33e0189b88ceeb69098521b353254e3"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/icons/left.png",
+      "sha256": "8f69fe0bc2939715699a21ac2fe742f637cbfe70d115f1efc40dda3ddd9057fe"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/icons/poly_color.psd",
+      "sha256": "075a1bb2b163e66c90eede7e8af2e51727d17366fbc9528e4a3d5028b3c37b6b"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/icons/poly_color_blue.png",
+      "sha256": "3555d42de6a65e065ec351d3335f73edc1797529b21826eb2cd8a63944c05f49"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/icons/poly_color_green.png",
+      "sha256": "77bc5fb65f92b67ab9d76e8d09ca597731618e9dea6a3a8bbb7208f7d1c38f64"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/icons/poly_color_red.png",
+      "sha256": "4b200df6b90d8d36025fd71d34537ffdbf32167b014f23dcc711a253f93da7ab"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/icons/poly_type_exclude.png",
+      "sha256": "07f1d35712a2e0d490944720ecd72ac9aebd21280a1724fb3b3f95bc09be6e69"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/icons/poly_type_include.png",
+      "sha256": "efaa712d8db36d96931d849dca288bd0483bac100510b866b019fa4cedad66ee"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/icons/poly_type_source.psd",
+      "sha256": "e2ef73f855cb946da71debd6721866a6aad13a98741c2283428488c596551927"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/icons/pt_edit_mode.png",
+      "sha256": "6cb7678357a6b4036d0f6cfbe02ae0a33b89c297a811bb313f13c40748809b4f"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/icons/pt_edit_mode_source.psd",
+      "sha256": "b40f076c5846eb4a006ebf61682640d8fe874dfdc729935b6f4e340ed9f0e668"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/icons/redo_pt.png",
+      "sha256": "a8adfb6e0b56945f0189f7e3cd3d64347847ec1643b4a12437240de96e260018"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/icons/redo_pt_source.psd",
+      "sha256": "5973ca1152fb50993c8e6b62d30c69572077e847dd090d0ac46a573b037038d0"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/icons/right.png",
+      "sha256": "c8de050720bd8abd24fac87f997866395ba4a7fd2c3261a07872518612724450"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/icons/trashcan.png",
+      "sha256": "3d196789781495b70d63f98238400f4492dbc672d60480b32252d9cfb60d9281"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/icons/undo_pt.png",
+      "sha256": "e293e3363484bf6abf915cc340d1b2f775f27cf37cad8ed5ee71820a73954b3f"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/icons/undo_pt_source.psd",
+      "sha256": "4da9022959d0bfd5ce22db4d4702571a57fdcca04671b514233bc60f530504f0"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/icons/up.png",
+      "sha256": "e1902769cb795ee07487decbc6415daf92049606612c60a150ceb3f480204c3f"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/icons/view_baked.png",
+      "sha256": "8a20528a6046dcf278437da84389c9fcb933f3961a66494811cca4b5427abf88"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/icons/view_lock_center.png",
+      "sha256": "4293ea122a65ef1e20cd0e43d9567b6910f62298f990a0ef96c37c6b4747c093"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/icons/view_xseg.png",
+      "sha256": "70efaad61e731177e3d1fd117bd029c79fad49b843dce7b1daf638ddc3dc03fb"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/icons/view_xseg_overlay.png",
+      "sha256": "c3bfcd36dede6473356bf9584f6abf110eea7f97d9b391b98f9bc20a470c0414"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/images/intro.png",
+      "sha256": "fb398c5921c2741ea821e304b6c6812014154220947ee7c898ad6a4102b6f021"
+    },
+    {
+      "path": "_internal/DeepFaceLab/XSegEditor/gfx/images/intro_source.psd",
+      "sha256": "94286b3da2cfa5e784050710e81aa2d39f07dc85966712e4f78748011c602fee"
+    },
+    {
+      "path": "_internal/DeepFaceLab/configs/me-default.json",
+      "sha256": "4e2908c35e8806bed09ad0a637ff76d8c3e39cc237bc61916e941ad9ee90e9a2"
+    },
+    {
+      "path": "_internal/DeepFaceLab/configs/me-finetune.json",
+      "sha256": "bee93f2e1d755bae87f7a607481c7153a11dfbcc1075373012ac591d489763c0"
+    },
+    {
+      "path": "_internal/DeepFaceLab/configs/me-pretrain.json",
+      "sha256": "7af5fcff3b6d973f8ed9db52b2bb6619ef761f4f4cac910cd01f208f5b7af582"
+    },
+    {
+      "path": "_internal/DeepFaceLab/configs/me-rg-fp16.json",
+      "sha256": "f3a23ee9db61744cef6f59409730cdd7c8ede93a9d808a9450c90b30c1f92cb2"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/cv2ex.py",
+      "sha256": "8a324a532e88070dcd55f3e87ad170a419a75d259bb7fd8c5b8f8b8704ab4a11"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/imagelib/SegIEPolys.py",
+      "sha256": "7b0b75a2241052bccc1f3391905b785c58eee84a2f3465139da573d04169a62e"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/imagelib/__init__.py",
+      "sha256": "6bf29de7003011a9c5e8023eff73d29e4e857c092ec899f27e2deb1f7ef0c53a"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/imagelib/blursharpen.py",
+      "sha256": "97ba65ff6b31c3c61fcb9f473c5e525cb2b4a05d5cc91a709997f7e7b7a9baac"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/imagelib/color_transfer.py",
+      "sha256": "f4eb0a6d29faa88d206dcffbfb55a3e030c5228984b0064e262df031edee242a"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/imagelib/common.py",
+      "sha256": "f07f8629b24496a2f92d634e3770d2a3b47f0e9c30cb849f7eaaecc211338cd0"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/imagelib/draw.py",
+      "sha256": "9b868bf33d2e5ee097ebe3cf8a995d58aeab14fe3fa8f845c462dd50842d4edc"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/imagelib/equalize_and_stack_square.py",
+      "sha256": "f8fc9590340e768235a4c426c154fa9f72e45c5d234396a67fdb28b321a65021"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/imagelib/estimate_sharpness.py",
+      "sha256": "ffa5b74fbf486ec838d4acc6dd6fcc451e6835ff74b664c517d211956e1a0f67"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/imagelib/filters.py",
+      "sha256": "9e92f9dfc130c763b9455e53d9481bcdad6264f5b1324b61d7646279ce0aa07d"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/imagelib/morph.py",
+      "sha256": "989fb9fd254f088f2c26ef0c0cdbf3e778453f20af8abd0e5a75b75e7b041929"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/imagelib/reduce_colors.py",
+      "sha256": "5d1e1401e895cdec1ac81f7deb95daccb3f58ba37a9774f75c07434d7cddf119"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/imagelib/sd/__init__.py",
+      "sha256": "1f4175b17d213327ae2f11bc9f9cd942fcfae091ee65dee4d7c0430dd54eea00"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/imagelib/sd/calc.py",
+      "sha256": "09b34e7fa20ece080a691c029bd627ab28af7c91f6b79569832b3fabca013890"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/imagelib/sd/draw.py",
+      "sha256": "e8395ed9020ae2d971effc6edfed35e6d0ba8205f3d9725acfb7e0a359f78454"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/imagelib/text.py",
+      "sha256": "aa98220b384db73e4f7625787fd4f6b4e93548293126a9a109b167662a75123e"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/imagelib/warp.py",
+      "sha256": "80fef4db685b79e0298b8f3fd5e78baec63fe94cb0afb375e585a40042b7455e"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/interact/__init__.py",
+      "sha256": "e9fe38b2083702d49af65dcf5bd29c37644dcabd5924299aeb8046a8699808b2"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/interact/interact.py",
+      "sha256": "788b2a5da9de2972f44a52c5a39f90a55037ce3d70841b1b4cbf68fe6fb1815d"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/joblib/MPClassFuncOnDemand.py",
+      "sha256": "2dd1a6ccf4c30cbb67cac907620202758cd6f34d28ee699629281888e62329bb"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/joblib/MPFunc.py",
+      "sha256": "0bfbe5a2817b30c7a81d8ed5bbaa1d41fd456c03a014b938d56e9569f38bc3db"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/joblib/SubprocessGenerator.py",
+      "sha256": "cbeddc597e4683ae54e3df175d4f53081fb1320848d57a6883ad17c0663ed795"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/joblib/SubprocessorBase.py",
+      "sha256": "a14f5fd73c90e911c1e480fa3a5f8391d1e0418e5058c9384b581bb49e27425a"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/joblib/ThisThreadGenerator.py",
+      "sha256": "b700b1d73fd0958227f4aeb71e2c4d07bc52688918fa999a2a75a11e6e70ad8d"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/joblib/__init__.py",
+      "sha256": "6f06a703d2a49d1c38f4a33b3bc73e478de87bf8c08a5b881bb850b36250df31"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/__init__.py",
+      "sha256": "ae06fda2c3f42227742aaea469de05c90f3de208093648635a87c83977911986"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/archis/ArchiBase.py",
+      "sha256": "ac65470ab3e579c1bfe5cdde02b3f50ef516d7e4b60da884aca085e38240ad46"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/archis/DeepFakeArchi.py",
+      "sha256": "12ace292e86a662b467d5b0be3d23c7ce899dc1f8cb252cacda4a19c2349ce0c"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/archis/__init__.py",
+      "sha256": "f85bf2da4befac348890937a25008efbc2fa48f0582c2e47e669429cdc987e4d"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/device.py",
+      "sha256": "9713d664a6759bc3b1119c155659ea3bb86587e106205bf906534b461e66b047"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/initializers/CA.py",
+      "sha256": "4480455d072a11f1537ff51da381cc0b3f82552c67107346dadc013e32269695"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/initializers/__init__.py",
+      "sha256": "27c126a6ba63eaf0e0b3e102326b58df67a2f63fa240d3cff4f6d5995b565144"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/layers/AdaIN.py",
+      "sha256": "c9de4d01d08949b9b6e53696f5d513a8b655a02e3339bc3bab0d9e39becc5f04"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/layers/BatchNorm2D.py",
+      "sha256": "01636c2c0509c3ec5714fdb67b01f92f32212d141a1573e2849573dcafb6d1f1"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/layers/BlurPool.py",
+      "sha256": "e05d3f0ea6db4a423712d2dc7ce2eaa4da931c0b5de70bcc4702ba3244175396"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/layers/Conv2D.py",
+      "sha256": "3a49691abbc78f842e3ea1a30b74cfb5a6bd7e6d170fe9b621f747198263d824"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/layers/Conv2DTranspose.py",
+      "sha256": "2ed8862c5de077526ea03e788cb63b83d24d64cefe7de41aff18ae2b7a07190f"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/layers/Dense.py",
+      "sha256": "09c9b1e68a4855573b2205ce9ecc635827794d3b535ef93d78cdad846ab8e618"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/layers/DenseNorm.py",
+      "sha256": "ad3318d8d05c0a727ade1b97d4439347a15742d01b17d566df4037c6e4fdd8ae"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/layers/DepthwiseConv2D.py",
+      "sha256": "be6bed1336d4465b0f1ea1a68dc9bdcc526a08a4276869a5bf57c9069350dc55"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/layers/FRNorm2D.py",
+      "sha256": "8781aa2c6fb9a82486cf38b0bc34b8da3fa2d7d7cfb6b24e23247f5e857e7756"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/layers/InstanceNorm2D.py",
+      "sha256": "1cc789288c39dc32e2e50ea710575f29d50ccb0d033f7f100efcff176ec29f3b"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/layers/LayerBase.py",
+      "sha256": "938b59d1f2e42b32365fe4a7b97013d2002966db26f75df0e62ecc2fd5d0effa"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/layers/Saveable.py",
+      "sha256": "557c04d6d122484899599590f8c88177ec00faf94118e2d1d1fc0848aa3fe3d0"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/layers/ScaleAdd.py",
+      "sha256": "5241647b7949a469bb2bd617c59ede68fe1346432a8746439e9b4b5a11cc9fe2"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/layers/TLU.py",
+      "sha256": "47ab98d45c2664d8823cc280097255df0cb360ca08ffa0fe3a4d544ccbabcd0e"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/layers/TanhPolar.py",
+      "sha256": "daa1871eb61466e0b6a51cbb252f38202290daedbbca0d2d3b9991b3d2badb45"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/layers/__init__.py",
+      "sha256": "998713d771784c31c55901508b22ab66ac3dd20d2c4c6399cda0ea020458db26"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/models/CodeDiscriminator.py",
+      "sha256": "e921086897700441994974b001a52bb27234f66db6bc6cd0ac439212eda28bd9"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/models/ModelBase.py",
+      "sha256": "2a71aab37d4dc9cafff99dc313d9ca38e31c3d18aa5f190f62abf2dd214271f7"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/models/PatchDiscriminator.py",
+      "sha256": "29be24a55e5a5172d62705461d34d974c4f152af817c2256640cea122d07501d"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/models/XSeg.py",
+      "sha256": "78c10a1de46e9e7f7da39aea38513faa01457a059d9300874c0c6baa61fc4d6e"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/models/__init__.py",
+      "sha256": "9285a71f2015edb07650e63f37c370f507e7e10ea8090c6674c55e2895ed4d24"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/nn.py",
+      "sha256": "295c1bfc1d716176133cdc9aaf10fd7238fe25c8a04409b7d002a5edb5b0ed77"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/ops/__init__.py",
+      "sha256": "c7c1d225628c676562cf4ce8d5781830fdb6e7e5c90205be25aa253274a6fdaf"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/optimizers/AdaBelief.py",
+      "sha256": "47765ff1276ce6d8edf96159833345d4cf8af4a5a904b86201986934389ca021"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/optimizers/OptimizerBase.py",
+      "sha256": "3681a77186d7b38d0199ed1a219f435a635b9ca6d2d63f7cb043d3d5cf2d79e2"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/optimizers/RMSprop.py",
+      "sha256": "978dbe461f6b91953b53a026d440166e6699dcd4ee73cc9fe49f16edccf5b3c4"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/optimizers/__init__.py",
+      "sha256": "7edb484cf9d6af9452a35a76847352da14ee54b6e24bdf2c63dca2804049800c"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/leras/weight_io.py",
+      "sha256": "41f771deb0cf689b281443967eefdd93d1eef92b5829d4c3b44f18602dd74d25"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/mathlib/__init__.py",
+      "sha256": "f950920793bb185f9a8bc6e7e25bdd0b325211d65f77d007f10d7e70f9561839"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/mathlib/umeyama.py",
+      "sha256": "00515452fd09285d631974dd2e1873a1cf1fb813bb788f39d76dad7954cbd109"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/mplib/MPSharedList.py",
+      "sha256": "ca310a24fbe7fac52b63cc05ae5431452f8a756b7b1518f8e9dd3900655e5e6e"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/mplib/__init__.py",
+      "sha256": "e118c42228010c1eda59c197579365159b04ee9da21e3aa2f91cdb4dbc461b11"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/osex.py",
+      "sha256": "ac82d55bff83022547332a43f893f9e09b293430750fcc7f11ebb2692de48149"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/pathex.py",
+      "sha256": "b22058f5118c4a3ee2e2577860e2f71fc8f67058a7f5c2dfffb08929e0925aca"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/qtex/QSubprocessor.py",
+      "sha256": "690e32acb779d1c196cc2fa7971c12b3b81cec1701db184065a27e9158600afd"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/qtex/QXIconButton.py",
+      "sha256": "de0d5a21f5c1fac57ede8f5803cedbb540d5825b3e41d6a3474cde1acb7565ef"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/qtex/QXMainWindow.py",
+      "sha256": "35b54dd0a6a8162abfa83e359224dbfc57e2a2719b3ea5d8443d1c49113a2cc2"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/qtex/__init__.py",
+      "sha256": "43e4bc9a5589343473c4e46d8b7696f7d4f794cf9bdfe52d84da3d093223fa75"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/qtex/qt_compat.py",
+      "sha256": "c654e5d901ec56aa50ebcb0d1409e12db170eccbc0c2443f33b64f719ebc056b"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/qtex/qt_selftest.py",
+      "sha256": "2aa35d33de8997833642a951c1a481d9f910713530c0a50fb08252dc76421be9"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/qtex/qtex.py",
+      "sha256": "7a423714ce7cab1c05de26c960a24f283f16563f3969b89124739014526dff8e"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/randomex.py",
+      "sha256": "a65161f279452e2182c648a31d3f5f08faf4e84784cc385c85ed9cc901e34d83"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/stdex.py",
+      "sha256": "377cf70bf1b0c134f70b556a3abc33042c1974a6e1cb7be721f663f953af34b4"
+    },
+    {
+      "path": "_internal/DeepFaceLab/core/structex.py",
+      "sha256": "6d03925d1b8ac6185d5420c62bb4e6624ac1d0b2884fc78bf644e45e2ceaffc7"
+    },
+    {
+      "path": "_internal/DeepFaceLab/facelib/FANExtractor.py",
+      "sha256": "a58ded440f7969cafbaadf7c94b79d6e5257479a0653309245c896bbdf2048d1"
+    },
+    {
+      "path": "_internal/DeepFaceLab/facelib/FaceEnhancer.py",
+      "sha256": "eca7c4aa52523c4a0bbce0e215454736ec64cdb6f5e47018eebec727cc34e9ab"
+    },
+    {
+      "path": "_internal/DeepFaceLab/facelib/FaceType.py",
+      "sha256": "a43de236c1281d2781ead304380db654a61e54b601970d5db03ae7b644656bae"
+    },
+    {
+      "path": "_internal/DeepFaceLab/facelib/LandmarksProcessor.py",
+      "sha256": "60e728fb95dea1afe1eb7fff6d6ca9ad29cb913fe43233f401af2d029318fe76"
+    },
+    {
+      "path": "_internal/DeepFaceLab/facelib/S3FDExtractor.py",
+      "sha256": "1c060a2e339670cba445943ae0d4c4bbb2b8b97300e1ff212b50a8cc7140749c"
+    },
+    {
+      "path": "_internal/DeepFaceLab/facelib/XSegNet.py",
+      "sha256": "bfff0dbfbd987990abe67d5d9bb8012f715f7e312730ff7b14785795705153bb"
+    },
+    {
+      "path": "_internal/DeepFaceLab/facelib/__init__.py",
+      "sha256": "1c84713d29524f86f127044cfadda604f3e75f54ecc141f981e6399b273836d0"
+    },
+    {
+      "path": "_internal/DeepFaceLab/localization/__init__.py",
+      "sha256": "2702d19d7d29a93f331ebbe6761990a0b259399786362dfb5d32d6d0f8e985fd"
+    },
+    {
+      "path": "_internal/DeepFaceLab/localization/localization.py",
+      "sha256": "a3584d94166e37204c700180a074688e01096c084eb239135958076c7aaa03d4"
+    },
+    {
+      "path": "_internal/DeepFaceLab/main.py",
+      "sha256": "f1292ace4b67a183fd8dff8e7e9cad3c0db2a002dc0cd89167748b74514604bb"
+    },
+    {
+      "path": "_internal/DeepFaceLab/mainscripts/ExportDFM.py",
+      "sha256": "09122cb6b390776f76153825f4cd8bb721e1619a22255afcc615c44190e3122d"
+    },
+    {
+      "path": "_internal/DeepFaceLab/mainscripts/Extractor.py",
+      "sha256": "ed65f7adc200745a384f0871c84881029d7fef28146658d0e25dcaa551472c70"
+    },
+    {
+      "path": "_internal/DeepFaceLab/mainscripts/FacesetEnhancer.py",
+      "sha256": "3d09cd264542cd3344edc0feeb55cbf2b59b79ad946fe9efd043cd2836b64c0c"
+    },
+    {
+      "path": "_internal/DeepFaceLab/mainscripts/FacesetResizer.py",
+      "sha256": "53a0bae0196518827bfb2d9f756f3e2afea1cda7a388069993f68ad0b9f57b86"
+    },
+    {
+      "path": "_internal/DeepFaceLab/mainscripts/Latent.py",
+      "sha256": "1bd76a7db307be5d01b8791ba92277daab1d535b3b590f7ec98137e3e057511d"
+    },
+    {
+      "path": "_internal/DeepFaceLab/mainscripts/Merger.py",
+      "sha256": "9b69b01a8acdcf00e9aec24873cc6b712ba4ccd348e699d3f31d4ab37e2ba21a"
+    },
+    {
+      "path": "_internal/DeepFaceLab/mainscripts/Sorter.py",
+      "sha256": "8f99a9b9abf172408dc1dc0c24ff5ba9991b7d7ae2995c571bfc46d026e345ca"
+    },
+    {
+      "path": "_internal/DeepFaceLab/mainscripts/Trainer.py",
+      "sha256": "b72e1e42abef959c4179ef6988d2e7ca8f7c426ffb9dab1c663d290c9e3402d0"
+    },
+    {
+      "path": "_internal/DeepFaceLab/mainscripts/Util.py",
+      "sha256": "ba011398337164a21550f3593b90198010ca5b6a59bdc4f4ce07b3a87d641691"
+    },
+    {
+      "path": "_internal/DeepFaceLab/mainscripts/VideoEd.py",
+      "sha256": "93956d3ac90ab918e5db8b726e703b14163e4c6e690cb2dd065d4ba88d567c58"
+    },
+    {
+      "path": "_internal/DeepFaceLab/mainscripts/XSegUtil.py",
+      "sha256": "b66add87e4d35c2ff3ab7ebce9683669ad948d964c83eff0143ed8b9923feb9e"
+    },
+    {
+      "path": "_internal/DeepFaceLab/mainscripts/dev_misc.py",
+      "sha256": "e0a0545563d65fd236290456aca0db287331c51d78ca1f52fa359d035583fa8b"
+    },
+    {
+      "path": "_internal/DeepFaceLab/me.py",
+      "sha256": "bf880c27adbee4c4b12d09e4c1e3fcfe9afe500efc56d3080d437964b0464d83"
+    },
+    {
+      "path": "_internal/DeepFaceLab/me_backend/__init__.py",
+      "sha256": "0ad84a415d63c3e993c252626b41e5fd44b99e32f76f3b06f6dab9857380d711"
+    },
+    {
+      "path": "_internal/DeepFaceLab/me_backend/adversarial.py",
+      "sha256": "0080824dddd8e98ec9dde912058c9a9fc7d242cf70d90b5b52e68e4a979f7d9b"
+    },
+    {
+      "path": "_internal/DeepFaceLab/me_backend/checkpoint_backup.py",
+      "sha256": "cfa4fc55e9b8ca9968c83a1b76132e74179e5cecc41d5ba704781aa815321e6d"
+    },
+    {
+      "path": "_internal/DeepFaceLab/me_backend/checkpoint_import.py",
+      "sha256": "4718e179eb79629d6b04f0a64ba362a182877b3642927eafaf52d963a032c447"
+    },
+    {
+      "path": "_internal/DeepFaceLab/me_backend/config.py",
+      "sha256": "3215433d5ea689a34480de13328e47061abdd8feec95b5b11be44f951bc67427"
+    },
+    {
+      "path": "_internal/DeepFaceLab/me_backend/data.py",
+      "sha256": "cc9fa1e8abdf869c26e713b7397e7e063170ba0c97572a3ca8d74accadefcb6b"
+    },
+    {
+      "path": "_internal/DeepFaceLab/me_backend/data_augmentation.py",
+      "sha256": "dfe8d3f9d9619db0c6e70d766fda173bbf59fa2f4690bf9733446c7941c354c5"
+    },
+    {
+      "path": "_internal/DeepFaceLab/me_backend/engine.py",
+      "sha256": "18d77e283b06a9ee9643d8d1dcf821f6f2370edb75abaf8b7fa38ecea1d87cf2"
+    },
+    {
+      "path": "_internal/DeepFaceLab/me_backend/export.py",
+      "sha256": "dca2ddee56d4aaa6c2f7a83e86de066dfe179f5bef535b72da94e0e2265c6639"
+    },
+    {
+      "path": "_internal/DeepFaceLab/me_backend/loss_console.py",
+      "sha256": "682d1800c331f1dc513cc7e80f7338e37e12519f1a6006a92722d42a46538d4c"
+    },
+    {
+      "path": "_internal/DeepFaceLab/me_backend/losses.py",
+      "sha256": "ceaaac431156622fdc4863d61c4d72d56b074129da3af9da440f4909ac040eea"
+    },
+    {
+      "path": "_internal/DeepFaceLab/me_backend/model_adapter.py",
+      "sha256": "9250b7b560550546558aa76219a65107cf9b8edffcf228d4eb49ee4f3527b3b6"
+    },
+    {
+      "path": "_internal/DeepFaceLab/me_backend/multi_gpu_acceptance.py",
+      "sha256": "a6417aef4be74566e71c7950e95be6c6ff03cf902d444b335473035abbfaa138"
+    },
+    {
+      "path": "_internal/DeepFaceLab/me_backend/network.py",
+      "sha256": "e4fa391b3f9371fa63eb1db60a49475b1510e0ed966abf1f18a2d84672f2815f"
+    },
+    {
+      "path": "_internal/DeepFaceLab/me_backend/optimizer.py",
+      "sha256": "16641f67ccc3d3f2f49458f4a504d49fa2066636f56a1b8f23241df92fd79395"
+    },
+    {
+      "path": "_internal/DeepFaceLab/me_backend/profile.py",
+      "sha256": "b38af82a2e3580113853161578d77a5c2df26204d45a0377dbb40c9526f90bad"
+    },
+    {
+      "path": "_internal/DeepFaceLab/me_backend/profiling.py",
+      "sha256": "a8ae76ac85e6cb3da3ff185ce448889453d303880b8050c1d1e90427fe9eafee"
+    },
+    {
+      "path": "_internal/DeepFaceLab/me_backend/replay.py",
+      "sha256": "3e316156ccd29f22356cc67399e43c39835770b526c9d34f03e199258f5eee7f"
+    },
+    {
+      "path": "_internal/DeepFaceLab/me_backend/web_bridge.py",
+      "sha256": "69037b33441517ccf3a058d09efb0e38a801d12f6c5c119edc9a88282f6f0c7d"
+    },
+    {
+      "path": "_internal/DeepFaceLab/merger/FrameInfo.py",
+      "sha256": "cfbe38d33348cc87c442c687083d3ff5bf8f5a14991c98588df3017ba0f4fd10"
+    },
+    {
+      "path": "_internal/DeepFaceLab/merger/InteractiveMergerSubprocessor.py",
+      "sha256": "87c89bc90743dcb587b0d46ceef76977b1cea55d4f95a66550f576e08c9fd79a"
+    },
+    {
+      "path": "_internal/DeepFaceLab/merger/MergeAvatar.py",
+      "sha256": "5c965b4d27c8cd66fc9f530383c22d117dcd9cd07219ab31da33af3450654b88"
+    },
+    {
+      "path": "_internal/DeepFaceLab/merger/MergeMasked.py",
+      "sha256": "797e7463649454e1bf34b80740a6c2b0158d577b52d37fe035d44b9c7d2dbc1a"
+    },
+    {
+      "path": "_internal/DeepFaceLab/merger/MergerConfig.py",
+      "sha256": "7d4e8eb3f50cd0382f105b1ba829ba7bf6f71259e3bb1277a4cd388b944fee3a"
+    },
+    {
+      "path": "_internal/DeepFaceLab/merger/MergerScreen/MergerScreen.py",
+      "sha256": "c4795c00526a17b82a6e7edc412317fa9b694e9fa1113eac41a1605bebfa5879"
+    },
+    {
+      "path": "_internal/DeepFaceLab/merger/MergerScreen/__init__.py",
+      "sha256": "32e0c6b9c428e90733b86aee9d5d136fc93b6185f2d46a1b4acc38574d3ffe27"
+    },
+    {
+      "path": "_internal/DeepFaceLab/merger/MergerScreen/gfx/sand_clock_64.png",
+      "sha256": "0e481a29f6d97c86c5ab5e81fbb57d25de6c9b0f6f41e168774a2452c5037564"
+    },
+    {
+      "path": "_internal/DeepFaceLab/merger/__init__.py",
+      "sha256": "67f6125a1cc503a1d711339285911e0e61885f0bb7264dccd038f39f728b399f"
+    },
+    {
+      "path": "_internal/DeepFaceLab/merger/gfx/help_merger_face_avatar.jpg",
+      "sha256": "69dbee38b1d879f4bac26e1eafdbb167038c64f05b5dc910fbdc7732b8e68a00"
+    },
+    {
+      "path": "_internal/DeepFaceLab/merger/gfx/help_merger_face_avatar_source.psd",
+      "sha256": "457d44d105aa60addd06e7d5cec9f9d5ffa3762960c0b085e9e559b1cf7e4a3e"
+    },
+    {
+      "path": "_internal/DeepFaceLab/merger/gfx/help_merger_masked.jpg",
+      "sha256": "caa8170f09c45dd6399d2843b926b943d0e02e0bd0e0f364ce890ee0b53f9f13"
+    },
+    {
+      "path": "_internal/DeepFaceLab/merger/gfx/help_merger_masked_source.psd",
+      "sha256": "02c7cdd5d3be810268dfdd5512c2c5f4a35c80e6c25a53e02d7a801d46d70033"
+    },
+    {
+      "path": "_internal/DeepFaceLab/models/ModelBase.py",
+      "sha256": "c2d40d2b9c87e50b1127e905225aaacad33ed3461901a975a6f0723c06a22090"
+    },
+    {
+      "path": "_internal/DeepFaceLab/models/Model_ME/__init__.py",
+      "sha256": "db83fecdd06236521557d786aa4e50be38ed341356dded16f01a5e19d47ba1f6"
+    },
+    {
+      "path": "_internal/DeepFaceLab/models/Model_XSeg/Model_pytorch.py",
+      "sha256": "756e7f1bfde3b84e43481fe6af5fcafc6a6defdc84f9fe7cc23afa852c5569c3"
+    },
+    {
+      "path": "_internal/DeepFaceLab/models/Model_XSeg/__init__.py",
+      "sha256": "88ffee8ffad7d465481b676f7ed3542b0dbd6ae9805a5c0d059dde4228709d37"
+    },
+    {
+      "path": "_internal/DeepFaceLab/models/__init__.py",
+      "sha256": "1f88807934ac93c22163822f0de391cb42dbb7c7bf9e06d98fea9dd33339821e"
+    },
+    {
+      "path": "_internal/DeepFaceLab/requirements-me.txt",
+      "sha256": "acfd15cba00249b953d96881a0e36ba29b7bb7fcc89a73dc4cbecb369d3a2f52"
+    },
+    {
+      "path": "_internal/DeepFaceLab/samplelib/PackedFaceset.py",
+      "sha256": "1faefe6b6460f77ea668677c081a4d90766d7f40dd6caa87adcf16c9adc91ae7"
+    },
+    {
+      "path": "_internal/DeepFaceLab/samplelib/Sample.py",
+      "sha256": "a75808be61336c0b9edd44c86be8065760a3a2513b2eb1cc84a828aa5655eaa0"
+    },
+    {
+      "path": "_internal/DeepFaceLab/samplelib/SampleGeneratorBase.py",
+      "sha256": "83d75be570297f2e244ef6749e4db8fbc354187e2ed74b4a26867681248abd57"
+    },
+    {
+      "path": "_internal/DeepFaceLab/samplelib/SampleGeneratorFace.py",
+      "sha256": "e42a7dae588bd414065538fd7ba84138a203bc195df590e810c4f32675d4a880"
+    },
+    {
+      "path": "_internal/DeepFaceLab/samplelib/SampleGeneratorFaceCelebAMaskHQ.py",
+      "sha256": "d8f311ff7f3e07c37b43c099ac59ca119fc85ebd8ca889267d7a4cdea33b990e"
+    },
+    {
+      "path": "_internal/DeepFaceLab/samplelib/SampleGeneratorFacePerson.py",
+      "sha256": "bfa4482a338ee01a282d15a96270c8e72080adb45da37d338312eb47c9aa97c6"
+    },
+    {
+      "path": "_internal/DeepFaceLab/samplelib/SampleGeneratorFaceTemporal.py",
+      "sha256": "ec3630a9de967f1e46ba7ded12c1874b21a62b09224e0cad8cb110ad36430a81"
+    },
+    {
+      "path": "_internal/DeepFaceLab/samplelib/SampleGeneratorFaceXSeg.py",
+      "sha256": "009c8d9ec995a04209cc83e151dc9d2697aa1e9a49cb606385172646b52f34ee"
+    },
+    {
+      "path": "_internal/DeepFaceLab/samplelib/SampleGeneratorImage.py",
+      "sha256": "f65d8066158ddefc0d20b6e65e70d375f7eb9efb04433f13ea5e3434c28dd6a7"
+    },
+    {
+      "path": "_internal/DeepFaceLab/samplelib/SampleGeneratorImageTemporal.py",
+      "sha256": "e6129e42f717638055a861c145eb0b29f0e9ffe955a65b420334df9d8fba4821"
+    },
+    {
+      "path": "_internal/DeepFaceLab/samplelib/SampleLoader.py",
+      "sha256": "a2d5d8804f59822846b5f862d69783f72b9da4a2d7d906c0095e12c9b3104aea"
+    },
+    {
+      "path": "_internal/DeepFaceLab/samplelib/SampleProcessor.py",
+      "sha256": "0174e46d6b3c38622b0ec75bba360ff203b8ad74f5437fdffe676487678fc09a"
+    },
+    {
+      "path": "_internal/DeepFaceLab/samplelib/__init__.py",
+      "sha256": "889cda13ce04bdbfca6bcec59e7215ff1165f660e90d3e14aa0922ad60099825"
+    },
+    {
+      "path": "_internal/DeepFaceLab/utils/__init__.py",
+      "sha256": "fb79dfb6ee50fb38e863f5bbe9f7070db51f2d49c2c98db7014d89097b63bb1e"
+    },
+    {
+      "path": "_internal/DeepFaceLab/utils/label_face.py",
+      "sha256": "16953c834bec36222a7b0493de6be462d44d61a2cae65b302f3e1f9201346457"
+    },
+    {
+      "path": "_internal/DeepFaceLab/utils/logo.py",
+      "sha256": "8f4d011a8a3660e65ce2e73644ebe01d99a17f0a6e97c8b5853d8a459f5bcabd"
+    },
+    {
+      "path": "_internal/DeepFaceLab/utils/logo1.py",
+      "sha256": "2fb8350674ccf02c30317c130d823039ec1f6376a579a8d8c7de424fe880255b"
+    },
+    {
+      "path": "_internal/DeepFaceLab/utils/logo2.py",
+      "sha256": "2fb8350674ccf02c30317c130d823039ec1f6376a579a8d8c7de424fe880255b"
+    },
+    {
+      "path": "_internal/DeepFaceLab/utils/train_status_export.py",
+      "sha256": "b0193db23cd682d69b4d6a21438b2a240505b38d5bab2467ac739e2c33701cb7"
+    },
+    {
+      "path": "_internal/DeepFaceLab/yaw_image_filter.py",
+      "sha256": "4526267ef933a3a4a79c6d4f5018c14bcd90330965b7301da38c8d322867fee1"
+    },
+    {
+      "path": "launcher/MIGRATION_VALIDATION.md",
+      "sha256": "d44745123c3237eadd5d35af984312c7ac67a0dc58ea36bcd3345e56f24951da"
+    },
+    {
+      "path": "launcher/UPDATE-SIGNING.md",
+      "sha256": "6914b267e50a0a788d53bb133cb3a8c8e1097b845bdac382a8575a21386a8432"
+    },
+    {
+      "path": "launcher/bootstrap.ps1",
+      "sha256": "dabfd00f90a7473334947876d802c0c209fae8ea150c45592316f11169791c3f"
+    },
+    {
+      "path": "launcher/build-host.ps1",
+      "sha256": "332127354cf6ee5a1e9de8260ee5b48fc2d87f85fe26eb8118e9459905a2fe20"
+    },
+    {
+      "path": "launcher/host/AppSettings.cs",
+      "sha256": "75aa99d695e4fb0b365316db1f789eacb37f38317033d6221e94ffae434dc04e"
+    },
+    {
+      "path": "launcher/host/AssemblyInfo.cs",
+      "sha256": "74f89e6bc0b8da689456bc6ec16a19b76e624f56fdd7163058b4ca4e70a45525"
+    },
+    {
+      "path": "launcher/host/DflEnvironment.cs",
+      "sha256": "02d6cf23c4c37698471cdd3037dfc54685e39910d36d706fd7600c8d96277b0b"
+    },
+    {
+      "path": "launcher/host/GitNetworkOptions.cs",
+      "sha256": "a42b749e8399d6c3035b3fa2037946bcc2fe4a0d549218831b0197ad8a452b60"
+    },
+    {
+      "path": "launcher/host/GitService.cs",
+      "sha256": "6d22afcf83e545ea5603f854f5ac56df6cf2ff08eb358d1094fc3fd25f3112f7"
+    },
+    {
+      "path": "launcher/host/HostController.cs",
+      "sha256": "c7aeb05d78e3d9cd88a85fa9290bc957e4a10a3c02424d1b7d6b7330655161e5"
+    },
+    {
+      "path": "launcher/host/LauncherConstants.cs",
+      "sha256": "42f10458e21c38ded0be82b85a1fb6b958af2a7b01e90965f0f1316302612a01"
+    },
+    {
+      "path": "launcher/host/LauncherInstallation.cs",
+      "sha256": "bb7e196fb8a442ef46a9aa7114e15f6be2eecec5cd2cde3dee9c9e22f4e13026"
+    },
+    {
+      "path": "launcher/host/LauncherSelfUpdater.cs",
+      "sha256": "94d96c03959b5592f1526a0d0ee1bda2634010106f86dbdcbdba58d5ce3266ac"
+    },
+    {
+      "path": "launcher/host/LauncherUpdateFileSystem.cs",
+      "sha256": "b31b6681dc40595bec6b3c17ec7702399a7e09d837b156a2970adcf6657b306f"
+    },
+    {
+      "path": "launcher/host/LauncherUpdateMetadata.cs",
+      "sha256": "45240aae22ddff372f315df71baa7e7d6d3f94f786f3c5f23f07a5166b19d1f5"
+    },
+    {
+      "path": "launcher/host/LogBuffer.cs",
+      "sha256": "f025c5f7b27cf878203a07d80d55234b70da9e94ddd63beb80c667a45a38564e"
+    },
+    {
+      "path": "launcher/host/MainWindow.cs",
+      "sha256": "3d7048a327ff0f62f90cd8bef4861b66badef3e22f3a38e1f66583652c703a57"
+    },
+    {
+      "path": "launcher/host/PayloadRuntime.cs",
+      "sha256": "25b10b21bc8a464cc0f6677bc85c8f09e2f538a644a738ded2494386091f2b42"
+    },
+    {
+      "path": "launcher/host/PortableNodeEnvironment.cs",
+      "sha256": "6767475035b12f41d1d6c9b1ba192a0e97a462d66fb4ac39b40280cc2501d67e"
+    },
+    {
+      "path": "launcher/host/PreparedRuntimeStore.cs",
+      "sha256": "18b9ebc3e102bfe7e4d6048439275ee118d5e1882029342cd2a2840e28052e9b"
+    },
+    {
+      "path": "launcher/host/ProcessRunner.cs",
+      "sha256": "c4f4cec893d5f025afb57dcad7ff84f20c0ffb59bcb8c3b88cf6863783ca39e6"
+    },
+    {
+      "path": "launcher/host/Program.cs",
+      "sha256": "3acea417f6497bc32634271a0cf1a3526c63ae687a676ceeda3e52262345669e"
+    },
+    {
+      "path": "launcher/host/ProjectLocator.cs",
+      "sha256": "fd825375fdb3d217f9ea2d51bc42a3ddf1b2878a176c6d2c5cf24ae381bfd1e6"
+    },
+    {
+      "path": "launcher/host/README.md",
+      "sha256": "2bd00d2cf886cd0b04a584a91e24997dafa03f92d914ed25fbaf5beec75e2dd8"
+    },
+    {
+      "path": "launcher/host/ReleaseIdentity.cs",
+      "sha256": "ca3932789064abcf6312d079c1fb3b23eaf809ad165ab668adc00c70416826d0"
+    },
+    {
+      "path": "launcher/host/RpcBridge.cs",
+      "sha256": "14101143da2e6a34714828f881a4b3d145f898654bc3667d835f6a5161a265e3"
+    },
+    {
+      "path": "launcher/host/RuntimeBootstrapLocator.cs",
+      "sha256": "3f5d5dcaf980ba9c3b836e61347b0d447722f952cb334a3d170bf3aaa2675c58"
+    },
+    {
+      "path": "launcher/host/RuntimeManifestValidator.cs",
+      "sha256": "572c44917a9f15e934b96bc88597a10bba71e0bb5ecc932fea7bd5fa2b4eecfa"
+    },
+    {
+      "path": "launcher/host/RuntimeServiceIdentity.cs",
+      "sha256": "bf1e68a205dc1a1da7068635617e9df513525aba2beb18d03e2ccc560c09e05c"
+    },
+    {
+      "path": "launcher/host/TerminalBridgeService.cs",
+      "sha256": "11b3d8e568d0c92a8dbbaaf190233f636366366838cd3fe620871122e244bcb5"
+    },
+    {
+      "path": "launcher/host/WebUiDependencies.cs",
+      "sha256": "b60b39acff515c3f2e99f7f232ac5e6f65574d288e30342ac8a53b5620701e3f"
+    },
+    {
+      "path": "launcher/host/WebView2RuntimeBootstrapper.cs",
+      "sha256": "cb48d7b059afcd286a2055b89b267b09d9cfd6fb6721bf43b77e47912661a36c"
+    },
+    {
+      "path": "launcher/host/WorkspaceTemplate.cs",
+      "sha256": "fe8d0bfd9d7570ed300d694e2d01f656c67d54bb7f20f4cb7b2ea6ed683ffa02"
+    },
+    {
+      "path": "launcher/host/app.manifest",
+      "sha256": "8aa4d48c26273912c77f411464f05236093eb8a67812155ec6afe94796c9f345"
+    },
+    {
+      "path": "launcher/host/brand-mark.ico",
+      "sha256": "6f52590c533f5faf10f216cbe187ebff8419174ece8fab06b0dc34f712fd2910"
+    },
+    {
+      "path": "launcher/install-project.ps1",
+      "sha256": "c2c2d955552210adc009381d9dcc73aa56100c1c29826aa1cffe121f175b0435"
+    },
+    {
+      "path": "launcher/install-source.ps1",
+      "sha256": "fa0b9c29f44e4ed3f9a15653ae388a721a79166c5610a3232f68a779000aff9e"
+    },
+    {
+      "path": "launcher/new-update-channel.ps1",
+      "sha256": "651a883246fbe8636b414a9ff91eafe9faf33f4243400695209faea0c6d3b435"
+    },
+    {
+      "path": "launcher/relocation-runtime-evidence.json",
+      "sha256": "cbbf869cc0c7829d4d74e8b05e28d4c83f6fa77488893c27ef899e46a77ef6ff"
+    },
+    {
+      "path": "launcher/runtime-README.md",
+      "sha256": "b5bbc08c02fa5316c4e4a773984da86557331889c4f5b0b68064bd37568c76a6"
+    },
+    {
+      "path": "launcher/runtime-manifest.json",
+      "sha256": "425c2c95ba088dfcea4fd61d3bf02f123eaf83525b682c61071377cf9dbd34bc"
+    },
+    {
+      "path": "launcher/runtime-manifest.schema.json",
+      "sha256": "3494d5ccee4b4341b82ad4ff8b3bb98f32bdd248e225ef12e90aa9b91cf6678e"
+    },
+    {
+      "path": "launcher/server/README.md",
+      "sha256": "02c3404bb122eaa0110b0063c92b31ed100a431a36bbe41817a262b5f77ea0ca"
+    },
+    {
+      "path": "launcher/server/index.mjs",
+      "sha256": "36b6358563ef31af1bb5b98fcc27802e8ecb2ac41136d5cbab2176c202428a3d"
+    },
+    {
+      "path": "launcher/server/package.json",
+      "sha256": "c7fb122c2913d39a9b4f0e240a4259eea3540b8bfa1a118c0c771cc09c2c9097"
+    },
+    {
+      "path": "launcher/server/terminal-bridge.mjs",
+      "sha256": "a138c8ba78c8182f0ebb78239b551ed56272bed83b5c30532a903a54bf24c11b"
+    },
+    {
+      "path": "launcher/setup-runtime.ps1",
+      "sha256": "cb1fbd68a9ccd94792536d23c65fa7615ba9ca8fda11db33c28eb0d160380427"
+    },
+    {
+      "path": "launcher/ui/.npmrc",
+      "sha256": "4b86f5f917232873bbf42e48812de3a2869a739df361ffa4a3b117a9f4ff65aa"
+    },
+    {
+      "path": "launcher/ui/AGENTS.md",
+      "sha256": "f59721722aeebdad406ef7011cb439c32acbb4b30b33e1e9c08c71b4fd1dde09"
+    },
+    {
+      "path": "launcher/ui/index.html",
+      "sha256": "47c63c7f23349be7836ffe3dff3a1e36f002c9d51e3729181e3209c9d60cc76f"
+    },
+    {
+      "path": "launcher/ui/package-lock.json",
+      "sha256": "2847b53fd1dc32e6c19e01a7cb9ff08601df13a80da08ed019e88fbcdc5b78d1"
+    },
+    {
+      "path": "launcher/ui/package.json",
+      "sha256": "1e809b0d85f96df41046e6732169d027f4a4830a5a17f897e3d49f635325c40f"
+    },
+    {
+      "path": "launcher/ui/public/assets/brand-mark.png",
+      "sha256": "77faede7f3a5fa617113673bc1829971e966ebad9c6fe5137148265593fd5db0"
+    },
+    {
+      "path": "launcher/ui/scripts/prepare-sites-build.mjs",
+      "sha256": "b6a6adaa4fab3234676116dd1c9cb6611275ab9d92dd26f5bf402393e3744bf6"
+    },
+    {
+      "path": "launcher/ui/src/App.jsx",
+      "sha256": "489cf1bcf4e0efc3379e3230ce60ad3e00f00e87c181f8b5ceb93d9be98e576d"
+    },
+    {
+      "path": "launcher/ui/src/bridge.js",
+      "sha256": "456cac0d89349f749a605f85fbe96f1424e649b53ef2fc44d49f4400ba1cee27"
+    },
+    {
+      "path": "launcher/ui/src/components/InstallView.jsx",
+      "sha256": "2b1d30759ef11739603873fac8a96cba532196203a1fa4ada298e7d634a29151"
+    },
+    {
+      "path": "launcher/ui/src/components/PlainLog.jsx",
+      "sha256": "75ed76f7c6276f8bea3448582904844ab4c86643fcd3ee264f81fe6c7d7d704e"
+    },
+    {
+      "path": "launcher/ui/src/components/ReadyView.jsx",
+      "sha256": "c46d402f549a935297c67e0f3ba8bcfffc3a2e349b870b7814c8fd1c54cdcd89"
+    },
+    {
+      "path": "launcher/ui/src/components/TitleBar.jsx",
+      "sha256": "1e7c490ea207c2a0a70ba1fef1ccd71aec65b8d6d9b9ccbd69181525e0d07a24"
+    },
+    {
+      "path": "launcher/ui/src/main.jsx",
+      "sha256": "cecd47ed9ac490fbe0098267e04a4b8a08c1dd2b993cc26a9b8f15b62f9048ae"
+    },
+    {
+      "path": "launcher/ui/src/ready.css",
+      "sha256": "5a4be81fcf69b12da0a64f757192f28e806bd70bc94c11c0317c4a7d0ed1a507"
+    },
+    {
+      "path": "launcher/ui/src/styles.css",
+      "sha256": "6117902b0303c12bbfebffaa0ad4991cd4dea145dc43c01ab9408fd1874541d5"
+    },
+    {
+      "path": "launcher/ui/vite.config.mjs",
+      "sha256": "04410bbd99339e73b39be86c477f55c4849c4a7a971184ff1899bf613cafe9e5"
+    },
+    {
+      "path": "launcher/ui/worker/index.js",
+      "sha256": "2dd0615a445143933d88d4271f54f5d63ee951421fcd08c5a7617bb09c564389"
+    },
+    {
+      "path": "launcher/update-channel.json",
+      "sha256": "479685c22f575fadf9508cbb167ad364e68e9a344af76041ba1586de60c296bb"
+    },
+    {
+      "path": "launcher/update-signing-policy.json",
+      "sha256": "758e033708350680297d2b00a6bbf7518d4a16dfb2619f2913f1b6fb9fef51e2"
+    },
+    {
+      "path": "launcher/upgrade-project.ps1",
+      "sha256": "37a6883bc5354803466bbf31dce559c0b4325bae2784135f19a306354eb4da2e"
+    },
+    {
+      "path": "legacy-cli/1.1)--- 剪切视频（将视频拖拽到本文件）----------- cut video (drop video on me).bat",
+      "sha256": "2b123a34deb54653716976fce8b055036e6374dd93621ad32efa0a50fc79b572"
+    },
+    {
+      "path": "legacy-cli/1.2)--- 提取 DST 视频图片帧 ------------------------ extract images from video data_dst FULL FPS.bat",
+      "sha256": "c3c7b3fe243acd11a73381fe21109d841273e9f3aee7cea804f89731704e1d0c"
+    },
+    {
+      "path": "legacy-cli/1.2)--- 提取 SRC 视频图片帧 ------------------------ extract images from video data_src.bat",
+      "sha256": "b4aa2e96e53031d74af2efe088d3dcf0a91ad6fce994af89423ecfae9527ed70"
+    },
+    {
+      "path": "legacy-cli/1.3)--- 降噪 data_dst 图片帧（可选） ------------- denoise data_dst images.bat",
+      "sha256": "989ba3f48e60bde7e2a257880af7e6bed7fd21001fe56cc99b75cee55e5e24f5"
+    },
+    {
+      "path": "legacy-cli/2.1)--- 切脸 data_src 手动 ------------------------- data_src faceset extract MANUAL.bat",
+      "sha256": "608dfba89aa0fdf8f82b376758a8c04a558014bc2a5ae301dfab4b7b5d55c1d4"
+    },
+    {
+      "path": "legacy-cli/2.1)--- 切脸 data_src 自动 ------------------------- data_src faceset extract.bat",
+      "sha256": "0eaf606bc62eb3ac38d1849bda58ab6e5209d141fdbbff143f06467ce83099dc"
+    },
+    {
+      "path": "legacy-cli/2.2)--- SRC-aligned 预览 -------------------------- data_src view aligned result.bat",
+      "sha256": "50a36665b02376c2d11e4636f6a5fc9670b95bdab7fbf0af5938497970b25367"
+    },
+    {
+      "path": "legacy-cli/2.3)--- SRC-aligned 检查错误 --------------------- data_src add landmarks debug images.bat",
+      "sha256": "6e86667a76afea365a4c52e7957f40c3e440099d618077f56682901f739aa025"
+    },
+    {
+      "path": "legacy-cli/2.3)--- SRC-aligned 缩放尺寸 --------------------- data_src util faceset resize.bat",
+      "sha256": "a31aca1022d463b97afb44368d0e9c268f47697863471799ba7fecbc06ce5948"
+    },
+    {
+      "path": "legacy-cli/2.4)--- SRC-aligned 排序 -------------------------- data_src sort.bat",
+      "sha256": "121b4c6ad90915c811b398bd0b9a849040f57e88ab7a0036ad7dbb886997f7d9"
+    },
+    {
+      "path": "legacy-cli/2.5)--- SRC-aligned 打包 -------------------------- data_src util faceset pack.bat",
+      "sha256": "d3443d12d9fbb2a3294612323a9efa909b913cbcf9c8bc1845b23ec5b0fc5816"
+    },
+    {
+      "path": "legacy-cli/2.5)--- SRC-aligned 解包 -------------------------- data_src util faceset unpack.bat",
+      "sha256": "9b3c0bc081b1cdf6abb14cfaa7f60d5eefbdb755d419e529cdaa6ef4bc508691"
+    },
+    {
+      "path": "legacy-cli/2.6)--- SRC-aligned 文件名恢复 ------------------- data_src util recover original filename.bat",
+      "sha256": "92e9858fe20b99ea81cec4f3c3f61274b5c8e09602d1758c1ec34f3198e216f1"
+    },
+    {
+      "path": "legacy-cli/2.6)--- SRC-aligned 高清修复 --------------------- data_src util faceset enhance.bat",
+      "sha256": "51a0ea0b43ea4c19895217867b017873464c0c702d507253f802fb2ad85dda31"
+    },
+    {
+      "path": "legacy-cli/2.7)--- SRC-aligned 数据保存 --------------------- data_src util faceset metadata save.bat",
+      "sha256": "af953584137b7b0165ab826fdb2562e4be6e57e3eb29d78f89c338d90c436584"
+    },
+    {
+      "path": "legacy-cli/2.7)--- SRC-aligned 数据恢复 --------------------- data_src util faceset metadata restore.bat",
+      "sha256": "27a7f130f821394b781533a5d21f94d6d1f8f6ab43004d51a02da141b1b38f29"
+    },
+    {
+      "path": "legacy-cli/3.1)--- 切脸 data_dst 半自动 ---------------------- data_dst faceset extract + manual fix.bat",
+      "sha256": "f6e4c1ef0c0b58f76ce086b34379d987c98bc7f51fbf2c39272622ade3d9ff20"
+    },
+    {
+      "path": "legacy-cli/3.1)--- 切脸 data_dst 手动 ------------------------- data_dst faceset extract MANUAL.bat",
+      "sha256": "ec64a8bb5e0d6b8c17feae30312d230778111c2e4c9b70f82b6fcd233e143330"
+    },
+    {
+      "path": "legacy-cli/3.1)--- 切脸 data_dst 自动 ------------------------- data_dst faceset extract.bat",
+      "sha256": "d67948eec9a8507c68a3dc6bf14e21596ff84517868ac759c31191ccdb12254c"
+    },
+    {
+      "path": "legacy-cli/3.1)--- 提取 aligned_debug 删掉的人脸 ---------- data_dst faceset MANUAL RE-EXTRACT DELETED ALIGNED_DEBUG.bat",
+      "sha256": "877027e45af09f68243c2db511cb3f1a1da2b21689fa88557a996e1ecdfce29b"
+    },
+    {
+      "path": "legacy-cli/3.2)--- DST-aligned 预览 -------------------------- data_dst view aligned results.bat",
+      "sha256": "f87e6da1384048fc2c091685ee791f31e41cdc94a2333252e20203c82295e7a0"
+    },
+    {
+      "path": "legacy-cli/3.3)--- DST-aligned 检查错误 --------------------- data_dst add landmarks debug images.bat",
+      "sha256": "435f48bf2166fe41ccbf358143cdf6d6f9feed25061fa7f6acb71d2a4cf24c86"
+    },
+    {
+      "path": "legacy-cli/3.3)--- DST-aligned 缩放尺寸 --------------------- data_dst util faceset resize.bat",
+      "sha256": "6ec05020116c1dc16845b2057aff65745e40cf44cda51ece5b2febd6bed1fcde"
+    },
+    {
+      "path": "legacy-cli/3.4)--- DST-aligned 排序 -------------------------- data_dst sort.bat",
+      "sha256": "fb3abc884ebc5f208ae87ae1bda93dcc31983fd4d9e4935d13476bede16156a0"
+    },
+    {
+      "path": "legacy-cli/3.5)--- DST-aligned 打包 -------------------------- data_dst util faceset pack.bat",
+      "sha256": "877f9a1e888053a696c4d27a8f260c011da3058b19731e5a798415aa17472369"
+    },
+    {
+      "path": "legacy-cli/3.5)--- DST-aligned 解包 -------------------------- data_dst util faceset unpack.bat",
+      "sha256": "7ffe750d906e9bbf71511fe593f6094a96b039e7d207c7656e222a1a576caaea"
+    },
+    {
+      "path": "legacy-cli/3.6)--- DST-aligned 文件名恢复 ------------------- data_dst util recover original filename.bat",
+      "sha256": "3bd55b63545865eec631b3d25fb7421340feafc281d5e1be4b369e955ebd947c"
+    },
+    {
+      "path": "legacy-cli/4.1)--- DST-aligned 画遮罩 ----------------------- data_dst mask - edit.bat",
+      "sha256": "2950be162f9a82927fe2d0b6037ec409a3f309cd279c315a63f08cea75156850"
+    },
+    {
+      "path": "legacy-cli/4.1)--- SRC-aligned 画遮罩 ----------------------- data_src mask - edit.bat",
+      "sha256": "ef99ca23cf059b2d4cf40f8fd0e1a6e1bf9029a7c5936032a3ebc07c3952e000"
+    },
+    {
+      "path": "legacy-cli/4.2)--- SRC+DST 训练遮罩模型 -------------------- train Xseg.bat",
+      "sha256": "2ca687a21049b8d679eaada21029750dea471368cbaeb129ca735faff5d4069d"
+    },
+    {
+      "path": "legacy-cli/4.3)--- DST-aligned 使用内置遮罩 ---------------- data_dst whole_face mask - apply.bat",
+      "sha256": "a153fb844b1fd155fc1b169eab679e789691047bff1457dc42f487486e2f38b9"
+    },
+    {
+      "path": "legacy-cli/4.3)--- DST-aligned 应用自定遮罩 ---------------- data_dst trained mask - apply.bat",
+      "sha256": "9f838476187399539429dd45a9f38a35cb466e5e8d0646b692ea15706ca9f8c3"
+    },
+    {
+      "path": "legacy-cli/4.3)--- SRC-aligned 使用内置遮罩 ---------------- data_src whole_face mask - apply.bat",
+      "sha256": "484787d4185806c4698ce49646669a5742c1695517f614bd10331c91f3ef143b"
+    },
+    {
+      "path": "legacy-cli/4.3)--- SRC-aligned 应用自定遮罩 ---------------- data_src trained mask - apply.bat",
+      "sha256": "52a787cf357abd961780164a68168c7d8f5d2762a61f2df12bf456a3b8edcc33"
+    },
+    {
+      "path": "legacy-cli/4.4)--- DST-aligned 移除手绘 --------------------- data_dst mask - remove.bat",
+      "sha256": "e5251192c1dbbd9506444c86cbf0a009440e48b19a8239efae55bd826950c9b6"
+    },
+    {
+      "path": "legacy-cli/4.4)--- DST-aligned 移除遮罩 --------------------- data_dst trained mask - remove.bat",
+      "sha256": "29c4f03b344ec40973642b5063ecb3bbaab532c4287801191e81b1ba5d3f02e4"
+    },
+    {
+      "path": "legacy-cli/4.4)--- SRC-aligned 移除手绘 --------------------- data_src mask - remove.bat",
+      "sha256": "f18c5d650d1fd97d28330f1378821fa86b6ce1283a13b5e3480340fad8a06fa4"
+    },
+    {
+      "path": "legacy-cli/4.4)--- SRC-aligned 移除遮罩 --------------------- data_src trained mask - remove.bat",
+      "sha256": "4d3bec307f50832146d74664dbec8bcf638dec6f7c315b6bd4d1374bb6767f60"
+    },
+    {
+      "path": "legacy-cli/4.5)--- DST-aligned 遮罩提取 --------------------- data_dst mask - fetch.bat",
+      "sha256": "47ee284c23946c95437bbf0bc2f4c35f017af1e1e64792f243e443fad0d56657"
+    },
+    {
+      "path": "legacy-cli/4.5)--- SRC-aligned 遮罩提取 --------------------- data_src mask - fetch.bat",
+      "sha256": "0f9d83daaca59aeabb92eb0632077d8151b542de5f0ca63174eb28921ff35333"
+    },
+    {
+      "path": "legacy-cli/5.2)--- 训练 ME 模型 ------------------------------- train ME.bat",
+      "sha256": "93ec0374934155a59e816fc0ed907a1ccf9406be4146dfbcf8548c7f5e73f73d"
+    },
+    {
+      "path": "legacy-cli/6.1)--- 导出 ME 直播模型 -------------------------- export ME as dfm.bat",
+      "sha256": "0e5bf56aa2ab1a43f456907bc4c81e0fda71b3648ef825f7cc13c7397a50f6b0"
+    },
+    {
+      "path": "legacy-cli/6.2)--- 模型 ME 合成人脸 -------------------------- merge ME.bat",
+      "sha256": "43bd8177d1b2c869300cf7ec2e3efa95402264e7c2443171ffb670391c008bc1"
+    },
+    {
+      "path": "legacy-cli/7.1)--- 合成 MP4 无损视频 ------------------------- merged to mp4 lossless.bat",
+      "sha256": "6344f2dd12d41d6d4007e8b40815d14671552b18f0843e6f7467f47afaf4cb7d"
+    },
+    {
+      "path": "legacy-cli/7.1)--- 合成 MP4 视频 ----------------------------- merged to mp4.bat",
+      "sha256": "f3811c043d59d6ac6a9587da120ff997cc7ddbfb11375b132a2307eceddf98a1"
+    },
+    {
+      "path": "legacy-cli/7.2)--- 合成 AVI 视频 ------------------------------ merged to avi.bat",
+      "sha256": "a6ac975db6f6a85e0cf1154e3211fd4844abe014c8b932a8c6d616be8da6b3f2"
+    },
+    {
+      "path": "legacy-cli/7.2)--- 合成 MOV 无损视频 ----------------------- merged to mov lossless.bat",
+      "sha256": "5848fcd271445b752fb183cfbe6aceb43df784b40a9a8bae5ef8e3be3575aeca"
+    },
+    {
+      "path": "legacy-cli/8.1)--- Landmarks自动识错 ------------------------ Landmarks auto check.bat",
+      "sha256": "f27625137b3f0757c0edb58d1bd62e989f866540141c96d13a38e4c114f77d19"
+    },
+    {
+      "path": "legacy-cli/8.1)--- VisiPics 查重 --------------------------- VisiPics.bat",
+      "sha256": "09b88a28a50170158950caaf2bf44a3054b297c48ea5cb5788359ce8e0607fb8"
+    },
+    {
+      "path": "legacy-cli/8.2)--- 启动EBS ------------------------------------- start EBSynth.bat",
+      "sha256": "9d13e4f34c3c0e53b36004bde1bb3ac08ce9c32b36bb154f01ec33b27fd6cc12"
+    },
+    {
+      "path": "legacy-cli/8.3)--- Aligned 角度分布 --------------------------- aligned tools by marsmana1.bat",
+      "sha256": "4f2312f5c33be2eb91088e29941deed56e394be4953efdbb5b47cd1e54936241"
+    },
+    {
+      "path": "legacy-cli/8.3)--- Aligned 角度整理 --------------------------- aligned tools by yangala.bat",
+      "sha256": "045c0b24b070075044fae3177047f4d9739d28462eb251046409eb38737c84e2"
+    },
+    {
+      "path": "legacy-cli/README.md",
+      "sha256": "b5f63d98bb088d1b66ce9d038f953e1a13e77a839c073879eff72a1d58e24426"
+    },
+    {
+      "path": "legacy-cli/commands.json",
+      "sha256": "6e415f3059e13ab2824604cd7579ae4317f26f7b4a753cf9d4a8a587eb85d792"
+    },
+    {
+      "path": "legacy-cli/external-tools.ps1",
+      "sha256": "663c9b5d7633f3416e7a908914a2f966b6af9615e9c9567406cd63fc411e11d3"
+    },
+    {
+      "path": "legacy-cli/menu.bat",
+      "sha256": "a82a7c00bf68c29fb0d17a50d56c079961e1eeed938ba6b14ca4c7f7e3aed1f2"
+    },
+    {
+      "path": "legacy-cli/menu.ps1",
+      "sha256": "fd5bfb26c33e132d35ea355701959c788cc6e09664a69bf7075a27bd8a4a99d9"
+    },
+    {
+      "path": "release/feedback-template.json",
+      "sha256": "5f5f7a66df73f1c37c1ec49710ecbcd4fd6beaf4ae6177e6a6b859eb86367530"
+    },
+    {
+      "path": "release/feedback.mjs",
+      "sha256": "a686e94557f5a5d6d29afe23c97c3e8683e35671f64cdd4b327cff8a6ba0a744"
+    },
+    {
+      "path": "release/generic-xseg-data.dat",
+      "sha256": "bbf5ca3f3177e901c9486281c4a41989d679f6d6a67959e9b6de539d9baf29a4"
+    },
+    {
+      "path": "release/generic-xseg-original-summary.txt",
+      "sha256": "952a6c709626eba32c2dc98538595fbfeea78a02462a5b0a3c8f37b15d7d935e"
+    },
+    {
+      "path": "release/generic-xseg.json",
+      "sha256": "ab8d681d03a6f3793ae6cf974e4c811691365dd87e51f75e129f6de6d723dd3b"
+    },
+    {
+      "path": "release/installation.mjs",
+      "sha256": "586c50c88af29bc4c393beff9da8a7c1577cdde1bbdfae4b2b81c8ad49081f99"
+    },
+    {
+      "path": "release/package-config.json",
+      "sha256": "a102bfd354c38643b0e149e724b8a4875cd6e6cc5c2ab360c5c0b826af529a3d"
+    },
+    {
+      "path": "release/source-integrity.mjs",
+      "sha256": "9fa3e1fafbb9ad995d5b9b75685a5678a3b49cda97e209a8d74891da68f4a8d2"
+    },
+    {
+      "path": "release/version.json",
+      "sha256": "e5ef3c885c69bc159850b996b598cfcd0d2dd55339730b37d6fa7b904d3d8614"
+    },
+    {
+      "path": "release/version.mjs",
+      "sha256": "e906d71eff6e0e455ad812b38840b05251ff16cc7c51f854ce43fd6164f132e1"
+    },
+    {
+      "path": "tools/build-release.py",
+      "sha256": "213be4b9532a759aadf3dd77043ea93f77513021714b138260810366c1f80b56"
+    },
+    {
+      "path": "tools/check-i18n.mjs",
+      "sha256": "fa38da25cba9696083e859ed5638f9468ca0fb965cbb7b773a27f36d1d6a8e8c"
+    },
+    {
+      "path": "tools/convert-generic-xseg.py",
+      "sha256": "3621a779e04885c2057dd427001fe7875c8b140a0ae435b3792af629e8047c9a"
+    },
+    {
+      "path": "tools/dist-provenance.mjs",
+      "sha256": "b14d027b09bc08b08e0b6af828045a62c9c51455d9f4d6edd49ace140a9235c4"
+    },
+    {
+      "path": "tools/i18n-baseline.json",
+      "sha256": "f0f13679818c0a63f9bfb41e1acef0b37eed8e8971690aab12dea7b5512f11e0"
+    },
+    {
+      "path": "tools/licenses/GenericXSeg-DeepFaceLab-GPL-3.0.txt",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+    },
+    {
+      "path": "tools/licenses/NotoFonts-OFL-1.1.txt",
+      "sha256": "0dab92d0544f7b233403f14b84a663bdbfa746982eda629e7f4f9ffe1b036feb"
+    },
+    {
+      "path": "tools/licenses/SFace-Apache-2.0.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "path": "tools/me-longrun-audit.py",
+      "sha256": "2b199b73eb7783cc78807cb4773f579e1f790bf96ce57034d815e6035f0f5b01"
+    },
+    {
+      "path": "tools/me-short-run-audit.py",
+      "sha256": "5227396169356799cc3a866f54fdbbc5251cb4cc35fcc7433ba67891fb4378e3"
+    },
+    {
+      "path": "tools/me-short-run.py",
+      "sha256": "d466e43cd72a90cbfb2ea668ec3f32595ef0bf5000bdfe4ea84dc69d13ce91b1"
+    },
+    {
+      "path": "tools/package-launcher.py",
+      "sha256": "8e4f4fa29217dad2e690279a24fbd03bbf66d2d489a91a8961ec950c6679b33d"
+    },
+    {
+      "path": "tools/package_release.ps1",
+      "sha256": "211b0789b4443401d10ac6d160469e5ed3779c7baa7d8edd322ed985ef418886"
+    },
+    {
+      "path": "tools/prepare-vision-runtime.ps1",
+      "sha256": "32af9a8973e12dd3bc3ffade382e3e9487c8b429a516b80960c996d7f621fbba"
+    },
+    {
+      "path": "tools/release-snapshot.mjs",
+      "sha256": "82d7212ae05761470b0c98afe4bf8bd248ebbb4918a3a95d8261fdb18db0360f"
+    },
+    {
+      "path": "tools/restore-release.ps1",
+      "sha256": "1d83cf78b1ca75b0465047371673a74f92b03f8f4f4b1fa3290fa9470ea049d5"
+    },
+    {
+      "path": "tools/smoke-dist.mjs",
+      "sha256": "21fcc244f3d80d4dbd715bfc1a391556f0af3fdd51c1659ab613a86cd48df656"
+    },
+    {
+      "path": "tools/smoke_test.bat",
+      "sha256": "82685dfbf6ff6a52c3f6f3455f45e3254dcb909db8b64fcab500b81c73a2b7ff"
+    },
+    {
+      "path": "tools/smoke_test.py",
+      "sha256": "6cfaa8a9f0b8244dc0079af33e5c7fa1835aa7c0e7465bbd3fe7fe2f10cdbb8b"
+    },
+    {
+      "path": "tools/update-channel-signature.mjs",
+      "sha256": "c420926ab6c2015a6c4f359bb24e0a1dc8c4d47d5e3624dd96ab364ec461a245"
+    },
+    {
+      "path": "tools/verify-release.ps1",
+      "sha256": "54735574ffbac42782ad3cba1373d1b1e5ed012cccb2246c2140a54c41efc418"
+    },
+    {
+      "path": "tools/verify-version.mjs",
+      "sha256": "90335f7359be2fe3f208f77d2452e5f753b6211e87ee16dc7b08b52ef7f03f4c"
+    },
+    {
+      "path": "webui/package.json",
+      "sha256": "785479660a2d414fd6f478630f8d68221270523b4e5cbc5f49e1cba1c30dce84"
+    },
+    {
+      "path": "webui/pnpm-lock.yaml",
+      "sha256": "ef25485998290d465a5960bf86f3048ba027946972c39626559d22af3efcce73"
+    },
+    {
+      "path": "webui/public/assets/brand-mark.png",
+      "sha256": "77faede7f3a5fa617113673bc1829971e966ebad9c6fe5137148265593fd5db0"
+    },
+    {
+      "path": "webui/scripts/dev.mjs",
+      "sha256": "ae1841bb383531b743a1052563d3f469d8b6a4efdd4f48d78ee79aff7cab8a59"
+    },
+    {
+      "path": "webui/scripts/evaluate-me-checkpoint.mjs",
+      "sha256": "c569bc1edb78725b8f6f0a31a7c3a5195602ef8ab8e99d586c328e1822171c15"
+    },
+    {
+      "path": "webui/scripts/install-node.ps1",
+      "sha256": "137a17727990ebdb5f028e2d020a37280cd2e1ffe37b646d47eb0b3baadc5276"
+    },
+    {
+      "path": "webui/scripts/launcher-menu.ps1",
+      "sha256": "452a45e125565d8d9a8bc6efe070fdd6fc1f304e6ac33a9a49a20170d62ac1fe"
+    },
+    {
+      "path": "webui/scripts/local-manager.mjs",
+      "sha256": "0c7da233afa3eafcc07299736e17eb6302b043d32a677e25f156aa42dbe2bf28"
+    },
+    {
+      "path": "webui/scripts/prepare-sites-build.mjs",
+      "sha256": "60b57d769e5462f9c47aa4c9a5ccaf1494275a3f68bc1a06c11349dda20dbe1f"
+    },
+    {
+      "path": "webui/scripts/serve-local.mjs",
+      "sha256": "bb184b3b8e91b3aa720dcbe210ec845c49789806e40bef5516b014be7a7e5ab8"
+    },
+    {
+      "path": "webui/scripts/smoke-live.mjs",
+      "sha256": "105753adb86b8778b47305d2ee9026fddc85d87ce5622c3d4bceb6b2cbacce4f"
+    },
+    {
+      "path": "webui/server/app-server.mjs",
+      "sha256": "dbd79383f5275e358b7634fa0d55feab805b56cacc125e670f9ffc4aa9785213"
+    },
+    {
+      "path": "webui/server/asset-manager.mjs",
+      "sha256": "4c8b8c6f99fc2103dd79fcd2afb8e146c0e581edeb71e03e6f4cbfeeddee83dd"
+    },
+    {
+      "path": "webui/server/command-registry.mjs",
+      "sha256": "d7516a65f17b73453022fa903b05098441310e76f387fe04d5d89d69aa76c633"
+    },
+    {
+      "path": "webui/server/encode-mp4.mjs",
+      "sha256": "c2966f28a4e22e4d09344195e4d88f2f3ddb1050971223b16a7443f4458a6f0d"
+    },
+    {
+      "path": "webui/server/environment.mjs",
+      "sha256": "71098fd6dcf58dd8274bd3542db6b09bcbc5495cfc0d7156c1376d97123997dc"
+    },
+    {
+      "path": "webui/server/export-history.mjs",
+      "sha256": "e8058ac3e3390ce2c0e113cdeb86e4d22a264c4a5004a0889bd6778483c544e0"
+    },
+    {
+      "path": "webui/server/external-window-adapter.mjs",
+      "sha256": "13b3736eb89261dc89bbeadba353d4ec36ebd64bdb2d7023cba8c55922036426"
+    },
+    {
+      "path": "webui/server/image-service-credentials.mjs",
+      "sha256": "1e3f02557e32a7d4fcc6c01bfab73ced74ade39d8950dde42da9af00d1750122"
+    },
+    {
+      "path": "webui/server/image-service-manager.mjs",
+      "sha256": "12dadd813d000783caa3c9b8ca599637ad5e315d62afa1159aab4f4dd776b4fe"
+    },
+    {
+      "path": "webui/server/image-service-network.mjs",
+      "sha256": "61901f735ea123dd999cf2bf0c65d53e1e1cf7641f5300ac72fb5f4dba0b2bfa"
+    },
+    {
+      "path": "webui/server/index.mjs",
+      "sha256": "b9eab6e20f219d2a8419c05e34fbcc3fb84280968c38f6a2d7e2d6ac0db7a9b8"
+    },
+    {
+      "path": "webui/server/job-manager.mjs",
+      "sha256": "b0bb7c73a2be606e897e61cd46c4c7503454c46d1e32037a88acecd821a68d17"
+    },
+    {
+      "path": "webui/server/me-detached-runner.mjs",
+      "sha256": "d59292f4ad91a66bf5a82140a9e0ac0b1b27e61b912624497884a1d41a0dddb5"
+    },
+    {
+      "path": "webui/server/me-runner-sidecar.mjs",
+      "sha256": "ee59c528f51d58d6e39bce8eb731fe85e0f619e1325e021f0ade25ce40dd630f"
+    },
+    {
+      "path": "webui/server/me-supervisor-state.mjs",
+      "sha256": "78fd4b6ff6a50bbbe977ce43008229098ebba66453541c7031cc97153bc1d360"
+    },
+    {
+      "path": "webui/server/model-backup-manager.mjs",
+      "sha256": "3390e7f597232d451dd6c41f64eec5336681ac2023016d391b2809f7a87ff256"
+    },
+    {
+      "path": "webui/server/operation-manager.mjs",
+      "sha256": "0097695814c669bf3a798470293bf63f26d59b63ce7b1308731a7e6b3c4fbcd3"
+    },
+    {
+      "path": "webui/server/output-parser.mjs",
+      "sha256": "e4668508f2e6a4343a2dd9bbc633e1b8bcc76e3cf3e93220e3bab7a5d50cb06d"
+    },
+    {
+      "path": "webui/server/paths.mjs",
+      "sha256": "21d6b8310a1ada00110e80b4a794117517ba7a34fbf955df63bd27b8f9a03577"
+    },
+    {
+      "path": "webui/server/project-manager.mjs",
+      "sha256": "0f11969ea8f11e696923a9455bfb9549d15fa5cc3f94ba4266ab0ac8712d285f"
+    },
+    {
+      "path": "webui/server/pty-runner.mjs",
+      "sha256": "414639863e243800dc307460f4da717a23f496c8e7e23e720c3eeae194f252d8"
+    },
+    {
+      "path": "webui/server/role-assignment-manager.mjs",
+      "sha256": "348893c6ae69226ae57bba6fee0af01bbc0c70b45122b06defafff9a7a9c2502"
+    },
+    {
+      "path": "webui/server/system-diagnostics.mjs",
+      "sha256": "1194b7ede6541106e7732389758c16fb0a5e9ab82e736e0efaf471e735aaf4d9"
+    },
+    {
+      "path": "webui/server/system-readiness.mjs",
+      "sha256": "8aded7ed81fde029a522eb32d25723b0aa603a7290924f7184d84441ff526516"
+    },
+    {
+      "path": "webui/server/telemetry.mjs",
+      "sha256": "d9b8795f622f960879bc50b74fbd587ec10a3e656785f1fe8e8a7c62ca842e9d"
+    },
+    {
+      "path": "webui/server/training-evaluation-manager.mjs",
+      "sha256": "7a95471c43445344bbb301562a6523726c7f0f8826b4f9e094d2986679837896"
+    },
+    {
+      "path": "webui/server/video-tool-manager.mjs",
+      "sha256": "470598b63299379a8442f850dd907261a546ed14807c01957a34246e29b09dcf"
+    },
+    {
+      "path": "webui/server/workspace-manager.mjs",
+      "sha256": "980059af18a48b7a03dd311c2ea59eada7abc3a54d8931d0f29c638ec67a0bcf"
+    },
+    {
+      "path": "webui/shared/image-service-contract.mjs",
+      "sha256": "8ebb2cf55dfc6bceb6a639e2b80d0d928ff755d668424bf3c11e881f83c56c7a"
+    },
+    {
+      "path": "webui/shared/me-training-options.mjs",
+      "sha256": "f7cc9f1b71f98c1c44cbe30fc07285f2b37674d65f9db370d0402e180341a1c9"
+    },
+    {
+      "path": "webui/shared/project-identity.mjs",
+      "sha256": "e07b3b093f5a4ef30aa9cfa3322c932220c62e26a0c136d5a643fa0b5c6b312b"
+    },
+    {
+      "path": "webui/src/App.jsx",
+      "sha256": "ac6593f5b7bc40e1aa905085f501d93823498547e6b435a6b95718273f9278b6"
+    },
+    {
+      "path": "webui/src/components/AdvancedWorkbenchPanels.jsx",
+      "sha256": "ef19a295a9d9c6ebb19c26bf5cb44e6806f845e0f0bc0fcecc93ebf3c35b3ed6"
+    },
+    {
+      "path": "webui/src/components/AppErrorBoundary.jsx",
+      "sha256": "f3459666e4253e340efc3a6fed537f225e8531c2e98ee33ee3b27e5e672cfd15"
+    },
+    {
+      "path": "webui/src/components/BackgroundOperations.jsx",
+      "sha256": "2381097e2d09e14c0e058cad181e267595f1cf42a79d0551696b89224fd12c9e"
+    },
+    {
+      "path": "webui/src/components/Chrome.jsx",
+      "sha256": "e153587ace06ad5554138ded231b399b294c1b06bbe7d61c86dd892744cd59a5"
+    },
+    {
+      "path": "webui/src/components/ConsoleDock.jsx",
+      "sha256": "063eb77f967813e155e79ad3edac408b2d3800dcae49b2041335646350c51a2e"
+    },
+    {
+      "path": "webui/src/components/ExportView.jsx",
+      "sha256": "495f79ade57467eb02717c061229ec701713a48e9e309f8f384a7f24c39e3332"
+    },
+    {
+      "path": "webui/src/components/FirstUseGuide.jsx",
+      "sha256": "19fb473e9d7306dbb22c452e883d6dcf8e611060568a9cc5a8c0b41d03503a8d"
+    },
+    {
+      "path": "webui/src/components/ImageResultComparison.jsx",
+      "sha256": "dd965985eb638960ca05fb6379bbc73f4cdd60e82b54a5ba9aad8f6dada35790"
+    },
+    {
+      "path": "webui/src/components/ImageServiceWorkbench.jsx",
+      "sha256": "af31124709dfbd84345bc80ee7fc05011fd412f5fd3e258d4839e8dabe37c14f"
+    },
+    {
+      "path": "webui/src/components/METrainingFields.css",
+      "sha256": "583f69425639f22337224e15dab4d51ee9b2dcb35b5cb61f971d37d227c26ad5"
+    },
+    {
+      "path": "webui/src/components/METrainingFields.jsx",
+      "sha256": "7abd090ea24f9e23b69c1debc652faa733e8923487ad4a59a53f08bc06fa015d"
+    },
+    {
+      "path": "webui/src/components/METrainingReview.css",
+      "sha256": "f03d4e79ffe9683562f76ba1ba49d66b56b4cbe0d57d35a1d56797f3eed2ff2f"
+    },
+    {
+      "path": "webui/src/components/METrainingReview.jsx",
+      "sha256": "c2f28034326f7f2e65ab44cf5fb96149bcbbc429743ed8ea8e04c0cffb8f04b3"
+    },
+    {
+      "path": "webui/src/components/OperationsView.jsx",
+      "sha256": "09a20663ea86f61a14ebdb6a97dc6ed8565fe9b4b0a51be39b714e7c39236400"
+    },
+    {
+      "path": "webui/src/components/OutputGallery.jsx",
+      "sha256": "c44ad084d218d944d89b9834687fdb07c3a55ea778c9cc864d0276c52b054912"
+    },
+    {
+      "path": "webui/src/components/Overlays.jsx",
+      "sha256": "f3b880842a8f2fe140b5d151a9ec00188d0012c70756ea9ffa3793d04dd23d19"
+    },
+    {
+      "path": "webui/src/components/ProgressFeedback.jsx",
+      "sha256": "653bcdf9a6cfece4769b3733da87878152d1a28c9fa1edd3e0fbf8748911d7e4"
+    },
+    {
+      "path": "webui/src/components/ProjectManagerPanel.jsx",
+      "sha256": "f940101eadb9826da52aec49bb70c82cd8cb3c47c7c012ebcac3d6e92177e7fb"
+    },
+    {
+      "path": "webui/src/components/ProjectSwitchDialog.jsx",
+      "sha256": "44c299b80648be20e7bf9ae8beae46097acab4122280024e0f504720e0f2b886"
+    },
+    {
+      "path": "webui/src/components/QualityDiagnosticsView.jsx",
+      "sha256": "5d273c7d7244db7f9c53736cef37cb1482398ec5ed1bd7215f3d378c4a7c1d28"
+    },
+    {
+      "path": "webui/src/components/ReleaseFeedbackPanel.jsx",
+      "sha256": "cad2717fe97ce32cac5126ede132bdc3bb69a376f188c2fcd81e9a22b79f4e49"
+    },
+    {
+      "path": "webui/src/components/RoleGroupingPanel.jsx",
+      "sha256": "f41b7b061498a6b801d44a470da9ef4dd075e00fe77bb702d840e24f30b18276"
+    },
+    {
+      "path": "webui/src/components/SimilarityAuditPanel.jsx",
+      "sha256": "9ea8ef1c44d0b636d05a509e207d1dac663e05f1f4eae8b4a66c61096fc307ae"
+    },
+    {
+      "path": "webui/src/components/TerminalSurface.jsx",
+      "sha256": "7aa028f991d96cca30967561425cc8c03630c4e321da248a9fc79739f2d692d4"
+    },
+    {
+      "path": "webui/src/components/ToolLabView.jsx",
+      "sha256": "702da296f7ec5742bb3149578d1f84d173310e0200c57ec34f9d309152e8f45d"
+    },
+    {
+      "path": "webui/src/components/ToolWorkbenchPanels.jsx",
+      "sha256": "af94d83fc15f83b63fb07e45cc2691c146098cc0edb876f9f03198296d510079"
+    },
+    {
+      "path": "webui/src/components/TrainingView.jsx",
+      "sha256": "596a3ee94310e66a1440bee6ff118e7cf32ec2016cdcd06864107afe4f995528"
+    },
+    {
+      "path": "webui/src/components/WorkspaceView.jsx",
+      "sha256": "059c92b9d2bd9b75351ad09e68d275fa8cd2e89c2ca9d883753c345d04513ab8"
+    },
+    {
+      "path": "webui/src/components/first-use-guide.css",
+      "sha256": "4e6779a9f762871d42f6f087b07014a6957a491068dd3b6dd34f77d38a52efcd"
+    },
+    {
+      "path": "webui/src/components/image-result-comparison.css",
+      "sha256": "d7c909f7eef37a0205bcf2e0a11ecfcc08183295e2e3f48b486bd3f0cdd8c624"
+    },
+    {
+      "path": "webui/src/components/release-feedback.css",
+      "sha256": "03c596c7e0ea8705f5afeceafcafccf6e23bb388b2fa0c6bead99f70c95d6603"
+    },
+    {
+      "path": "webui/src/data/dashboard.js",
+      "sha256": "e675fb4d84226de6e8d353cc35a1337f1ca7d3c8a7cf231911818adaba9090bb"
+    },
+    {
+      "path": "webui/src/domain/image-result-review.js",
+      "sha256": "c5e779b2f25b7aa719e7c2756be662f6ed0c942ac2b42b360997c6793dc43f05"
+    },
+    {
+      "path": "webui/src/domain/job-presentation.js",
+      "sha256": "08636e4509e0cc57a1cc9d87dbd777ac702e67b54d4a260ac67a3cb5044e0df2"
+    },
+    {
+      "path": "webui/src/domain/me-training-configuration.js",
+      "sha256": "74d0e57484b6d5297eb8bb628c491d8a51f73a02b3d4941bfeaafe323b03bf82"
+    },
+    {
+      "path": "webui/src/domain/pose-comparison.js",
+      "sha256": "7c33d4fd6fbc32ea98f26711729a2163de6e48fa6d02a8c7e57d163f9077de68"
+    },
+    {
+      "path": "webui/src/domain/preflight-recovery.js",
+      "sha256": "c5ca43a82532f65f664fc720cef0a76647df893b776d5443267974c172804208"
+    },
+    {
+      "path": "webui/src/domain/role-review.js",
+      "sha256": "bef8f775f1a73854cbc532658ea952cfc0c4a3789441a228ecb54937d2a9d62c"
+    },
+    {
+      "path": "webui/src/domain/similarity-review.js",
+      "sha256": "b65347caa2809dbcae7c125bdc2bc21e27aae5c634dc7069d39dc046558999f5"
+    },
+    {
+      "path": "webui/src/domain/task-configuration.js",
+      "sha256": "85faf20c1a1790e862811dd8d4aa51f54e1f00ef7689c819c2321a58f5aa8421"
+    },
+    {
+      "path": "webui/src/domain/terminal-sessions.js",
+      "sha256": "f892345468057a61ac3c45eea4bfa59c6b3a005070347ea3c546b5d9aee9be28"
+    },
+    {
+      "path": "webui/src/domain/training-context.js",
+      "sha256": "f105998a429f68d8c754b6c82101c921cb9834e3dcea52102ecbdfbf628d302c"
+    },
+    {
+      "path": "webui/src/domain/training-pose-regression.js",
+      "sha256": "755f0da9755a479e9363c25b4304fc062a98b72ec5978264dcf091c27f9cdc09"
+    },
+    {
+      "path": "webui/src/domain/training-preview-refresh.js",
+      "sha256": "61f54e14675f6f7653e2dac020d0e70cdc6d465dcdd10e86a0e090d37c164e65"
+    },
+    {
+      "path": "webui/src/domain/workflow-readiness.js",
+      "sha256": "5f5dfe976f2c264d8a14fa1579e5dea4d886f6c5cc37b1b920849ed7a686755a"
+    },
+    {
+      "path": "webui/src/i18n.jsx",
+      "sha256": "9287d25ad5bc8ed2af1d28f993d060983e6ad89e58451c8090a7d212e97d48a9"
+    },
+    {
+      "path": "webui/src/main.jsx",
+      "sha256": "0c4d2a82ad6988a59e4122179a5396d2bf3a5aa2592311776eec3bd06d75e279"
+    },
+    {
+      "path": "webui/src/progress-store.js",
+      "sha256": "2a586300dd2b1ccac8ea9872525ccd40f3fbe4900ce43bcb135b0407e1d8bc81"
+    },
+    {
+      "path": "webui/src/runtime/api.js",
+      "sha256": "eae650374e416b37df84b5457afacd127b619290af435b661e409cc142d6b898"
+    },
+    {
+      "path": "webui/src/runtime/operation-cancellation.js",
+      "sha256": "b5a13de627533015d7d8ea157f0664f660b011a4e629b18402525ed2d263f0e5"
+    },
+    {
+      "path": "webui/src/runtime/project-switch.js",
+      "sha256": "dc3123462082141a609fdfce88fe123de9c5e9e882eb32454d8e9b433fa80247"
+    },
+    {
+      "path": "webui/src/runtime/request-deadline.js",
+      "sha256": "09ae3de76a12acef2df640327113db82c365cdcc589e548cdefec18c01ae751c"
+    },
+    {
+      "path": "webui/src/runtime/training-history-reader.js",
+      "sha256": "792d226a1744bcae9615178079238afc6c5757b05ac9a161922886a065566c8f"
+    },
+    {
+      "path": "webui/src/runtime/useRoleReviewDraft.js",
+      "sha256": "cf294c4ca8d3fe610200d078d8535b9e682956e30883cd5aef4d8996b6d61393"
+    },
+    {
+      "path": "webui/src/runtime/useRuntime.js",
+      "sha256": "c664d09cdc806ec27bde1d74b502eabd8fe80f311bf40286e3f05328dd02a1ae"
+    },
+    {
+      "path": "webui/src/runtime/useTrainingHistory.js",
+      "sha256": "7e01847e4a0219a0f02605385d4e45c56450b6c215c622a961d8cfb4e832a8c1"
+    },
+    {
+      "path": "webui/src/runtime/useWorkspaceRead.js",
+      "sha256": "1b355cb4c7dc9533d09dc5b975934222ee6f2cd8cc9f8a33e4efe7be24ab5825"
+    },
+    {
+      "path": "webui/src/styles.css",
+      "sha256": "8a9189a990922695f4792a4a9d6e013857d77a7e9062f04a06a8ccbdc033b6d0"
+    },
+    {
+      "path": "webui/vite.config.mjs",
+      "sha256": "a7b13edf5a79c93a938b18b52fe8f0fd6af1354e4b28355350389ea451594172"
+    },
+    {
+      "path": "webui/worker/index.js",
+      "sha256": "2dd0615a445143933d88d4271f54f5d63ee951421fcd08c5a7617bb09c564389"
+    }
+  ]
+}

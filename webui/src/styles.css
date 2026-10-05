@@ -10499,3 +10499,29 @@ summary { cursor: pointer; color: var(--text-soft); padding: 9px 0; }
 .wizard-search-feedback { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; font-size:12px; color:var(--muted); margin-top:8px; }
 .wizard-field-error { color:var(--amber) !important; }
 .wizard-search-feedback .text-button { flex-shrink:0; }
+
+/* Optional version/onboarding rows must never consume the route's fixed row. */
+.app-frame .main-surface:has(.release-strip) {
+  grid-template-areas: "header" "release" "notice" "progress" "workflow" "guide" "content" "console";
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 72px auto auto auto auto auto minmax(0, 3fr) minmax(226px, 2fr);
+  gap: 0;
+}
+.app-frame .main-surface:has(.release-strip):has(.runtime-console.is-collapsed) {
+  grid-template-rows: 72px auto auto auto auto auto minmax(0, 1fr) 58px;
+}
+.main-surface > .project-header { grid-area: header; }
+.main-surface > .release-strip { grid-area: release; min-height: 24px; padding: 4px 2px; }
+.main-surface > .narrow-screen-notice { grid-area: notice; }
+.main-surface > .global-loading-progress { grid-area: progress; margin-block: 0 8px; }
+.main-surface > .workflow-bar { grid-area: workflow; min-height: 60px; margin-bottom: 8px; }
+.main-surface > .first-use-guide { grid-area: guide; margin: 0 0 8px; }
+.route-content { grid-area: content; min-width: 0; min-height: 0; margin-bottom: 8px; }
+.route-content > * { height: 100%; min-height: 0; }
+.main-surface > .console-dock-slot { grid-area: console; }
+@media (max-width: 1020px) {
+  .app-frame .main-surface:has(.release-strip),
+  .app-frame .main-surface:has(.release-strip):has(.runtime-console.is-collapsed) {
+    grid-template-rows: auto auto auto auto auto auto minmax(380px, auto) auto;
+  }
+}

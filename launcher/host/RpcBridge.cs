@@ -187,6 +187,12 @@ namespace DflPtWebUi.Launcher
                 case "git.update":
                     return await controller.ApplyUpdateAsync();
 
+                case "rollbackUpdate":
+                    return await controller.RollbackUpdateAsync();
+
+                case "prepareFeedback":
+                    return await controller.PrepareFeedbackAsync(ReadString(parameters, "step"));
+
                 case "startWebUi":
                 case "webui.start":
                     return await controller.StartWebUiAsync();

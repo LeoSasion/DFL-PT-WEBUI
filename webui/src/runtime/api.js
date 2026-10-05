@@ -381,6 +381,14 @@ export const runtimeApi = {
     `/api/system/storage?requiredBytes=${encodeURIComponent(requiredBytes)}`,
   ),
   diagnostics: () => request("/api/system/diagnostics"),
+  release: (options = {}) => request("/api/system/release", options),
+  prepareFeedback: ({ failureStep = "unknown" } = {}, options = {}) => request("/api/system/feedback", {
+    ...options, method: "POST", body: JSON.stringify({ failureStep }),
+  }),
+  saveImageResultCopy: (id, index, { name } = {}, options = {}) => request(`/api/image-service/tasks/${encodeURIComponent(id)}/results/${index}/save-as`, {
+    ...options, method: "POST", body: JSON.stringify({ name }),
+  }),
+  imageExportUrl: id => `/api/image-service/exports/${encodeURIComponent(id)}`,
   operations: (options = {}) => request("/api/operations", options),
   operation: (id, options = {}) => request(`/api/operations/${encodeURIComponent(id)}`, options),
   startOperation: (kind, side, parameters = {}, options = {}) => request("/api/operations", {

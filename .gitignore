@@ -40,6 +40,7 @@ desktop.ini
 
 # Release artifacts and workstation-only deployment/documentation assets
 release-output/
+release/installation.json
 webui/.openai/hosting.json
 docs/images/user-interface-guide/
 docs/images/product-*.png

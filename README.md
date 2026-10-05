@@ -2,10 +2,10 @@
 
 Windows 本地工作台：**ME PyTorch 训练 + WebUI + 数据处理、XSeg、合成和视频工具**。
 
-**0.1.1-preview** 面向用户实测反馈。换脸训练使用 ME/PyTorch，XSeg 是辅助遮罩模型；旧 ME 网络权重可以通过显式导入命令迁移。运行环境与项目材料保持独立。
+当前源码的应用版本为 **0.1.2-preview**，启动器版本为 **0.1.3-preview**。换脸训练使用 ME/PyTorch，XSeg 是辅助遮罩模型；旧 ME 网络权重可以通过显式导入命令迁移。运行环境与项目材料保持独立。源码版本、EXE 版本与已发布便携包分别记录，以发行资产及 provenance 判断实际内容。
 
-- [下载预览版](https://github.com/LeoSasion/DFL-PT-WEBUI/releases/tag/v0.1.1-preview)：源码包和 Windows x64 便携包，均随包提供通用 XSeg 推理权重。
-- [下载一键启动器 EXE](https://github.com/LeoSasion/DFL-PT-WEBUI/releases/download/launcher-v0.1.2-preview/DFL-PT-WEBUI.Launcher.exe)：双击、选择空目录并开始安装，无需先安装 Git、Python 或 Node；详见[启动器说明](docs/LAUNCHER.md)。
+- [历史 0.1.1-preview 便携包](https://github.com/LeoSasion/DFL-PT-WEBUI/releases/tag/v0.1.1-preview)：保持原功能集及原摘要，随包提供通用 XSeg 推理权重。
+- [启动器及源码发行资产](https://github.com/LeoSasion/DFL-PT-WEBUI/releases)：无需预装 Git、Python 或 Node；新启动器按固定公开提交及 SHA-256 安装。历史 launcher-v0.1.2-preview 跟随安装时的 main；详见[启动器说明](docs/LAUNCHER.md)。
 - [完整安装步骤](docs/INSTALL.md)、[版本说明](docs/RELEASE_NOTES.md)、[已知限制](docs/KNOWN_ISSUES.md)。
 - [反馈问题](https://github.com/LeoSasion/DFL-PT-WEBUI/issues/new/choose)；反馈需要的信息见 [FEEDBACK.md](docs/FEEDBACK.md)。
 
@@ -23,7 +23,7 @@ Set-Location C:\DFL-PT-WEBUI
 powershell -NoProfile -ExecutionPolicy Bypass -File launcher\bootstrap.ps1 -ProjectRoot C:\DFL-PT-WEBUI -NoNetwork
 ```
 
-启动器从本项目官方 GitHub `main` 下载源码，再调用 PT 源码安装入口准备独立运行环境和固定通用 XSeg 权重。原版 DFL-WEBUI 与本项目必须使用不同安装目录；两个项目默认使用相同本地端口，切换时先停止另一项目的 WebUI，启动器不会结束其他项目的服务。源码 Git 不提交运行时、辅助权重、依赖包、个人素材和模型；克隆后先执行安装入口。便携包不带个人素材、训练检查点、本机任务状态或旧工作台截图。源码安装支持准备离线材料，详见 [运行环境说明](launcher/runtime-README.md)。启动器在线自动更新仍关闭，升级通过发行页下载。
+新启动器按 `release/source-pin.json` 从本项目官方 GitHub 固定提交下载源码并校验 ZIP SHA-256，再调用 PT 安装入口准备独立运行环境和通用 XSeg 权重。源码 Git 不提交运行时、依赖包、个人素材和模型；克隆后先执行安装入口。便携包不带个人素材、训练检查点或本机任务状态。源码安装支持准备离线材料，详见 [运行环境说明](launcher/runtime-README.md)。自动更新关闭；用户在新版启动器中主动选择升级，运行任务阻止维护，升级失败恢复保留的源码、构建与依赖备份。
 
 当前开发证据覆盖单卡、小参数的保存、停止、恢复和初步收敛趋势。正式案例画质、真实双卡和新用户不同机器上的完整流程等待实测反馈，详见 [短程验收](docs/ME_SHORT_RUN_ACCEPTANCE.md)。
 
@@ -50,7 +50,7 @@ ME 向导提供“默认训练”“RG + FP16”“预训练”“后期微调�
 
 ## 配套工具
 
-当前 `main` 源码包含“工具实验室 → 图像工具”的奇智 API 接入：申请入口、本机 Key 配置、文生图/图像编辑/参考图合成、后台进度与结果保存。一键启动器安装当前 `main`；现有 0.1.1-preview 源码包和便携包尚不含这项功能，使用与能力边界见 [图像服务说明](docs/IMAGE_SERVICE.md)。
+0.1.2-preview 源码包含“工具实验室 → 图像工具”的奇智 API 接入：本机 Key 配置、文生图/图像编辑/参考图合成、后台进度与结果保存，以及原图/结果同步对比、版本选择和另存。现有 0.1.1-preview 便携包尚不含这项功能，使用与能力边界见 [图像服务说明](docs/IMAGE_SERVICE.md)。
 
 保留视频提帧/封装、S3FD 切脸、2D/3D FAN、错脸筛选、排序、姿态筛选、PAK/ZIP 打包解包、FaceEnhancer、重设尺寸、DFL 元数据和 XSeg 工具，以及 Web 的人物选择、审核、修复、标注、相似度、回收恢复、诊断、日志和任务管理。详细映射见 [迁移说明](MIGRATION.md)。
 

@@ -76,6 +76,7 @@ export async function inspectStorage(root, {
 
 export function buildDiagnosticSnapshot({
   version,
+  installation = null,
   workspace,
   telemetry,
   storage,
@@ -86,6 +87,7 @@ export function buildDiagnosticSnapshot({
   const datasets = workspace?.datasets ?? {};
   return {
     schemaVersion: 1,
+    installation,
     generatedAt,
     product: {
       name: "DFL-PT-WEBUI",

@@ -32,7 +32,7 @@ test("settings exports a privacy-bounded diagnostic JSON with version and sample
   const source = await readFile(new URL("../src/components/OperationsView.jsx", import.meta.url), "utf8");
   assert.match(source, /const snapshot = await runtimeApi\.diagnostics\(\)/);
   assert.match(source, /new Blob\(\[.*JSON\.stringify\(snapshot, null, 2\)/s);
-  assert.match(source, /link\.download = `deepfacelabsn-diagnostics-/);
+  assert.match(source, /link\.download = `dfl-pt-webui-diagnostics-/);
   assert.match(source, /snapshot\.product\?\.version/);
   assert.match(source, /snapshot\.generatedAt/);
   assert.match(source, /不含绝对路径、命令参数或终端内容/);

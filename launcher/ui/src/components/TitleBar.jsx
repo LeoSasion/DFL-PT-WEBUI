@@ -27,6 +27,7 @@ export function TitleBar({ state }) {
       <div className="titlebar__brand" data-drag-region>
         <img src={BRAND_MARK} alt="" className="brand-mark brand-mark--small" />
         <strong>DFL-PT-WEBUI 启动器</strong>
+        <small>{state.release?.launcherVersion || "0.1.3-preview"}</small>
         <span className="titlebar__divider" />
         <span className={"titlebar__state " + (healthy ? "is-healthy" : "is-warning")}>
           {healthy ? <IconCircleCheck size={15} /> : <IconTool size={15} />}

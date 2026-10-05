@@ -27,6 +27,9 @@ import { runtimeApi } from "./runtime/api.js";
 import { useRuntime } from "./runtime/useRuntime.js";
 import { useTrainingHistory } from "./runtime/useTrainingHistory.js";
 import { isFailedJob } from "./domain/job-presentation.js";
+import { getNextWorkflowStep, getUsageReadiness } from "./domain/workflow-readiness.js";
+import { FirstUseGuide } from "./components/FirstUseGuide.jsx";
+import { ReleaseStrip, useReleaseInfo } from "./components/ReleaseFeedbackPanel.jsx";
 
 const pipelineCommandMap = {
   extract: ["src.extract_frames", "dst.extract_frames"],
@@ -76,40 +79,10 @@ function workspaceTaskReady(taskId, workspace) {
   return false;
 }
 
-function getNextWorkflowStep(workspace, snapshotCount = 0, canEvaluate = false) {
-  const readiness = workspace?.readiness ?? {};
-  const datasets = workspace?.datasets ?? {};
-  if (!readiness.materials) {
-    return { stage: "material", task: "extract", label: "导入 SRC / DST 素材", target: "workspace" };
-  }
-  if (!readiness.frames) {
-    const commandId = (datasets.srcFrames?.count ?? 0) > 0 ? "dst.extract_frames" : "src.extract_frames";
-    return { stage: "frames", task: "extract", label: "提取视频帧", commandId };
-  }
-  if (!readiness.faces) {
-    const commandId = (datasets.srcFaces?.count ?? 0) > 0 ? "dst.extract_faces" : "src.extract_faces";
-    return { stage: "faces", task: commandId.startsWith("dst") ? "dst" : "src", label: "提取 aligned 人脸", commandId };
-  }
-  if (!readiness.me) {
-    if (!workspaceTaskReady("sort", workspace)) return { stage:"clean",task:"sort",label:"选择人物",target:"roles" };
-    return { stage: "train", task: "me", label: "训练 ME", commandId: "train.me" };
-  }
-  if (snapshotCount < 2) {
-    return canEvaluate
-      ? { stage: "diagnose", task: "diagnose", label: "生成质量评估快照", target: "diagnostics" }
-      : { stage: "train", task: "me", label: "继续训练并生成评估快照", commandId: "train.me" };
-  }
-  if (!readiness.merged) {
-    return { stage: "merge", task: "merge", label: "合成 ME 人脸", commandId: "merge.me" };
-  }
-  if (!readiness.encoded) {
-    return { stage: "encode", task: "export", label: "导出 MP4", commandId: "encode.mp4" };
-  }
-  return { stage: "encode", task: "export", label: "查看项目成果", target: "export" };
-}
-
 export function App() {
   const runtime = useRuntime();
+  const releaseState = useReleaseInfo(runtime.serviceState);
+  const usageReadiness = useMemo(() => getUsageReadiness({ serviceState: runtime.serviceState, health: runtime.health, telemetry: runtime.telemetry, release: releaseState.release }), [runtime.serviceState, runtime.health, runtime.telemetry, releaseState.release]);
   const {
     control,
     preflight,
@@ -144,6 +117,7 @@ export function App() {
   const [diagnosticSnapshotCount, setDiagnosticSnapshotCount] = useState(0);
   const [toast, setToast] = useState({ message: "", tone: "success" });
   const [pendingAction, setPendingAction] = useState(null);
+  const [settingsFocus, setSettingsFocus] = useState(null);
   const navigationTouchedRef = useRef(false);
   const initialWorkspaceNavigationRef = useRef(null);
 
@@ -347,8 +321,9 @@ export function App() {
         && ["starting", "running", "waiting_input"].includes(evaluationJob.state)
         && evaluationJob.controls?.includes("evaluate"),
       ),
+      usageReadiness,
     ),
-    [diagnosticSnapshotCount, evaluationJob, workspaceSnapshot],
+    [diagnosticSnapshotCount, evaluationJob, usageReadiness, workspaceSnapshot],
   );
 
   useEffect(() => {
@@ -467,6 +442,8 @@ export function App() {
   }, []);
 
   const activateRecommendedAction = useCallback(() => {
+    if (nextWorkflowStep.pending) return;
+    if (nextWorkflowStep.target === "settings") { setSettingsFocus({ target: "environment", request: Date.now() }); handleNavigate("settings", t("运行时与恢复")); return; }
     if (nextWorkflowStep.commandId) {
       openCommand(nextWorkflowStep.commandId);
       return;
@@ -811,6 +788,8 @@ export function App() {
       <SettingsView
         onSwitchProject={setSwitchProject}
         health={runtime.health}
+        releaseState={releaseState}
+        focusRequest={settingsFocus}
         jobs={jobs}
         onRetry={retryJob}
         onError={showError}
@@ -876,6 +855,7 @@ export function App() {
           onNewTask={openNewTask}
           onMenu={() => handleNavigate("video",t("工作区"))}
         />
+        <ReleaseStrip release={releaseState.release} onOpen={() => { setSettingsFocus({ target: "release", request: Date.now() }); handleNavigate("settings", t("版本与反馈")); }} />
         <div className="narrow-screen-notice" role="status">
           {t("当前为紧凑布局；建议将窗口展开至 1024 px 以上。所有功能仍可通过纵向滚动使用。")}
         </div>
@@ -903,7 +883,10 @@ export function App() {
             onSelectStage={handleStageSelect}
           />
         )}
-        <Suspense
+        {["video", "overview", "workflow.frames", "workflow.faces", "workflow.roles", "training"].includes(activeNav) && (
+          <FirstUseGuide readiness={usageReadiness} workspace={workspaceSnapshot} project={runtime.health?.project} nextStep={nextWorkflowStep} onNext={activateRecommendedAction} onProjects={() => { setSettingsFocus({ target: "projects", request: Date.now() }); handleNavigate("settings", t("受管项目工作区")); }} />
+        )}
+        <div className="route-content"><Suspense
           fallback={(
             <div className="route-loading-state">
               <LoadingProgress
@@ -915,7 +898,7 @@ export function App() {
           )}
         >
           {mainContent}
-        </Suspense>
+        </Suspense></div>
         <div className="console-dock-slot">
           <div className="global-feedback-anchor">
             <div className="global-feedback-stack">

@@ -15,6 +15,7 @@ function now() {
 }
 
 const installPreview = {
+  release: { applicationVersion: "0.1.2-preview", launcherVersion: "0.1.3-preview", installationSource: "local-source / unverified", sourceCommit: "unverified" },
   mode: "install",
   environmentStatus: "installing",
   installPath: "C:\\DFL-PT-WEBUI",
@@ -51,6 +52,7 @@ const installPreview = {
 };
 
 const readyPreview = {
+  release: { applicationVersion: "0.1.2-preview", launcherVersion: "0.1.3-preview", installationSource: "local-source / unverified", sourceCommit: "unverified" },
   mode: "ready",
   environmentStatus: "ready",
   installPath: "C:\\DFL-PT-WEBUI",
@@ -109,6 +111,9 @@ function mockRequest(method, params = {}) {
       if (method === "getState") {
         resolve(clone(mockState));
         return;
+      }
+      if (method === "prepareFeedback") {
+        resolve({ preview: "产品：DFL-PT-WEBUI\n应用版本：0.1.2-preview\n启动器版本：0.1.3-preview\n安装来源：本地预览 / 未验证\n源码快照：未验证\n失败步骤：" + (params.step || "unknown") + "\n\n重现步骤：\n1. \n\n预期行为：\n\n实际行为：", issueUrl: "https://github.com/LeoSasion/DFL-PT-WEBUI/issues/new?template=bug_report.yml" }); return;
       }
       if (method === "toggleMirror") {
         const china = mockState.mirror !== "china";

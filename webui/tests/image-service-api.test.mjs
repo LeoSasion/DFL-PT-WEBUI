@@ -137,3 +137,26 @@ test("result responses send the verified bytes without reopening a replaceable f
   assert.equal(result.headers["Cache-Control"], "no-store");
   assert.match(result.headers["Content-Disposition"], /result-1.png/);
 });
+
+test("save-as requires the local session, forwards only the requested name and downloads verified copy bytes", async () => {
+  const saves = [];
+  const bytes = Buffer.from("verified-independent-copy");
+  const copy = { exportId: "exp-copy", name: "chosen.png", resultIndex: 0 };
+  const server = runtime({
+    saveResultCopy: async (...args) => { saves.push(args); return copy; },
+    exportFile: async id => { assert.equal(id, copy.exportId); return { path: "Z:\\unused.png", name: copy.name, mimeType: "image/png", bytes }; },
+  });
+  const url = "/api/image-service/tasks/image-1/results/0/save-as";
+  assert.equal((await call(server, "POST", url, { body: { name: "chosen.png" }, session: false })).status, 403);
+  assert.equal(saves.length, 0);
+  const result = await call(server, "POST", url, { body: { name: "chosen.png", ignoredPath: "private" } });
+  assert.equal(result.status, 201);
+  assert.deepEqual(result.body.data, copy);
+  assert.deepEqual(saves, [["image-1", 0, { name: "chosen.png" }]]);
+  const download = await call(server, "GET", `/api/image-service/exports/${copy.exportId}`);
+  assert.equal(download.status, 200);
+  assert.deepEqual(download.body, bytes);
+  assert.match(download.headers["Content-Disposition"], /attachment/);
+  assert.match(download.headers["Content-Disposition"], /chosen.png/);
+  assert.equal(download.headers["Cache-Control"], "no-store");
+});

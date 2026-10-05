@@ -134,6 +134,9 @@ namespace DflPtWebUi.Launcher
             result["logs"] = GetUiLogs();
             result["git"] = gitStatus;
             result["updateAvailable"] = gitStatus.UpdateAvailable;
+            result["release"] = await GetReleaseIdentityAsync(projectRoot);
+            result["upgradeTarget"] = ReleaseIdentity.UpgradeTarget();
+            result["upgradePending"] = File.Exists(Path.Combine(projectRoot, ".launcher-install", "upgrade-current", "journal.json"));
             return result;
         }
 
@@ -237,8 +240,7 @@ namespace DflPtWebUi.Launcher
                 string projectRoot = ProjectLocator.Resolve(settings.Current);
                 ProjectLocator.AssertInstallTarget(projectRoot);
                 ProjectLocator.AssertWritableChildPath(projectRoot, ".launcher-install");
-                if (await HasRunningWebUiAsync())
-                    throw new InvalidOperationException("WebUI 正在运行。请先停止 WebUI，再修复依赖。");
+                await AssertMaintenanceIdleAsync(projectRoot);
                 logs.SetDirectory(Path.Combine(ProjectLocator.PrepareInstallWorkspace(projectRoot), "logs"));
                 if (!ProjectLocator.IsProject(projectRoot))
                 {
@@ -298,15 +300,25 @@ namespace DflPtWebUi.Launcher
             await operationGate.WaitAsync();
             try
             {
-                string root = RequireGitProjectRoot();
-                if (await HasRunningWebUiAsync())
-                {
-                    throw new InvalidOperationException("WebUI 正在运行。请先停止 WebUI，再更新项目，以免运行中的文件被锁定。");
+                string root = RequireProjectRoot();
+                await AssertMaintenanceIdleAsync(root);
+                ReportProgress("updates", "正在备份并升级到此启动器固定的应用版本…", "running", 0, 2);
+                Exception updateFailure = null;
+                try {
+                    await RunUpgradeScriptAsync(root, "apply");
+                    await BuildWebUiIfPossibleAsync(root, true);
+                    object state = await GetStateAsync();
+                    if (!String.Equals(Convert.ToString(((Dictionary<string, object>)state)["environmentStatus"]), "ready", StringComparison.Ordinal))
+                        throw new InvalidOperationException("升级后的环境检查未通过。");
+                    await RunUpgradeScriptAsync(root, "complete");
+                } catch (Exception error) { updateFailure = error; }
+                if (updateFailure != null) {
+                    if (File.Exists(Path.Combine(root, ".launcher-install", "upgrade-current", "journal.json"))) {
+                        await RunUpgradeScriptAsync(root, "rollback");
+                        logs.Add("updates", "升级失败，已经恢复升级前的源码和构建。", "warning");
+                    }
+                    throw updateFailure;
                 }
-                ReportProgress("updates", "正在安全拉取源码更新…", "running", 0, 2);
-                GitStatus result = await git.ApplyUpdateAsync(root);
-                ReportProgress("updates", "源码已更新，本地配置与工作区数据已保留。", "complete", 1, 2);
-                await BuildWebUiIfPossibleAsync(root, true);
                 ReportProgress("updates", "更新完成。", "complete", 2, 2);
                 return await GetStateAsync();
             }
@@ -377,6 +389,85 @@ namespace DflPtWebUi.Launcher
                 ? TryReadManagedWebUiPid(projectRoot)
                 : null;
             return managedPid.HasValue || await IsOwnedRuntimeOnlineAsync(projectRoot);
+        }
+
+        private async Task AssertMaintenanceIdleAsync(string root)
+        {
+            if (terminal.IsRunning || await HasRunningWebUiAsync())
+                throw new InvalidOperationException("项目或 WebUI 正在运行。请先结束任务、终端和 WebUI，再修复或升级。");
+            await RunUpgradeScriptAsync(root, "guard");
+            // Inspect executable identity without exposing command lines, media
+            // paths or secrets. This also covers detached training processes.
+            foreach (Process process in Process.GetProcesses()) {
+                try {
+                    string name = process.ProcessName;
+                    if (name != "python" && name != "pythonw" && name != "node" && name != "ffmpeg") continue;
+                    string executable = process.MainModule.FileName;
+                    if (executable.StartsWith(Path.GetFullPath(root).TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("检测到项目运行中的任务。请先保存并停止任务，再修复或升级。");
+                } catch (System.ComponentModel.Win32Exception) { }
+                  catch (InvalidOperationException error) { if (error.Message.StartsWith("检测到")) throw; }
+                finally { process.Dispose(); }
+            }
+        }
+
+        private async Task<object> GetReleaseIdentityAsync(string root)
+        {
+            string node = Path.Combine(root, "_internal", "node", "bin", "node.exe");
+            string module = Path.Combine(LauncherPayload.GetPath("bootstrap"), "installation.mjs");
+            if (File.Exists(node) && File.Exists(module)) {
+                try {
+                    CommandResult result = await runner.RunAsync(node, ProcessRunner.Quote(module) + " --root " + ProcessRunner.Quote(root), root, null, "release");
+                    if (result.Success) {
+                        Dictionary<string, object> identity = new JavaScriptSerializer().DeserializeObject(result.StandardOutput) as Dictionary<string, object>;
+                        Dictionary<string, object> source = identity["source"] as Dictionary<string, object>;
+                        identity["applicationVersion"] = identity["appVersion"];
+                        identity["launcherVersion"] = "0.1.3-preview";
+                        identity["sourceCommit"] = source["revision"] ?? "unverified";
+                        identity["archiveSha256"] = source["archiveSha256"];
+                        identity["sourceStatus"] = source["status"];
+                        return identity;
+                    }
+                } catch { }
+            }
+            return ReleaseIdentity.Get(root);
+        }
+
+        private async Task RunUpgradeScriptAsync(string root, string action)
+        {
+            string bootstrap = LauncherPayload.GetPath("bootstrap");
+            string script = Path.Combine(bootstrap, "upgrade-project.ps1");
+            string arguments = "-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File " + ProcessRunner.Quote(script)
+                + " -ProjectRoot " + ProcessRunner.Quote(root) + " -Action " + action
+                + " -SourcePinPath " + ProcessRunner.Quote(Path.Combine(bootstrap, "source-pin.json"));
+            CommandResult result = await runner.RunAsync("powershell.exe", arguments, bootstrap, null, "updates");
+            EnsureSuccess(result, action == "rollback" ? "自动回退失败，请保留安装缓存并使用回退入口" : "固定版本升级未完成");
+        }
+
+        public async Task<object> RollbackUpdateAsync()
+        {
+            await operationGate.WaitAsync();
+            try { string root = RequireProjectRoot(); await AssertMaintenanceIdleAsync(root); await RunUpgradeScriptAsync(root, "rollback"); return await GetStateAsync(); }
+            finally { operationGate.Release(); }
+        }
+
+        public async Task<object> PrepareFeedbackAsync(string step)
+        {
+            string[] allowed = { "install", "start", "upgrade", "repair", "project", "import", "extract", "train", "image", "export", "unknown" };
+            if (Array.IndexOf(allowed, step) < 0) step = "unknown";
+            string root = ProjectLocator.Resolve(settings.Current);
+            string node = Path.Combine(root, "_internal", "node", "bin", "node.exe");
+            string feedback = Path.Combine(LauncherPayload.GetPath("bootstrap"), "feedback.mjs");
+            if (File.Exists(node) && File.Exists(feedback)) {
+                CommandResult result = await runner.RunAsync(node, ProcessRunner.Quote(feedback) + " --root " + ProcessRunner.Quote(root) + " --step " + step, root, null, "feedback");
+                EnsureSuccess(result, "反馈信息准备失败");
+                return new JavaScriptSerializer().DeserializeObject(result.StandardOutput);
+            }
+            Dictionary<string, object> template = new JavaScriptSerializer().DeserializeObject(File.ReadAllText(Path.Combine(LauncherPayload.GetPath("bootstrap"), "feedback-template.json"))) as Dictionary<string, object>;
+            return new Dictionary<string, object> {
+                { "preview", Convert.ToString(template["offlinePreview"]) + "\n\n失败步骤：" + step + "\n启动器版本：0.1.3-preview\n应用版本/安装来源/源码快照：尚未验证\n" },
+                { "issueUrl", template["issueUrl"] }, { "release", ReleaseIdentity.Get(root) }
+            };
         }
 
         public async Task<object> StartTerminalAsync()

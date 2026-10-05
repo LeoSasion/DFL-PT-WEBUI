@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "product": "DFL-PT-WEBUI",
+  "offlinePreview": "产品：DFL-PT-WEBUI\n失败步骤：安装或启动（请补充）\n应用版本：未知（尚未读取项目）\n启动器版本：见启动器版本栏\n安装来源：见启动器来源栏\n源码快照：未知\n\n运行环境：尚未就绪，无法读取诊断摘要\n\n重现步骤：\n1. \n\n预期行为：\n\n实际行为：\n\n请预览并复制到 Issue；不会自动上传日志、素材、模型或凭据。",
+  "issueUrl": "https://github.com/LeoSasion/DFL-PT-WEBUI/issues/new?template=bug_report.yml",
+  "steps": {"install":"安装","start":"启动 WebUI","upgrade":"升级","repair":"修复环境","project":"创建或切换项目","import":"导入 SRC/DST","extract":"提帧或提脸","train":"ME 任务","image":"图像编辑","export":"合并或导出","unknown":"尚未确定"},
+  "instructions": "预览并复制以下信息到 Issue 的版本、环境、日志字段。请补充最小重现步骤及预期/实际行为。不会上传日志、素材、模型或凭据。"
+}

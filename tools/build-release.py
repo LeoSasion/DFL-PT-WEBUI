@@ -357,6 +357,13 @@ def build(plan: Plan, output: Path, version: dict, config_sha: str, max_part_byt
     if any(output.glob(name + ".*")):
         raise ReleaseError(f"Release files already exist for {name}; use a fresh output directory")
     records = []
+    installation = encoded({"schemaVersion": 1, "product": version["product"],
+                            "applicationVersion": version["version"], "launcherVersion": version.get("launcherVersion", "unknown"),
+                            "installationSource": plan.kind, "sourceCommit": source_commit, "sourceTree": source_tree,
+                            "installedAt": datetime.now(timezone.utc).isoformat()})
+    if "release/installation.json" in plan.entries:
+        raise ReleaseError("Installation provenance is generated from the reviewed archive snapshot, never copied from this workstation")
+    plan.add(Entry("release/installation.json", len(installation), "release-provenance", data=installation))
     try:
         with zipfile.ZipFile(archive, "x", compression=compression, compresslevel=1, allowZip64=True) as z:
             for entry in sorted(plan.entries.values(), key=lambda x: x.path):
@@ -378,7 +385,7 @@ def build(plan: Plan, output: Path, version: dict, config_sha: str, max_part_byt
                 if entry.expected_sha256 and sha != entry.expected_sha256:
                     raise ReleaseError(f"Pinned SHA-256 mismatch: {entry.path}")
                 records.append({"path": entry.path, "size": count, "sha256": sha, "category": entry.category})
-            manifest = {"schemaVersion": 1, "product": version["product"], "version": version["version"], "kind": plan.kind,
+            manifest = {"schemaVersion": 1, "product": version["product"], "version": version["version"], "launcherVersion": version.get("launcherVersion", "unknown"), "kind": plan.kind,
                         "sourceCommit": source_commit, "sourceTree": source_tree, "archiveRoot": root, "createdUtc": datetime.now(timezone.utc).isoformat(),
                         "configSha256": config_sha, "weights": plan.weights if plan.kind == "portable" else None,
                         "fileCount": len(records), "totalBytes": sum(r["size"] for r in records),

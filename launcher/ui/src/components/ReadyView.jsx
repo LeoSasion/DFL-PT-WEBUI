@@ -180,7 +180,9 @@ function ReadySidebar({ state, busyAction, onAction }) {
         <div className="action-stack action-stack--compact">
           <ActionRow icon={IconSettings} title="首次配置 / 重新检测" busy={busyAction === "runFirstSetup"} onClick={() => onAction("runFirstSetup")} />
           <ActionRow icon={IconCloudDownload} title="下载新版启动器" subtitle="通过发行页升级；不会自动更新" onClick={() => onAction("openExternal", { url: "https://github.com/LeoSasion/DFL-PT-WEBUI/releases" })} />
-          <ActionRow icon={IconShieldCheck} title="修复依赖" busy={busyAction === "repairDependencies"} onClick={() => onAction("repairDependencies")} />
+          <ActionRow icon={IconCloudDownload} title="升级应用 / 备份与回退" subtitle="升级到此启动器固定的源码快照" disabled={state.webuiRunning || state.terminalRunning} busy={busyAction === "applyUpdate"} onClick={() => onAction("reviewUpgrade")} />
+          {state.upgradePending && <ActionRow icon={IconShieldCheck} title="恢复未完成的升级" subtitle="用本地备份恢复原源码和构建" busy={busyAction === "rollbackUpdate"} onClick={() => onAction("rollbackUpdate")} />}
+          <ActionRow icon={IconShieldCheck} title="修复依赖" disabled={state.webuiRunning || state.terminalRunning} busy={busyAction === "repairDependencies"} onClick={() => onAction("repairDependencies")} />
           <ActionRow icon={IconGlobe} title="PyTorch 官方运行包" subtitle="CUDA 12.8 随 PyTorch wheel 安装" disabled />
         </div>
       </section>
@@ -188,7 +190,11 @@ function ReadySidebar({ state, busyAction, onAction }) {
       <section className="project-facts">
         <dl>
           <div><dt>项目目录</dt><dd title={state.projectDir}>{state.projectDir}</dd></div>
-          <div><dt>安装来源</dt><dd>官方固定来源</dd></div>
+          <div><dt>应用版本</dt><dd>{state.release?.applicationVersion || "未验证"}</dd></div>
+          <div><dt>安装来源</dt><dd>{state.release?.installationSource || "未验证"}</dd></div>
+          <div><dt>源码快照</dt><dd title={state.release?.sourceCommit}>{state.release?.sourceCommit || "未验证"}</dd></div>
+          <div><dt>内容校验</dt><dd>{state.release?.sourceStatus === "content-verified" ? "源码内容已验证" : state.release?.sourceStatus === "modified-or-incomplete" ? "源码有改动或不完整" : "尚未验证"}</dd></div>
+          <div><dt>源码包 SHA-256</dt><dd title={state.release?.archiveSha256}>{state.release?.archiveSha256 || "未记录"}</dd></div>
           <div><dt>最后检查</dt><dd>{state.lastCheck || "尚未检查"}</dd></div>
         </dl>
       </section>

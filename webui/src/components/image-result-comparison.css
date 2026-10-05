@@ -1,0 +1,25 @@
+.image-comparison-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border-bottom: 1px solid #173027; }
+.image-comparison-toolbar label { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.image-comparison-toolbar input { width: 100px; accent-color: var(--green); }
+.image-comparison-toolbar output { min-width: 38px; font-variant-numeric: tabular-nums; }
+.image-comparison-toolbar small { color: var(--muted); font-size: 11px; }
+.image-comparison-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-bottom: 1px solid #173027; }
+.image-comparison-panel { margin: 0; min-width: 0; background: #030806; }
+.image-comparison-panel + .image-comparison-panel { border-left: 1px solid #173027; }
+.image-comparison-panel figcaption { display: flex; gap: 8px; padding: 8px 12px; font-size: 11px; border-bottom: 1px solid #173027; }
+.image-comparison-panel figcaption strong { flex: none; }
+.image-comparison-panel figcaption span { color: var(--muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.image-comparison-viewport { height: clamp(240px, 35vh, 440px); display: grid; place-items: center; overflow: hidden; touch-action: none; }
+.image-comparison-viewport:focus-visible { outline: 2px solid var(--green, #74dfad); outline-offset: -2px; }
+.image-comparison-viewport > img { display: block; width: 100%; height: 100%; object-fit: contain; cursor: grab; user-select: none; }
+.image-comparison-viewport > img:active { cursor: grabbing; }
+.image-comparison-viewport .image-tools-empty { padding: 18px; text-align: center; }
+.image-result-controls { padding: 10px 12px; border-bottom: 1px solid #173027; display: grid; gap: 10px; }
+.image-result-controls label { display: grid; gap: 5px; font-size: 12px; }
+.image-result-controls select, .image-result-controls input { min-width: 0; max-width: 100%; background: #07120e; color: var(--text); border: 1px solid #19382b; border-radius: 4px; padding: 7px; }
+.image-result-save-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.image-result-save-form label { flex: 1 1 190px; }
+.image-result-save-form .button { white-space: nowrap; }
+.image-result-saved { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px; }
+.image-result-saved a { color: var(--green, #74dfad); overflow-wrap: anywhere; }
+@media (max-width: 560px) { .image-comparison-toolbar small { flex-basis: 100%; } .image-comparison-viewport { height: 220px; } .image-comparison-panel figcaption { flex-direction: column; gap: 3px; } }

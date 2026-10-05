@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { link, mkdtemp, mkdir, readFile, rename, rm, symlink, unlink, writeFile } from "node:fs/promises";
+import { link, mkdtemp, mkdir, readFile, readdir, rename, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -54,6 +54,76 @@ async function until(callback) {
   }
   throw new Error("mock did not reach expected state");
 }
+
+test("save-as copies retain provenance and pixels, allow repeated names without overwrite, and survive restart", async (t) => {
+  const { manager, paths, calls } = await fixture(t);
+  const input = await manager.stageInput({ name: "original.png", bytes: PNG });
+  const task = await finish(manager, await manager.createTask(request([input.inputId])));
+  const original = await manager.resultFile(task.id, 0);
+  const networkCount = calls.length;
+  const first = await manager.saveResultCopy(task.id, 0, { name: "选定版本.jpg" });
+  const second = await manager.saveResultCopy(task.id, 0, { name: "选定版本.jpg" });
+  assert.equal(first.name, "选定版本.png", "filename reflects the actual encoded format");
+  assert.notEqual(first.exportId, second.exportId);
+  assert.deepEqual((await manager.exportFile(first.exportId)).bytes, PNG);
+  assert.deepEqual((await manager.resultFile(task.id, 0)).bytes, original.bytes);
+  assert.deepEqual(await readFile((await manager.inputFile(input.inputId)).path), PNG);
+  assert.equal(manager.getTask(task.id).savedCopies[0].name, first.name);
+  assert.deepEqual(manager.getTask(task.id).usage, task.usage);
+  assert.equal(calls.length, networkCount, "save-as performs no provider requests");
+  await unlink(original.path);
+  assert.deepEqual((await manager.exportFile(first.exportId)).bytes, PNG, "copy is independent of the generated original");
+  const restored = new ImageServiceManager({ paths, fetch: async () => { throw new Error("network prohibited"); }, credentials: codec });
+  await restored.initialize();
+  t.after(() => restored.close());
+  assert.equal(restored.getTask(task.id).savedCopies.length, 2);
+  assert.deepEqual((await restored.exportFile(second.exportId)).bytes, PNG);
+});
+
+test("save-as rejects unsafe names and unverified results; exported tampering is detected", async (t) => {
+  const { manager } = await fixture(t);
+  const task = await finish(manager, await manager.createTask(request()));
+  for (const name of ["", "../escape.png", "subdir/file", "CON.png", "name\n.png", ".hidden", "trailing."]) {
+    await assert.rejects(manager.saveResultCopy(task.id, 0, { name }), { code: "IMAGE_EXPORT_NAME_INVALID" });
+  }
+  assert.equal(manager.getTask(task.id).savedCopies.length, 0);
+  const copy = await manager.saveResultCopy(task.id, 0, { name: "safe" });
+  const file = await manager.exportFile(copy.exportId);
+  const changed = Buffer.from(file.bytes);
+  changed[changed.length - 1] ^= 1;
+  await writeFile(file.path, changed);
+  await assert.rejects(manager.exportFile(copy.exportId), { code: "IMAGE_RESULT_CHANGED" });
+  const resultFile = await manager.resultFile(task.id, 0);
+  await writeFile(resultFile.path, changed);
+  await assert.rejects(manager.saveResultCopy(task.id, 0, { name: "another" }), { code: "IMAGE_RESULT_CHANGED" });
+  await assert.rejects(manager.exportFile("../../other"), { code: "IMAGE_RESULT_NOT_FOUND" });
+});
+
+test("save-as refuses an exports directory replaced by a link and writes nothing outside the project", async (t) => {
+  const { manager, root } = await fixture(t);
+  const task = await finish(manager, await manager.createTask(request()));
+  const outside = path.join(root, "outside-exports");
+  const preserved = `${manager.exportsRoot}-preserved`;
+  await mkdir(outside);
+  await rename(manager.exportsRoot, preserved);
+  await symlink(outside, manager.exportsRoot, process.platform === "win32" ? "junction" : "dir");
+  await assert.rejects(manager.saveResultCopy(task.id, 0, { name: "safe" }), { code: "IMAGE_PATH_INVALID" });
+  assert.deepEqual(await readdir(outside), []);
+  assert.equal(manager.getTask(task.id).savedCopies.length, 0);
+});
+
+test("save-as records the verified pixels even if recovery replaces result metadata after the read", async (t) => {
+  const { manager } = await fixture(t);
+  const task = await finish(manager, await manager.createTask(request()));
+  const readResult = manager.resultFile.bind(manager);
+  manager.resultFile = async (...args) => {
+    const verified = await readResult(...args);
+    manager.tasks.get(task.id).results[0] = { ...manager.tasks.get(task.id).results[0], size: 1, sha256: "0".repeat(64) };
+    return verified;
+  };
+  const copy = await manager.saveResultCopy(task.id, 0, { name: "verified-copy" });
+  assert.deepEqual((await manager.exportFile(copy.exportId)).bytes, PNG);
+});
 
 test("exact provider and ordered material consent is checked before any external call", async (t) => {
   const { manager, calls } = await fixture(t);

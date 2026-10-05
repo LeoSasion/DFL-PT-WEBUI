@@ -29,6 +29,8 @@ import { runtimeApi } from "../runtime/api.js";
 import { useI18n } from "../i18n.jsx";
 import { LoadingProgress } from "./ProgressFeedback.jsx";
 import { ProjectManagerPanel } from "./ProjectManagerPanel.jsx";
+import { ReleaseFeedbackPanel } from "./ReleaseFeedbackPanel.jsx";
+import { getNextWorkflowStep } from "../domain/workflow-readiness.js";
 import { jobPresentation, isFailedJob } from "../domain/job-presentation.js";
 
 const categoryLabels = {
@@ -1463,7 +1465,7 @@ export function ModelSummaryAside({ workspace }) {
       )) : (
         <div className="model-empty-guide">
           <strong>{t("还没有可用模型")}</strong>
-          <span>{t("首次使用可从“训练 ME”开始。")}</span>
+          <span>{t("下一步：{step}", { step: t(getNextWorkflowStep(workspace).label) })}</span>
           <small>{t("训练生成的模型文件会自动出现在这里。")}</small>
         </div>
       )}
@@ -1471,11 +1473,20 @@ export function ModelSummaryAside({ workspace }) {
   );
 }
 
-export function SettingsView({ health, jobs, onRetry, onError, onNotice, onSwitchProject }) {
+export function SettingsView({ health, releaseState, focusRequest, jobs, onRetry, onError, onNotice, onSwitchProject }) {
   const { language, t } = useI18n();
   const [retryBusy, setRetryBusy] = useState(null);
   const [diagnosticBusy, setDiagnosticBusy] = useState(false);
   const [diagnosticMeta, setDiagnosticMeta] = useState(null);
+  const releasePanelRef = useRef(null);
+  const projectPanelRef = useRef(null);
+  const environmentPanelRef = useRef(null);
+  useEffect(() => {
+    const target = { release: releasePanelRef, projects: projectPanelRef, environment: environmentPanelRef }[focusRequest?.target]?.current;
+    if (!target) return;
+    target.focus({ preventScroll: true });
+    target.scrollIntoView({ block: "start" });
+  }, [focusRequest]);
   const recoverable = jobs.filter((job) => terminalStates.has(job.state));
   const activeJobCount = jobs.filter((job) => ["queued", "starting", "running", "waiting_input", "stopping"].includes(job.state)).length;
   const exportDiagnostics = async () => {
@@ -1487,7 +1498,7 @@ export function SettingsView({ health, jobs, onRetry, onError, onNotice, onSwitc
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `deepfacelabsn-diagnostics-${generatedAt.replace(/[:.]/g, "-")}.json`;
+      link.download = `dfl-pt-webui-diagnostics-${generatedAt.replace(/[:.]/g, "-")}.json`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -1513,8 +1524,9 @@ export function SettingsView({ health, jobs, onRetry, onError, onNotice, onSwitc
         <span className="operation-count">{health?.loopbackOnly ? t("仅本机访问") : t("状态未知")}</span>
       </header>
       {retryBusy ? <LoadingProgress compact label={t("正在从历史记录创建安全副本…")} detail={retryBusy} operationKey="settings-job-retry"/> : null}
+      <div ref={releasePanelRef} tabIndex={-1}><ReleaseFeedbackPanel releaseState={releaseState} onNotice={onNotice} onError={onError} /></div>
       <p role="note">{t("缺少 Python 或运行库：停止 WebUI 后，在项目启动器中选择“修复依赖”。缺少 DeepFaceLab 入口：检查项目更新；缺少内置模型：补齐整合包资源。")}</p>
-      <div className="settings-runtime">
+      <div className="settings-runtime" ref={environmentPanelRef} tabIndex={-1}>
         {["pytorch", "current"].map((profile) => (
           <section key={profile}>
             <span>{profileLabel(profile)}</span>
@@ -1555,7 +1567,7 @@ export function SettingsView({ health, jobs, onRetry, onError, onNotice, onSwitc
           <IconDownload size={15} />{diagnosticBusy ? t("正在生成…") : t("导出诊断摘要")}
         </button>
       </section>
-      <ProjectManagerPanel health={health} activeJobCount={activeJobCount} onSwitchProject={onSwitchProject} onNotice={onNotice}/>
+      <div ref={projectPanelRef} tabIndex={-1}><ProjectManagerPanel health={health} activeJobCount={activeJobCount} onSwitchProject={onSwitchProject} onNotice={onNotice}/></div>
       <section className="recovery-section">
         <header>
           <div>

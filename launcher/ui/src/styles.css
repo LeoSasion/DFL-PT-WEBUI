@@ -59,7 +59,7 @@ p { margin: 0; }
   border: 1px solid #10261c;
   overflow: hidden;
   display: grid;
-  grid-template-rows: 46px minmax(0, 1fr);
+  grid-template-rows: 46px minmax(0, 1fr) auto;
 }
 
 .titlebar {
@@ -714,3 +714,14 @@ p { margin: 0; }
     transition-duration: 0.01ms !important;
   }
 }
+ .feedback-entry { display: flex; align-items: center; gap: 12px; padding: 8px 24px; color: var(--text-3); }
+ .feedback-entry button, .launcher-modal button { background: #123c2c; color: #c9d7cf; border: 1px solid #27634b; padding: 8px 12px; cursor: pointer; border-radius: 5px; }
+ .feedback-entry button:disabled, .launcher-modal button:disabled { opacity: .45; cursor: default; }
+ .launcher-modal-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: #000b; padding: 28px; }
+ .launcher-modal { width: min(660px, 100%); max-height: 90vh; overflow: auto; background: #06110c; color: #c9d7cf; border: 1px solid #27634b; border-radius: 9px; padding: 24px; }
+ .launcher-modal p { line-height: 1.65; }
+ .launcher-source-hash { overflow-wrap: anywhere; font-family: var(--mono); font-size: 12px; }
+ .feedback-entry details { position: relative; margin-left: auto; font-size: 11px; }
+ .feedback-entry details[open] { position: absolute; bottom: 8px; right: 16px; z-index: 4; background: #06110c; border: 1px solid #27634b; padding: 12px; max-width: 560px; overflow-wrap: anywhere; }
+ .launcher-modal button { margin: 12px 10px 0 0; }
+ .launcher-modal textarea { width: 100%; resize: vertical; color: #c9d7cf; background: #020705; border: 1px solid #27634b; padding: 12px; box-sizing: border-box; }

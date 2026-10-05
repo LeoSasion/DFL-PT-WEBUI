@@ -6,6 +6,9 @@ import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { WebSocket, WebSocketServer } from "ws";
 import { releaseVersion } from "../../release/version.mjs";
+import { inspectInstallation } from "../../release/installation.mjs";
+import { prepareFeedback } from "../../release/feedback.mjs";
+import { inspectToolResources } from "./system-readiness.mjs";
 import { assignRole, listRoleAssignments, restoreRoleAssignment } from "./role-assignment-manager.mjs";
 import {
   auditAlignedAssets,
@@ -689,6 +692,7 @@ export class RuntimeServer {
       ]);
     return buildDiagnosticSnapshot({
       version: RUNTIME_VERSION,
+      installation: await inspectInstallation(PATHS.repositoryRoot),
       workspace: { ...workspace, projectId: PATHS.activeProject.id },
       telemetry,
       storage,
@@ -828,6 +832,17 @@ export class RuntimeServer {
       this.assertNoWorkspaceMutation();
       return sendJson(response, 200, { ok: true, data: await this.imageServiceManager.checkTask(imageTaskCheck[1]) });
     }
+    const imageResultSave = url.pathname.match(/^\/api\/image-service\/tasks\/([a-z0-9_-]{1,128})\/results\/(\d{1,2})\/save-as$/i);
+    if (request.method === "POST" && imageResultSave) {
+      const body = await readJsonBody(request);
+      return sendJson(response, 201, { ok: true, data: await this.withWorkspaceMutation("图像结果另存", () => (
+        this.imageServiceManager.saveResultCopy(imageResultSave[1], Number(imageResultSave[2]), { name: body.name })
+      ), { allowActiveJobs: true }) });
+    }
+    const imageExport = url.pathname.match(/^\/api\/image-service\/exports\/([a-z0-9_-]{1,128})$/i);
+    if (request.method === "GET" && imageExport) {
+      return sendImageServiceFile(response, await this.imageServiceManager.exportFile(imageExport[1]), { download: true });
+    }
     const imageTaskResult = url.pathname.match(/^\/api\/image-service\/tasks\/([a-z0-9_-]{1,128})\/results\/(\d{1,2})$/i);
     if (request.method === "GET" && imageTaskResult) {
       return sendImageServiceFile(response, await this.imageServiceManager.resultFile(imageTaskResult[1], Number(imageTaskResult[2])), {
@@ -876,6 +891,18 @@ export class RuntimeServer {
     }
     if (request.method === "GET" && url.pathname === "/api/system/diagnostics") {
       return sendJson(response, 200, { ok: true, data: await this.buildSystemDiagnostic() });
+    }
+    if (request.method === "GET" && url.pathname === "/api/system/release") {
+      const [release, readiness] = await Promise.all([inspectInstallation(PATHS.repositoryRoot), inspectToolResources(PATHS.repositoryRoot)]);
+      return sendJson(response, 200, { ok: true, data: { ...release, readiness } });
+    }
+    if (request.method === "POST" && url.pathname === "/api/system/feedback") {
+      const body = await readJsonBody(request);
+      const [release, diagnostics] = await Promise.all([
+        inspectInstallation(PATHS.repositoryRoot),
+        this.buildSystemDiagnostic().catch(() => ({})),
+      ]);
+      return sendJson(response, 200, { ok: true, data: prepareFeedback({ release, diagnostics, failureStep: body.failureStep }) });
     }
     if (request.method === "GET" && url.pathname === "/api/operations") {
       return sendJson(response, 200, { ok: true, data: this.operationManager.list() });

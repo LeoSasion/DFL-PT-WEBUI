@@ -3,7 +3,7 @@
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-function New-ProjectSourceFixture([string]$Archive, [string]$Missing='', [object[]]$Extra=@(), [string]$Product='DFL-PT-WEBUI') {
+function New-ProjectSourceFixture([string]$Archive, [string]$Missing='', [object[]]$Extra=@(), [string]$Product='DFL-PT-WEBUI', [string]$ArchiveRoot='DFL-PT-WEBUI-main') {
     $files = [ordered]@{
         'release/version.json' = ('{"schemaVersion":1,"version":"fixture","product":"' + $Product + '"}')
         'requirements.txt' = 'numpy==2.2.6'
@@ -28,7 +28,7 @@ function New-ProjectSourceFixture([string]$Archive, [string]$Missing='', [object
     try {
         foreach ($name in $files.Keys) {
             if ($name -eq $Missing) { continue }
-            $entry = $zip.CreateEntry('DFL-PT-WEBUI-main/' + $name)
+            $entry = $zip.CreateEntry($ArchiveRoot + '/' + $name)
             $stream = $entry.Open()
             try {
                 $bytes = [Text.Encoding]::UTF8.GetBytes($files[$name])
@@ -53,6 +53,85 @@ function New-OwnedProjectInstallTarget([string]$Path) {
     New-Item -ItemType Directory -Path $state -Force | Out-Null
     [IO.File]::WriteAllText((Join-Path $state 'owner.txt'), 'DFL-PT-WEBUI install workspace v1')
     return $state
+}
+
+Describe 'fixed source upgrade transactions' {
+    BeforeEach {
+        . (Join-Path $PSScriptRoot '../upgrade-project.ps1')
+        Mock Assert-UpgradeIdle { }
+    }
+    It 'backs up source and dependencies, preserves user data and restores after a failed build' {
+        $target = Join-Path $TestDrive 'upgrade-target'
+        $oldArchive = New-ProjectSourceFixture (Join-Path $TestDrive 'upgrade-old.zip')
+        Invoke-ProjectSourceInstall -ProjectRoot $target -SourceArchivePath $oldArchive -NoNetwork | Should Be 0
+        [IO.File]::WriteAllText((Join-Path $target 'README.md'),'old source')
+        foreach ($relative in @('workspace/model/checkpoint.dat','workspaces/project/media.png','_internal/config.txt','webui/.env.local','webui/node_modules/original.txt','webui/dist/client/index.html')) {
+            $file = Join-Path $target $relative
+            New-Item -ItemType Directory -Path (Split-Path -Parent $file) -Force | Out-Null
+            [IO.File]::WriteAllText($file,'original ' + $relative)
+        }
+        $sourceRoot = 'DFL-PT-WEBUI-' + ('a' * 40)
+        $archive = New-ProjectSourceFixture (Join-Path $TestDrive 'upgrade-new.zip') -ArchiveRoot $sourceRoot
+        $pin = Join-Path $TestDrive 'upgrade-pin.json'
+        @{schemaVersion=1;product='DFL-PT-WEBUI';applicationVersion='fixture';sourceCommit=('a'*40);archiveRoot=$sourceRoot;archiveSha256=(Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()} | ConvertTo-Json | Set-Content -LiteralPath $pin -Encoding UTF8
+        Invoke-ProjectUpgrade $target 'apply' $pin $archive
+        [IO.File]::ReadAllText((Join-Path $target 'README.md')) | Should Match 'Fixture source'
+        Test-Path (Join-Path $target '.launcher-install/upgrade-current/original-node_modules/original.txt') | Should Be $true
+        Test-Path (Join-Path $target 'webui/node_modules') | Should Be $false
+        $built = Join-Path $target 'webui/dist/client/failed-new.js'
+        [IO.File]::WriteAllText($built,'new build artifact')
+        Invoke-ProjectUpgrade $target 'rollback' $pin ''
+        [IO.File]::ReadAllText((Join-Path $target 'README.md')) | Should Be 'old source'
+        Test-Path $built | Should Be $false
+        foreach ($relative in @('workspace/model/checkpoint.dat','workspaces/project/media.png','_internal/config.txt','webui/.env.local','webui/node_modules/original.txt','webui/dist/client/index.html')) {
+            [IO.File]::ReadAllText((Join-Path $target $relative)) | Should Be ('original ' + $relative)
+        }
+        Test-Path (Join-Path $target 'release/installation.json') | Should Be $false
+    }
+    It 'rejects a wrong archive digest before source mutation and leaves retries possible' {
+        $target = Join-Path $TestDrive 'upgrade-hash-target'
+        $archive = New-ProjectSourceFixture (Join-Path $TestDrive 'upgrade-hash.zip')
+        Invoke-ProjectSourceInstall -ProjectRoot $target -SourceArchivePath $archive -NoNetwork | Should Be 0
+        $pin = Join-Path $TestDrive 'wrong-pin.json'
+        @{schemaVersion=1;product='DFL-PT-WEBUI';applicationVersion='fixture';sourceCommit=('a'*40);archiveRoot=('DFL-PT-WEBUI-'+('a'*40));archiveSha256=('0'*64)} | ConvertTo-Json | Set-Content -LiteralPath $pin -Encoding UTF8
+        { Invoke-ProjectUpgrade $target 'apply' $pin $archive } | Should Throw
+        Test-Path (Join-Path $target '.launcher-install/upgrade-current') | Should Be $false
+        @(Get-ChildItem (Join-Path $target '.launcher-install') -Filter 'upgrade-rejected-*').Count | Should Be 1
+        [IO.File]::ReadAllText((Join-Path $target 'README.md')) | Should Match 'Fixture source'
+    }
+    It 'refuses damaged rollback backups before moving current build or dependencies' {
+        $target = Join-Path $TestDrive 'upgrade-corrupt-target'
+        $oldArchive = New-ProjectSourceFixture (Join-Path $TestDrive 'upgrade-corrupt-old.zip')
+        Invoke-ProjectSourceInstall -ProjectRoot $target -SourceArchivePath $oldArchive -NoNetwork | Should Be 0
+        foreach ($relative in @('webui/node_modules/original.txt','webui/dist/client/index.html')) {
+            $file = Join-Path $target $relative
+            New-Item -ItemType Directory -Path (Split-Path -Parent $file) -Force | Out-Null
+            [IO.File]::WriteAllText($file,'original')
+        }
+        $sourceRoot = 'DFL-PT-WEBUI-' + ('a' * 40)
+        $archive = New-ProjectSourceFixture (Join-Path $TestDrive 'upgrade-corrupt-new.zip') -ArchiveRoot $sourceRoot
+        $pin = Join-Path $TestDrive 'upgrade-corrupt-pin.json'
+        @{schemaVersion=1;product='DFL-PT-WEBUI';applicationVersion='fixture';sourceCommit=('a'*40);archiveRoot=$sourceRoot;archiveSha256=(Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()} | ConvertTo-Json | Set-Content -LiteralPath $pin -Encoding UTF8
+        Invoke-ProjectUpgrade $target 'apply' $pin $archive
+        $currentDependencies = Join-Path $target 'webui/node_modules/current.txt'
+        New-Item -ItemType Directory -Path (Split-Path -Parent $currentDependencies) -Force | Out-Null
+        [IO.File]::WriteAllText($currentDependencies,'current dependencies')
+        $currentBuild = Join-Path $target 'webui/dist/client/index.html'
+        [IO.File]::WriteAllText($currentBuild,'current build')
+        [IO.File]::WriteAllText((Join-Path $target '.launcher-install/upgrade-current/backup/README.md'),'corrupted')
+        { Invoke-ProjectUpgrade $target 'rollback' $pin '' } | Should Throw
+        [IO.File]::ReadAllText($currentDependencies) | Should Be 'current dependencies'
+        [IO.File]::ReadAllText($currentBuild) | Should Be 'current build'
+        Test-Path (Join-Path $target '.launcher-install/upgrade-current/failed-dist') | Should Be $false
+    }
+    It 'blocks a project process before obtaining or changing source' {
+        $target = Join-Path $TestDrive 'upgrade-busy-target'
+        $archive = New-ProjectSourceFixture (Join-Path $TestDrive 'upgrade-busy.zip')
+        Invoke-ProjectSourceInstall -ProjectRoot $target -SourceArchivePath $archive -NoNetwork | Should Be 0
+        Mock Assert-UpgradeIdle { throw 'running task' }
+        { Invoke-ProjectUpgrade $target 'apply' 'missing-pin' 'missing.zip' } | Should Throw 'running task'
+        Test-Path (Join-Path $target '.launcher-install/upgrade-current') | Should Be $false
+    }
 }
 
 Describe 'bounded PT first-install source acquisition' {
@@ -164,7 +243,10 @@ Describe 'bounded PT first-install source acquisition' {
     }
 
     It 'returns explicit process exit codes and parseable host JSON events' {
-        $archive = New-ProjectSourceFixture (Join-Path $TestDrive 'host-exit.zip')
+        $archiveRoot = 'DFL-PT-WEBUI-' + ('a' * 40)
+        $archive = New-ProjectSourceFixture (Join-Path $TestDrive 'host-exit.zip') -ArchiveRoot $archiveRoot
+        $pinPath = Join-Path $TestDrive 'source-pin.json'
+        @{schemaVersion=1;product='DFL-PT-WEBUI';applicationVersion='fixture';sourceCommit=('a'*40);archiveRoot=$archiveRoot;archiveSha256=(Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()} | ConvertTo-Json | Set-Content -LiteralPath $pinPath -Encoding UTF8
         foreach ($case in @('success','failure')) {
             $target = Join-Path $TestDrive ('host-' + $case)
             $start = New-Object Diagnostics.ProcessStartInfo
@@ -175,7 +257,7 @@ Describe 'bounded PT first-install source acquisition' {
             $start.RedirectStandardError = $true
             $start.StandardOutputEncoding = [Text.Encoding]::UTF8
             $start.Arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' +
-                [IO.Path]::GetFullPath($script:projectInstallerPath) + '" -ProjectRoot "' + $target + '" -NoNetwork'
+                [IO.Path]::GetFullPath($script:projectInstallerPath) + '" -ProjectRoot "' + $target + '" -SourcePinPath "' + $pinPath + '" -NoNetwork'
             if ($case -eq 'success') { $start.Arguments += ' -SourceArchivePath "' + $archive + '"' }
             $process = [Diagnostics.Process]::Start($start)
             try {

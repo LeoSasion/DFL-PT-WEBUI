@@ -1,0 +1,13 @@
+.first-use-guide { margin: 12px 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 13px 16px; }
+.first-use-statuses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.first-use-statuses > div { display: flex; gap: 8px; color: var(--muted); align-items: center; }
+.first-use-statuses .is-ready { color: var(--green); }
+.first-use-statuses span { display: grid; gap: 3px; }
+.first-use-statuses strong { color: var(--text-soft); font-size: 11px; }
+.first-use-statuses small { font-size: 11px; line-height: 1.5; }
+.first-use-actions { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; gap: 16px; align-items: center; justify-content: space-between; }
+.first-use-actions p { color: var(--muted); margin: 5px 0; line-height: 1.6; }
+.first-use-actions > div:last-child { display: flex; gap: 8px; flex-shrink: 0; }
+.first-use-note { display: block; color: var(--muted); margin-top: 6px; }
+@media (max-width: 1050px) { .first-use-actions { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 600px) { .first-use-statuses { grid-template-columns: 1fr; gap: 8px; } .first-use-actions > div:last-child { flex-wrap: wrap; } }

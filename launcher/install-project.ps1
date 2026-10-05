@@ -2,6 +2,7 @@
 param(
     [string]$ProjectRoot = '',
     [string]$SourceArchivePath = '',
+    [string]$SourcePinPath = '',
     [switch]$NoNetwork,
     [ValidateRange(1,536870912)][long]$MaxArchiveBytes = 536870912,
     [ValidateRange(1,2147483648)][long]$MaxExpandedBytes = 2147483648,
@@ -14,6 +15,27 @@ param(
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+
+function Read-ProjectSourcePin([string]$Path) {
+    if (-not $Path) { $Path = Join-Path $PSScriptRoot 'source-pin.json' }
+    Assert-ProjectInstallPlainPath $Path | Out-Null
+    $pin = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($pin.schemaVersion -ne 1 -or $pin.product -cne 'DFL-PT-WEBUI' -or
+        $pin.sourceCommit -cnotmatch '^[0-9a-f]{40}$' -or $pin.archiveSha256 -cnotmatch '^[0-9a-f]{64}$' -or
+        $pin.archiveRoot -cne ('DFL-PT-WEBUI-' + $pin.sourceCommit)) {
+        throw '发行版源码快照未固定或来源记录无效；请下载已验证的新版启动器。'
+    }
+    return $pin
+}
+
+function Write-ProjectInstallationRecord([string]$Root, [object]$Pin) {
+    $version = Get-Content -LiteralPath (Join-Path $Root 'release/version.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($version.version -cne $Pin.applicationVersion) { throw '源码应用版本与固定来源记录不一致。' }
+    $launcherVersion = if ($version.PSObject.Properties.Name -contains 'launcherVersion') { $version.launcherVersion } else { 'unknown' }
+    $record = @{schemaVersion=1;product='DFL-PT-WEBUI';applicationVersion=$version.version;launcherVersion=$launcherVersion;
+        installationSource='official-source';sourceCommit=$Pin.sourceCommit;archiveSha256=$Pin.archiveSha256;installedAt=[DateTime]::UtcNow.ToString('o')}
+    [IO.File]::WriteAllText((Resolve-ProjectInstallChild $Root 'release/installation.json'), ($record | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
+}
 
 function Write-ProjectInstallEvent([string]$Id, [string]$Status, [int]$Progress, [string]$Message) {
     [Console]::Out.WriteLine((@{ stage='source'; id=$Id; status=$Status; progress=$Progress;
@@ -105,7 +127,7 @@ function Assert-ProjectInstallTarget([string]$Path) {
     }
 }
 
-function Get-ProjectInstallArchive([string]$Destination, [string]$OfflineArchive, [bool]$Offline, [long]$Limit) {
+function Get-ProjectInstallArchive([string]$Destination, [string]$OfflineArchive, [bool]$Offline, [long]$Limit, [object]$Pin=$null) {
     if (-not [string]::IsNullOrWhiteSpace($OfflineArchive)) {
         $inputPath = Assert-ProjectInstallPlainPath $OfflineArchive
         if (-not (Test-Path -LiteralPath $inputPath -PathType Leaf) -or
@@ -115,6 +137,7 @@ function Get-ProjectInstallArchive([string]$Destination, [string]$OfflineArchive
         return
     }
     if ($Offline) { throw '离线模式需要提供 SourceArchivePath 源码 ZIP。' }
+    if (-not $Pin) { throw '在线安装必须指定固定源码快照。' }
     # HttpClient disables redirects and applies a finite timeout. Never accept an
     # alternate source host from downloaded content, command-line input or Git.
     Add-Type -AssemblyName System.Net.Http
@@ -132,7 +155,7 @@ function Get-ProjectInstallArchive([string]$Destination, [string]$OfflineArchive
     $outputStream = $null
     try {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        $response = $client.GetAsync('https://codeload.github.com/LeoSasion/DFL-PT-WEBUI/zip/refs/heads/main',
+        $response = $client.GetAsync(('https://codeload.github.com/LeoSasion/DFL-PT-WEBUI/zip/' + $Pin.sourceCommit),
             [Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
         if ([int]$response.StatusCode -ne 200) { throw "官方源码下载失败（HTTP $([int]$response.StatusCode)）。" }
         if ($response.Content.Headers.ContentLength -and $response.Content.Headers.ContentLength -gt $Limit) {
@@ -165,7 +188,7 @@ function Get-ProjectInstallArchive([string]$Destination, [string]$OfflineArchive
     }
 }
 
-function Expand-ProjectInstallArchive([string]$ZipPath, [string]$Destination, [long]$ExpandedLimit, [long]$EntryLimit, [int]$EntryCountLimit) {
+function Expand-ProjectInstallArchive([string]$ZipPath, [string]$Destination, [long]$ExpandedLimit, [long]$EntryLimit, [int]$EntryCountLimit, [string]$ArchiveRoot='DFL-PT-WEBUI-main') {
     Add-Type -AssemblyName System.IO.Compression
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = [IO.Compression.ZipFile]::OpenRead($ZipPath)
@@ -191,7 +214,7 @@ function Expand-ProjectInstallArchive([string]$ZipPath, [string]$Destination, [l
                     throw "源码包含不安全路径：$name"
                 }
             }
-            if ($parts[0] -cne 'DFL-PT-WEBUI-main') { throw '源码包必须来自 DFL-PT-WEBUI 官方 main 分支。' }
+            if ($parts[0] -cne $ArchiveRoot) { throw '源码包根目录与固定发行来源不一致。' }
             $unixMode = ([long]$entry.ExternalAttributes -shr 16) -band 0xf000
             if (($entry.ExternalAttributes -band 0x400) -ne 0 -or
                 ($unixMode -ne 0 -and $unixMode -ne 0x8000 -and $unixMode -ne 0x4000) -or
@@ -318,7 +341,7 @@ function Remove-ProjectInstallSession([string]$State, [string]$Session) {
 
 function Invoke-ProjectSourceInstall {
     [CmdletBinding()]
-    param([string]$ProjectRoot, [string]$SourceArchivePath='', [switch]$NoNetwork,
+    param([string]$ProjectRoot, [string]$SourceArchivePath='', [string]$SourcePinPath='', [switch]$NoNetwork,
         [ValidateRange(1,536870912)][long]$MaxArchiveBytes=536870912,
         [ValidateRange(1,2147483648)][long]$MaxExpandedBytes=2147483648,
         [ValidateRange(1,268435456)][long]$MaxEntryBytes=268435456,
@@ -355,12 +378,16 @@ function Invoke-ProjectSourceInstall {
         $session = Resolve-ProjectInstallChild $state ('source-' + [Guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $session | Out-Null
         $archive = Resolve-ProjectInstallChild $session 'source.zip'
-        Write-ProjectInstallEvent 'download' 'running' 5 '正在获取 DFL-PT-WEBUI 官方 main 源码。'
-        Get-ProjectInstallArchive $archive $SourceArchivePath ([bool]$NoNetwork) $MaxArchiveBytes
+        $pin = if ($SourcePinPath -or -not $NoNetwork) { Read-ProjectSourcePin $SourcePinPath } else { $null }
+        Write-ProjectInstallEvent 'download' 'running' 5 '正在获取 DFL-PT-WEBUI 固定版本源码。'
+        Get-ProjectInstallArchive $archive $SourceArchivePath ([bool]$NoNetwork) $MaxArchiveBytes $pin
+        if ($pin -and (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -cne $pin.archiveSha256) { throw '源码包 SHA-256 与固定发行来源不一致。' }
         Write-ProjectInstallEvent 'verify' 'running' 35 '正在检查源码包路径、大小与完整性。'
         $staging = Resolve-ProjectInstallChild $session 'staging'
-        Expand-ProjectInstallArchive $archive $staging $MaxExpandedBytes $MaxEntryBytes $MaxEntries
+        $archiveRoot = if ($pin) { $pin.archiveRoot } else { 'DFL-PT-WEBUI-main' }
+        Expand-ProjectInstallArchive $archive $staging $MaxExpandedBytes $MaxEntryBytes $MaxEntries $archiveRoot
         Assert-ProjectInstallIdentity $staging
+        if ($pin) { Write-ProjectInstallationRecord $staging $pin }
         Write-ProjectInstallEvent 'publish' 'running' 80 '正在将已验证的 PT 源码放入独立安装目录。'
         Publish-ProjectInstallSource $staging $root
         Write-ProjectInstallEvent 'complete' 'complete' 100 'DFL-PT-WEBUI 源码已就绪，可以继续安装本项目运行环境。'
@@ -382,7 +409,8 @@ function Invoke-ProjectSourceInstall {
 # exiting the test runner; normal host execution always returns an explicit code.
 if ($MyInvocation.InvocationName -ne '.') {
     [Console]::OutputEncoding = New-Object Text.UTF8Encoding($false)
-    $installExitCode = Invoke-ProjectSourceInstall -ProjectRoot $ProjectRoot -SourceArchivePath $SourceArchivePath -NoNetwork:$NoNetwork `
+    if (-not $SourcePinPath) { $SourcePinPath = Join-Path $PSScriptRoot 'source-pin.json' }
+    $installExitCode = Invoke-ProjectSourceInstall -ProjectRoot $ProjectRoot -SourceArchivePath $SourceArchivePath -SourcePinPath $SourcePinPath -NoNetwork:$NoNetwork `
         -MaxArchiveBytes $MaxArchiveBytes -MaxExpandedBytes $MaxExpandedBytes -MaxEntryBytes $MaxEntryBytes -MaxEntries $MaxEntries
     exit $installExitCode
 }

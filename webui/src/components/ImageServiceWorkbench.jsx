@@ -5,6 +5,8 @@ import { runtimeApi } from "../runtime/api.js";
 import { withRequestDeadline } from "../runtime/request-deadline.js";
 import { useDialogFocus } from "./Overlays.jsx";
 import { IMAGE_SERVICE, IMAGE_SIZES, IMAGE_RESOLUTIONS } from "../../shared/image-service-contract.mjs";
+import { ImageResultComparison } from "./ImageResultComparison.jsx";
+import { imageResultVersions } from "../domain/image-result-review.js";
 
 const PROVIDER_URL = IMAGE_SERVICE.baseUrl;
 const REGISTRATION_URL = IMAGE_SERVICE.registrationUrl;
@@ -101,6 +103,8 @@ function ImageServiceSession({ activeTool, onToolChange, side, toolFocus, worksp
   const [selectedTaskId, setSelectedTaskId] = useState(initialDraft.current.selectedTaskId ?? null);
   const [selectedInputId, setSelectedInputId] = useState(initialDraft.current.selectedInputId ?? null);
   const [selectedResultIndex, setSelectedResultIndex] = useState(0);
+  const [comparisonInputId, setComparisonInputId] = useState(null);
+  const [saveName, setSaveName] = useState("");
   const [confirmation, setConfirmation] = useState(null);
   const [busy, setBusy] = useState(null);
   const [actionError, setActionError] = useState(null);
@@ -121,9 +125,18 @@ function ImageServiceSession({ activeTool, onToolChange, side, toolFocus, worksp
   const selectedInput = inputs.find(input => input.inputId === selectedInputId) ?? inputs[0];
   const providerProgress = Number.isFinite(selectedTask?.progress) ? Math.min(100, Math.max(0, selectedTask.progress)) : null;
   const selectedResult = selectedTask?.results?.find(result => result.index === selectedResultIndex) ?? selectedTask?.results?.[0];
+  const comparisonInput = selectedTask?.inputs?.find(input => input.inputId === comparisonInputId) ?? selectedTask?.inputs?.[0];
+  const resultVersions = imageResultVersions(tasks, selectedTask, comparisonInput?.inputId);
   const previewUrl = safeLocalUrl(selectedTask ? selectedResult?.imageUrl : selectedInput?.imageUrl);
   const imageCount = inputs.length + imageUrls.length;
   const ready = Boolean(settings?.hasKey && !settingsError && !busy && !uncertainRequest && prompt.trim() && prompt.length <= 5000 && (tool.id === "generate" || imageCount));
+
+  useEffect(() => {
+    if (!selectedResult) { setSaveName(""); return; }
+    const base = (comparisonInput?.name ?? "generated").replace(/\.[^.]+$/, "");
+    const extension = selectedResult.name.split(".").pop();
+    setSaveName(`${base.slice(0, 110)}-${selectedTask.id.slice(-8)}-v${selectedResult.index + 1}.${extension}`);
+  }, [selectedTaskId, selectedResult?.index, comparisonInput?.inputId]);
 
   useEffect(() => {
     rememberProjectDraft(workspaceKey, { inputs, imageUrls, prompts, size, resolution, nsfwCheck, selectedInputId, selectedTaskId, uncertainRequest });
@@ -338,16 +351,34 @@ function ImageServiceSession({ activeTool, onToolChange, side, toolFocus, worksp
     } catch { /* Checking never creates another paid generation. */ }
   };
 
+  const saveResult = async event => {
+    event.preventDefault();
+    if (!selectedTask || !selectedResult || !saveName.trim()) return;
+    const taskId = selectedTask.id;
+    try {
+      await runAction("saving-result", options => runtimeApi.saveImageResultCopy(taskId, selectedResult.index, { name: saveName.trim() }, options), copy => {
+        setTasks(current => current.map(task => task.id === taskId ? { ...task, savedCopies: [...(task.savedCopies ?? []), copy] } : task));
+        onNotice?.(t("结果副本已另存于当前项目，可下载到本机；原图与生成记录保留。"), "success");
+      });
+    } catch { /* Failed saves retain the original and generated result. */ }
+  };
+
   return <section className="image-service-workbench" aria-labelledby="image-service-title">
     <header className="image-tools-heading"><div><span className="image-tools-kicker">{t("图像服务")}</span><h2 id="image-service-title">{t(tool.label)}</h2><p>{t(tool.description)}</p></div><a className="button secondary" href={REGISTRATION_URL} target="_blank" rel="noopener noreferrer"><IconExternalLink size={15} />{t("申请 API")}</a></header>
     <div className="image-tools-mode-switch image-service-modes" role="group" aria-label={t("图像工具模式")}>{IMAGE_TOOL_MODES.map(mode => <button aria-pressed={mode.id === tool.id} className={mode.id === tool.id ? "is-active" : ""} key={mode.id} type="button" disabled={Boolean(busy)} onClick={() => onToolChange(mode.id)}><IconPhoto size={15} />{t(mode.label)}</button>)}</div>
     <div className="image-service-body">
       <div className="image-service-main">
-        <div className="image-service-preview">
+        {selectedTask ? <ImageResultComparison original={comparisonInput ? { name: comparisonInput.name, url: safeLocalUrl(comparisonInput.imageUrl) } : null} result={selectedResult ? { name: selectedResult.name, url: safeLocalUrl(selectedResult.imageUrl) } : null} /> : <div className="image-service-preview">
           {previewUrl ? <img src={previewUrl} alt={selectedResult?.name ?? selectedInput?.name ?? t("图像预览")} decoding="async" /> : <div className="image-tools-empty"><IconPhoto size={32} /><strong>{t(selectedTask ? "结果尚未保存到本机" : "尚未选择素材")}</strong><p>{t("预览仅读取本机图片，外部链接不会自动加载。")}</p></div>}
           {selectedResult ? <a className="button secondary image-service-download" href={runtimeApi.imageResultUrl(selectedTask.id, selectedResult.index, { download: true })} download={selectedResult.name}><IconDownload size={15} />{t("下载结果")}</a> : null}
-        </div>
-        {selectedTask?.results?.length > 1 ? <div className="image-service-result-picker">{selectedTask.results.map(result => <button type="button" key={result.index} className={result.index === selectedResultIndex ? "is-active" : ""} onClick={() => setSelectedResultIndex(result.index)}>{result.name}</button>)}</div> : null}
+        </div>}
+        {selectedTask ? <div className="image-result-controls">
+          {selectedTask.inputs?.length > 1 ? <label><span>{t("对比原图")}</span><select value={comparisonInput?.inputId ?? ""} disabled={Boolean(busy)} onChange={event => setComparisonInputId(event.target.value)}>{selectedTask.inputs.map(input => <option key={input.inputId} value={input.inputId}>{input.name}</option>)}</select></label> : null}
+          {resultVersions.length ? <label><span>{t("结果版本")} · {t("选择版本同时查看该次参数与实际费用")}</span><select value={`${selectedTask.id}:${selectedResult?.index}`} disabled={Boolean(busy)} onChange={event => { const version = resultVersions.find(item => item.key === event.target.value); if (version) { setComparisonInputId(comparisonInput?.inputId ?? null); setSelectedTaskId(version.task.id); setSelectedResultIndex(version.result.index); } }}>{!selectedResult ? <option value={`${selectedTask.id}:undefined`} disabled>{t("当前任务尚无结果，选择已保存版本查看")}</option> : null}{resultVersions.map((version, index) => <option key={version.key} value={version.key}>{t("版本 {number}", { number: resultVersions.length - index })} · {new Date(version.task.createdAt).toLocaleString()} · {version.result.name} · {version.task.prompt.slice(0, 55)}</option>)}</select></label> : null}
+          {selectedResult ? <form className="image-result-save-form" onSubmit={event => void saveResult(event)}><label><span>{t("另存文件名（保留实际图片格式）")}</span><input value={saveName} maxLength={180} required disabled={Boolean(busy)} onChange={event => setSaveName(event.target.value)} /></label><button className="button secondary" disabled={Boolean(busy) || !saveName.trim()} type="submit"><IconDownload size={15} />{t(busy === "saving-result" ? "正在另存…" : "另存所选结果")}</button><a className="button secondary" href={runtimeApi.imageResultUrl(selectedTask.id, selectedResult.index, { download: true })} download={selectedResult.name}>{t("下载原始结果")}</a></form> : null}
+          {selectedTask.savedCopies?.length ? <div className="image-result-saved"><strong>{t("已另存副本")}</strong>{selectedTask.savedCopies.map(copy => <a key={copy.exportId} href={runtimeApi.imageExportUrl(copy.exportId)} download={copy.name}><IconDownload size={13} /> {copy.name}</a>)}</div> : null}
+          <p className="image-service-muted">{t("另存只复制所选版本到当前项目，不覆盖原图。生成图片没有 DFL 人脸标注；用于 SRC/DST 数据集时，请先将下载副本作为原始素材导入，再重新提脸并检查标注，不要直接放入 aligned。")}</p>
+        </div> : null}
         <section className="image-service-inputs" aria-label={t("本次素材范围")}>
           <header><strong>{t("参考素材")} <small>{imageCount} / {MAX_IMAGES}</small></strong><div><input ref={fileRef} hidden type="file" multiple accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={event => { const files = [...event.target.files]; event.target.value = ""; void stageFiles(files); }} /><button className="button secondary" type="button" disabled={Boolean(busy) || imageCount >= MAX_IMAGES} onClick={() => fileRef.current?.click()}>{busy === "staging" ? t("正在暂存…") : t("选择本机图片")}</button>{sample?.name ? <button className="button secondary" type="button" disabled={Boolean(busy) || imageCount >= MAX_IMAGES} onClick={() => void stageSample()}>{t("加入当前 aligned 图片")}</button> : null}</div></header>
           {sample?.name ? <p className="image-service-muted">{sampleSide.toUpperCase()} · {sample.name}</p> : null}
@@ -357,7 +388,7 @@ function ImageServiceSession({ activeTool, onToolChange, side, toolFocus, worksp
         </section>
         <section className="image-service-history" aria-labelledby="image-service-history-title"><header><strong id="image-service-history-title">{t("当前项目的图像记录")}</strong><button className="button secondary" type="button" disabled={Boolean(busy)} onClick={() => setRefreshVersion(version => version + 1)}><IconRefresh size={14} />{t("重新读取")}</button></header>
           {historyError ? <p className="workspace-read-error" role="alert">{t("记录读取失败，保留上次结果；当前状态未知。")}</p> : null}
-          {tasks === null ? <p className="image-service-muted">{t("正在读取图像记录…")}</p> : tasks.length ? <div className="image-service-task-list">{tasks.map(task => <button type="button" key={task.id} className={selectedTaskId === task.id ? "is-active" : ""} onClick={() => { setSelectedTaskId(task.id); setSelectedResultIndex(0); }}><span className={`image-service-state is-${task.status}`}>{t(STATUS_COPY[task.status] ?? task.status)}</span><strong>{task.prompt}</strong><small>{task.usage ? `${task.usage.amount} ${task.usage.currency}` : t("费用未返回")}</small><time>{new Date(task.createdAt).toLocaleString()}</time></button>)}</div> : <p className="image-service-muted">{t("当前项目还没有图像生成记录。")}</p>}
+          {tasks === null ? <p className="image-service-muted">{t("正在读取图像记录…")}</p> : tasks.length ? <div className="image-service-task-list">{tasks.map(task => <button type="button" key={task.id} className={selectedTaskId === task.id ? "is-active" : ""} onClick={() => { setSelectedTaskId(task.id); setSelectedResultIndex(0); setComparisonInputId(null); }}><span className={`image-service-state is-${task.status}`}>{t(STATUS_COPY[task.status] ?? task.status)}</span><strong>{task.prompt}</strong><small>{task.usage ? `${task.usage.amount} ${task.usage.currency}` : t("费用未返回")}</small><time>{new Date(task.createdAt).toLocaleString()}</time></button>)}</div> : <p className="image-service-muted">{t("当前项目还没有图像生成记录。")}</p>}
           {selectedTaskId && !selectedTask && tasks !== null ? <p className="workspace-read-error" role="alert">{t("此前选择的任务未出现在本次记录中，状态未知。")}</p> : null}{selectedTask ? <div className="image-service-task-detail"><dl><div><dt>{t("平台任务")}</dt><dd>{selectedTask.providerTaskId ?? t("尚未确认")}</dd></div><div><dt>{t("状态")}</dt><dd>{t(STATUS_COPY[selectedTask.status] ?? selectedTask.status)}{selectedTask.providerStatus ? ` · ${selectedTask.providerStatus}` : ""}</dd></div>{providerProgress !== null ? <div><dt>{t("平台进度")}</dt><dd className="image-service-progress"><progress max={100} value={providerProgress} aria-label={t("平台进度")} /><span>{providerProgress}%</span></dd></div> : null}<div><dt>{t("最终实扣")}</dt><dd>{selectedTask.usage ? `${selectedTask.usage.amount} ${selectedTask.usage.currency}` : t("待平台返回最终结算")}</dd></div><div><dt>{t("输出")}</dt><dd>{selectedTask.size} · {selectedTask.resolution}</dd></div></dl><details className="image-service-links"><summary>{t("查看生成参数与素材范围")}</summary><p className="image-service-history-prompt">{selectedTask.prompt}</p><p>{t("模型")}: {selectedTask.model} · {t(IMAGE_TOOL_MODES.find(mode => mode.id === selectedTask.mode)?.label ?? selectedTask.mode)}</p>{selectedTask.inputs?.length || selectedTask.imageUrls?.length ? <ol>{selectedTask.inputs?.map(input => <li key={input.inputId}>{input.name}</li>)}{selectedTask.imageUrls?.map((url, index) => <li key={`${url}-${index}`}><code>{url}</code></li>)}</ol> : <p>{t("本次只发送提示词，不发送图片。")}</p>}</details>{selectedTask.error ? <p className="workspace-read-error" role="alert">{t(taskErrorMessage(selectedTask.error) ?? "图像任务未完成，请查看任务说明。")}</p> : null}{selectedTask.status === "unconfirmed" ? <p className="image-service-muted">{t("平台可能已接收请求，不能盲目重新生成，请先在平台核对任务。")}</p> : null}{selectedTask.canCheck ? <button className="button secondary" type="button" disabled={Boolean(busy)} onClick={() => void checkTask(selectedTask)}><IconRefresh size={14} />{t("继续查询并保存结果")}</button> : null}</div> : null}
         </section>
       </div>

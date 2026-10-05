@@ -13,6 +13,7 @@ export { ImageServiceError } from "./image-service-network.mjs";
 
 const INPUT_ID = /^in-[a-f0-9]{32}$/;
 const TASK_ID = /^img-[a-f0-9]{32}$/;
+const EXPORT_ID = /^exp-[a-f0-9]{32}$/;
 const REQUEST_ID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const PROVIDER_ID = /^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,199}$/;
 const ALIGNED_NAME = /^[^<>:"/\\|?*\u0000-\u001f]{1,220}\.(?:jpe?g|png|webp)$/i;
@@ -178,6 +179,7 @@ export class ImageServiceManager {
     this.inputsRoot = path.join(this.root, "inputs");
     this.tasksRoot = path.join(this.root, "tasks");
     this.resultsRoot = path.join(this.root, "results");
+    this.exportsRoot = path.join(this.root, "exports");
     this.settingsRoot = path.join(paths.projectRegistryRoot ?? path.join(paths.webuiRoot, ".runtime"), "image-service");
     this.settingsFile = path.join(this.settingsRoot, "settings.json");
     this.fetch = fetchImpl;
@@ -200,9 +202,9 @@ export class ImageServiceManager {
   }
 
   async initialize() {
-    await Promise.all([this.inputsRoot, this.tasksRoot, this.resultsRoot, this.settingsRoot].map((directory) => mkdir(directory, { recursive: true })));
+    await Promise.all([this.inputsRoot, this.tasksRoot, this.resultsRoot, this.exportsRoot, this.settingsRoot].map((directory) => mkdir(directory, { recursive: true })));
     const workspace = await realpath(this.paths.workspaceRoot);
-    for (const directory of [this.root, this.inputsRoot, this.tasksRoot, this.resultsRoot]) {
+    for (const directory of [this.root, this.inputsRoot, this.tasksRoot, this.resultsRoot, this.exportsRoot]) {
       if (!within(workspace, await realpath(directory))) throw new ImageServiceError("项目图片目录超出允许范围", "IMAGE_PATH_INVALID");
     }
     if (!within(await realpath(this.paths.webuiRoot), await realpath(this.settingsRoot))) throw new ImageServiceError("密钥目录超出允许范围", "IMAGE_PATH_INVALID");
@@ -341,6 +343,10 @@ export class ImageServiceManager {
       results: task.results.map((result, index) => ({
         index, name: result.name, size: result.size, imageUrl: `/api/image-service/tasks/${task.id}/results/${index}`,
       })), usage: task.usage ?? null, error: task.error ?? null,
+      savedCopies: (task.savedCopies ?? []).map(copy => ({
+        exportId: copy.exportId, name: copy.displayName, resultIndex: copy.resultIndex, createdAt: copy.createdAt,
+        downloadUrl: `/api/image-service/exports/${copy.exportId}`,
+      })),
       canCheck: Boolean(task.providerTaskId) && !this.workers.has(task.id),
     };
   }
@@ -663,10 +669,10 @@ export class ImageServiceManager {
     }
   }
 
-  async resultDirectory(taskId, { create = false } = {}) {
-    if (!TASK_ID.test(taskId)) throw new ImageServiceError("结果图片不存在", "IMAGE_RESULT_NOT_FOUND", 404);
-    const rootInfo = await lstat(this.resultsRoot);
-    const root = await realpath(this.resultsRoot);
+  async resultDirectory(taskId, { create = false, storageRoot = this.resultsRoot, idPattern = TASK_ID } = {}) {
+    if (!idPattern.test(taskId)) throw new ImageServiceError("结果图片不存在", "IMAGE_RESULT_NOT_FOUND", 404);
+    const rootInfo = await lstat(storageRoot);
+    const root = await realpath(storageRoot);
     if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink() || !within(await realpath(this.paths.workspaceRoot), root)) {
       throw new ImageServiceError("结果目录超出允许范围或已变成链接", "IMAGE_PATH_INVALID");
     }
@@ -688,6 +694,10 @@ export class ImageServiceManager {
     const result = Number.isInteger(index) && index >= 0 ? task?.results[index] : null;
     if (!result || !/^result-[1-9][0-9]*\.(png|jpg|webp)$/.test(result.name)) throw new ImageServiceError("结果图片不存在", "IMAGE_RESULT_NOT_FOUND", 404);
     const directory = await this.resultDirectory(taskId);
+    return this.verifiedImageFile(result, directory);
+  }
+
+  async verifiedImageFile(result, directory) {
     const target = path.join(directory, result.name);
     const info = await lstat(target).catch((error) => {
       if (error.code === "ENOENT") throw new ImageServiceError("结果图片无法读取", "IMAGE_RESULT_NOT_FOUND", 404);
@@ -722,6 +732,41 @@ export class ImageServiceManager {
       verifiedBytes = bytes.subarray(0, length);
     } finally { await file.close(); }
     return { path: target, name: result.name, mimeType: result.mimeType, bytes: verifiedBytes };
+  }
+
+  async saveResultCopy(taskId, index, { name } = {}) {
+    return this.serializeMutation(async () => {
+      const file = await this.resultFile(taskId, index);
+      const task = this.tasks.get(taskId);
+      const extension = path.extname(file.name).slice(1);
+      const base = typeof name === "string" ? name.trim() : "";
+      // Accept only a plain filename; the saved pixels retain their real format.
+      if (!base || base.length > 180 || /[<>:"/\\|?*\u0000-\u001f]/.test(base)
+        || /[. ]$/.test(base) || /^\./.test(base) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(base)) {
+        throw new ImageServiceError("请输入有效文件名，不要包含目录、特殊字符或系统保留名称", "IMAGE_EXPORT_NAME_INVALID");
+      }
+      const displayName = /\.(?:png|jpe?g|webp)$/i.test(base) ? base.replace(/\.[^.]+$/, `.${extension}`) : `${base}.${extension}`;
+      const exportId = `exp-${randomBytes(16).toString("hex")}`;
+      const directory = await this.resultDirectory(exportId, { create: true, storageRoot: this.exportsRoot, idPattern: EXPORT_ID });
+      await writeFile(path.join(directory, file.name), file.bytes, { mode: 0o600, flag: "wx" });
+      const copy = { name: file.name, extension, mimeType: file.mimeType, size: file.bytes.length,
+        sha256: createHash("sha256").update(file.bytes).digest("hex"), exportId, displayName, resultIndex: index, createdAt: now() };
+      const previousCopies = task.savedCopies ?? [];
+      task.savedCopies = [...previousCopies, copy];
+      try { await this.persist(task); }
+      catch (error) { task.savedCopies = previousCopies; throw error; }
+      return { exportId, name: displayName, resultIndex: index, createdAt: copy.createdAt, downloadUrl: `/api/image-service/exports/${exportId}` };
+    });
+  }
+
+  async exportFile(exportId) {
+    if (!EXPORT_ID.test(exportId)) throw new ImageServiceError("另存图片不存在", "IMAGE_RESULT_NOT_FOUND", 404);
+    const copy = [...this.tasks.values()].flatMap(task => task.savedCopies ?? []).find(item => item.exportId === exportId);
+    if (!copy || !/^result-[1-9][0-9]*\.(png|jpg|webp)$/.test(copy.name)
+      || typeof copy.displayName !== "string" || /[<>:"/\\|?*\u0000-\u001f]/.test(copy.displayName)) throw new ImageServiceError("另存图片不存在", "IMAGE_RESULT_NOT_FOUND", 404);
+    const directory = await this.resultDirectory(exportId, { storageRoot: this.exportsRoot, idPattern: EXPORT_ID });
+    const file = await this.verifiedImageFile(copy, directory);
+    return { ...file, name: copy.displayName };
   }
 
   async close() {
