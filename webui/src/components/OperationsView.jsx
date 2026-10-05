@@ -1601,7 +1601,7 @@ export function SettingsView({ health, jobs, onRetry, onError, onNotice, onSwitc
         <IconX size={18} />
         <div>
           <strong>{t("WebUI 替代与待补能力")}</strong>
-          <p>{t("aligned 浏览与日常相似图审查优先使用 WebUI，相似组每次仅预检前 500 张。EbSynth 的关键帧结果传播尚未实现，列为后续原生功能候选；已有外部程序可选配置。")}</p>
+          <p>{t("aligned 浏览与日常相似图审查优先使用 WebUI，相似组可选择每批最多 500 张，或比较两批各最多 250 张。EbSynth 的关键帧结果传播尚未实现，列为后续原生功能候选；已有外部程序可选配置。")}</p>
         </div>
       </section>
     </section>

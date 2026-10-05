@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { mkdir, readFile, readdir, realpath, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, open, readFile, readdir, realpath, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { PATHS } from "./paths.mjs";
 import { localImageCredentialCodec } from "./image-service-credentials.mjs";
@@ -521,10 +521,15 @@ export class ImageServiceManager {
     if (!task.providerResultUrls.length) throw new ImageServiceError("平台已完成任务，但结果链接尚未返回，请继续查询", "IMAGE_RESULTS_PENDING", 502);
     task.status = "downloading";
     await this.persist(task);
+    const directory = await this.resultDirectory(task.id, { create: true });
     for (let index = 0; index < task.providerResultUrls.length; index++) {
       if (task.results[index]) {
         try { await this.resultFile(task.id, index); continue; }
-        catch { task.results.length = index; }
+        catch (error) {
+          // Never publish through a link to another task or outside the project.
+          if (!["IMAGE_RESULT_NOT_FOUND", "IMAGE_RESULT_CHANGED", "IMAGE_RESULT_UNVERIFIED"].includes(error.code)) throw error;
+          task.results.length = index;
+        }
       }
       let current = task.providerResultUrls[index];
       let bytes;
@@ -547,11 +552,18 @@ export class ImageServiceManager {
         break;
       }
       const kind = imageKind(bytes);
-      const directory = path.join(this.resultsRoot, task.id);
-      await mkdir(directory, { recursive: true });
-      if (!within(await realpath(this.resultsRoot), await realpath(directory))) throw new ImageServiceError("结果目录超出允许范围", "IMAGE_PATH_INVALID");
+      if (await this.resultDirectory(task.id) !== directory) {
+        throw new ImageServiceError("结果目录在下载期间已发生变化，请保留原文件并检查", "IMAGE_PATH_INVALID");
+      }
       const name = `result-${index + 1}.${kind.extension}`;
       const target = path.join(directory, name);
+      const existing = await lstat(target).catch((error) => {
+        if (error.code === "ENOENT") return null;
+        throw error;
+      });
+      if (existing && (!existing.isFile() || existing.isSymbolicLink() || existing.nlink > 1)) {
+        throw new ImageServiceError("结果图片不能是链接或特殊文件，请保留原文件并检查结果目录", "IMAGE_PATH_INVALID");
+      }
       const temporary = `${target}.${randomBytes(8).toString("hex")}.tmp`;
       try {
         await writeFile(temporary, bytes, { flag: "wx", mode: 0o600 });
@@ -630,8 +642,17 @@ export class ImageServiceManager {
         task.error = task.status === "unconfirmed"
           ? "提交结果未确认，请在平台核对任务和扣费；不会自动重新提交"
           : error instanceof ImageServiceError ? error.message : "参考图上传未完成；未再次提交，请检查网络后重新确认";
-      } else if (!["completed", "failed"].includes(task.status)) {
-        task.status = "paused";
+      } else if (task.status !== "failed") {
+        // A previously completed provider task can still need local-result
+        // recovery. A failed GET must remain visible without resubmitting it.
+        let verifiedResults = task.status === "completed" && task.results.length > 0;
+        if (verifiedResults) {
+          for (let index = 0; index < task.results.length; index++) {
+            try { await this.resultFile(task.id, index); }
+            catch { verifiedResults = false; break; }
+          }
+        }
+        if (!verifiedResults) task.status = "paused";
         task.error = error instanceof ImageServiceError ? error.message : "查询或下载连接中断，可继续检查原任务；不会重新生成";
       }
       if (this.closed && task.providerTaskId && !["completed", "failed"].includes(task.status)) {
@@ -642,13 +663,65 @@ export class ImageServiceManager {
     }
   }
 
+  async resultDirectory(taskId, { create = false } = {}) {
+    if (!TASK_ID.test(taskId)) throw new ImageServiceError("结果图片不存在", "IMAGE_RESULT_NOT_FOUND", 404);
+    const rootInfo = await lstat(this.resultsRoot);
+    const root = await realpath(this.resultsRoot);
+    if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink() || !within(await realpath(this.paths.workspaceRoot), root)) {
+      throw new ImageServiceError("结果目录超出允许范围或已变成链接", "IMAGE_PATH_INVALID");
+    }
+    const expected = path.join(root, taskId);
+    if (create) await mkdir(expected, { recursive: true });
+    const info = await lstat(expected).catch((error) => {
+      if (error.code === "ENOENT") throw new ImageServiceError("结果图片无法读取", "IMAGE_RESULT_NOT_FOUND", 404);
+      throw error;
+    });
+    const actual = await realpath(expected);
+    if (!info.isDirectory() || info.isSymbolicLink() || path.relative(root, actual) !== taskId) {
+      throw new ImageServiceError("结果目录不能是链接或属于其他任务", "IMAGE_PATH_INVALID");
+    }
+    return actual;
+  }
+
   async resultFile(taskId, index) {
     const task = TASK_ID.test(taskId) ? this.tasks.get(taskId) : null;
     const result = Number.isInteger(index) && index >= 0 ? task?.results[index] : null;
     if (!result || !/^result-[1-9][0-9]*\.(png|jpg|webp)$/.test(result.name)) throw new ImageServiceError("结果图片不存在", "IMAGE_RESULT_NOT_FOUND", 404);
-    const target = await realpath(path.join(this.resultsRoot, taskId, result.name)).catch(() => null);
-    if (!target || !within(await realpath(this.resultsRoot), target)) throw new ImageServiceError("结果图片无法读取", "IMAGE_RESULT_NOT_FOUND", 404);
-    return { path: target, name: result.name, mimeType: result.mimeType };
+    const directory = await this.resultDirectory(taskId);
+    const target = path.join(directory, result.name);
+    const info = await lstat(target).catch((error) => {
+      if (error.code === "ENOENT") throw new ImageServiceError("结果图片无法读取", "IMAGE_RESULT_NOT_FOUND", 404);
+      throw error;
+    });
+    if (!info.isFile() || info.isSymbolicLink() || info.nlink > 1) {
+      throw new ImageServiceError("结果图片不能是链接或特殊文件，请保留原文件并检查结果目录", "IMAGE_PATH_INVALID");
+    }
+    // Older records are recoverable through the original provider task, but
+    // hashing whatever is on disk now cannot prove it is that original result.
+    if (!Number.isSafeInteger(result.size) || result.size <= 0 || result.size > IMAGE_SERVICE.maxImageBytes
+      || typeof result.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(result.sha256)) {
+      throw new ImageServiceError("历史结果缺少完整的大小与 SHA-256 校验记录，请继续查询并重新保存原任务结果", "IMAGE_RESULT_UNVERIFIED", 409);
+    }
+    const changed = () => new ImageServiceError("本地结果图片已发生变化，请继续查询并重新保存原任务结果", "IMAGE_RESULT_CHANGED", 409);
+    if (info.size !== result.size) throw changed();
+    const file = await open(target, "r");
+    let verifiedBytes;
+    try {
+      const opened = await file.stat();
+      if (!opened.isFile() || opened.nlink > 1 || opened.dev !== info.dev || opened.ino !== info.ino || opened.size !== result.size) throw changed();
+      // Read at most the recorded image size plus one byte, even if a local
+      // writer grows the file while it is being checked.
+      const bytes = Buffer.alloc(result.size + 1);
+      let length = 0;
+      while (length < bytes.length) {
+        const { bytesRead } = await file.read(bytes, length, bytes.length - length, length);
+        if (!bytesRead) break;
+        length += bytesRead;
+      }
+      if (length !== result.size || createHash("sha256").update(bytes.subarray(0, length)).digest("hex") !== result.sha256) throw changed();
+      verifiedBytes = bytes.subarray(0, length);
+    } finally { await file.close(); }
+    return { path: target, name: result.name, mimeType: result.mimeType, bytes: verifiedBytes };
   }
 
   async close() {

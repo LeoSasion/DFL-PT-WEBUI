@@ -9438,7 +9438,7 @@ input {
 .advanced-mode-switch button.is-active { border-color: var(--green-selected-border); background: var(--green-deep); color: var(--green-strong); }
 .advanced-mode-switch > span { margin-left: auto; color: var(--muted); font-size: 11px; }
 
-.similarity-workbench { display: grid; grid-template-rows: 56px 56px minmax(0, 1fr) 54px; overflow: hidden; }
+.similarity-workbench { display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; overflow: hidden; }
 .similarity-toolbar,
 .alignment-toolbar {
   display: flex;
@@ -9457,6 +9457,18 @@ input {
 .similarity-toolbar label { display: flex; align-items: center; gap: 8px; color: var(--text-soft); font-size: 11px; }
 .similarity-toolbar input { width: 140px; accent-color: var(--green); }
 .similarity-toolbar label strong { width: 34px; color: var(--green-strong); font-variant-numeric: tabular-nums; }
+.similarity-toolbar { min-height: 56px; flex-wrap: wrap; }
+.similarity-toolbar > div:first-child { min-width: 0; }
+.similarity-batches { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: #07100d; }
+.similarity-batches label,
+.similarity-page-picker { display: flex; align-items: center; gap: 7px; color: var(--text-soft); font-size: 11px; }
+.similarity-batches select,
+.similarity-batches input { min-width: 0; height: 29px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); }
+.similarity-batches input { width: 65px; font-variant-numeric: tabular-nums; }
+.similarity-batches p { margin: 0; color: var(--text-soft); font-size: 11px; }
+.similarity-batches small { flex: 0 0 100%; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.similarity-page-picker > span { color: var(--muted); font-variant-numeric: tabular-nums; }
+.similarity-confirmation details ul { max-height: 180px; overflow-y: auto; overflow-wrap: anywhere; padding-left: 20px; }
 .similarity-summary { display: grid; grid-template-columns: repeat(3, 130px) 1fr; border-bottom: 1px solid var(--border); }
 .similarity-summary > div { display: flex; align-items: baseline; justify-content: space-between; padding: 11px 14px; border-right: 1px solid var(--border); }
 .similarity-summary span { color: var(--muted); font-size: 11px; }
@@ -9487,6 +9499,28 @@ input {
 .similarity-action-dock span { display: grid; gap: 1px; }
 .similarity-action-dock strong { color: var(--text); font-size: 12px; }
 .similarity-action-dock small { color: var(--muted); font-size: 11px; }
+.similarity-action-dock .similarity-uncertain { flex: 1; flex-wrap: wrap; gap: 7px 12px; }
+.similarity-uncertain > span { display: block; color: var(--text-soft); font-size: 11px; }
+.similarity-action-dock.is-uncertain { background: #171408; }
+.similarity-uncertain > strong { color: var(--amber); }
+
+@media (max-width: 760px) {
+  .similarity-toolbar { gap: 8px; }
+  .similarity-toolbar > div:first-child { flex: 1 0 100%; }
+  .similarity-toolbar input { width: 100px; }
+  .similarity-toolbar > .button { margin-left: auto; }
+  .similarity-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .similarity-summary > div { padding: 8px; gap: 4px; flex-wrap: wrap; }
+  .similarity-summary p { grid-column: 1 / -1; justify-self: start; margin: 0; padding: 6px 10px; }
+  .similarity-groups > section > header { min-height: 38px; height: auto; gap: 8px; padding: 5px 0; }
+  .similarity-groups > section > header > div { flex-wrap: wrap; gap: 4px 10px; }
+  .similarity-groups > section > header > button { flex-shrink: 0; }
+  .similarity-action-dock { gap: 8px; flex-wrap: wrap; }
+}
+
+@media (max-width: 1020px) {
+  .main-surface.is-tools { grid-template-rows: auto auto auto auto; }
+}
 
 .alignment-repair-workbench { display: grid; grid-template-rows: 56px minmax(0, 1fr); }
 .alignment-repair-layout { min-height: 0; display: grid; grid-template-columns: minmax(460px, 1fr) 310px; }

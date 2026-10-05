@@ -28,7 +28,10 @@ async function call(server, method, url, { body, headers = {}, session = true } 
   const finished = new Promise(resolve => response.on("finish", resolve));
   await server.handleRequest(request, response);
   await finished;
-  return { status: response.status, headers: response.headers, body: JSON.parse(Buffer.concat(chunks).toString()) };
+  const bytes = Buffer.concat(chunks);
+  return { status: response.status, headers: response.headers,
+    body: String(response.headers?.["Content-Type"]).startsWith("application/json")
+      ? JSON.parse(bytes.toString()) : bytes };
 }
 
 test("image settings retain local-session write authorization and never expose a key", async () => {
@@ -120,4 +123,17 @@ test("an unreadable image history is unknown and does not become an empty list",
   assert.equal(result.body.error.code, "IMAGE_RECORD_INVALID");
   assert.equal(read, false);
   assert.equal((await call(server, "GET", "/api/commands")).status, 200);
+});
+
+test("result responses send the verified bytes without reopening a replaceable file path", async () => {
+  const bytes = Buffer.from("verified-offline-result");
+  const server = runtime({ resultFile: async () => ({
+    path: "Z:\\not-a-real-result-file.png", name: "result-1.png", mimeType: "image/png", bytes,
+  }) });
+  const result = await call(server, "GET", "/api/image-service/tasks/image-1/results/0?download=1");
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body, bytes);
+  assert.equal(result.headers["Content-Length"], bytes.length);
+  assert.equal(result.headers["Cache-Control"], "no-store");
+  assert.match(result.headers["Content-Disposition"], /result-1.png/);
 });

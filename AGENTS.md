@@ -19,7 +19,8 @@ directories are reference sources only; all implementation belongs here.
   release archives, with pinned hashes and original source/license records.
   Never substitute random or locally trained QA checkpoints.
 - Prefer native WebUI aligned viewing and similarity review over installing
-  XnViewMP or VisiPics. Keep the first-500 similarity limit visible. EbSynth
+  XnViewMP or VisiPics. Keep the per-pass 500-image limit and selected batch
+  ranges visible; paired comparisons use at most 250 images per batch. EbSynth
   temporal keyframe propagation is a future native capability candidate;
   do not add an external installer flow for these tools.
 - Validate actual training, saving, stopping, resuming and prediction when

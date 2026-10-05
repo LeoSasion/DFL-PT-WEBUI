@@ -21,6 +21,7 @@ const IMAGE_NAME = /^[^<>:"/\\|?*\u0000-\u001f]{1,220}\.(?:jpe?g|png)$/i;
 const QUARANTINE_TOKEN = /^\d{14}-[a-f0-9]{10}$/;
 const MAX_HELPER_OUTPUT = 4 * 1024 * 1024;
 const ANALYSIS_CACHE_TTL_MS = 30_000;
+const MAX_ANALYSIS_CACHE_ENTRIES = 64;
 const analysisCache = new Map();
 
 export class AssetError extends Error {
@@ -450,14 +451,18 @@ export async function summarizeXSegLabels(side) {
   };
 }
 
-async function cachedAnalysis(side, key, refresh, loader) {
+async function cachedAnalysis(side, key, refresh, loader, { fingerprint } = {}) {
   const cacheKey = `${side}:${key}`;
   const cached = analysisCache.get(cacheKey);
-  if (!refresh && cached && Date.now() - cached.createdAt < ANALYSIS_CACHE_TTL_MS) {
+  if (!refresh && cached && Date.now() - cached.createdAt < ANALYSIS_CACHE_TTL_MS
+      && (fingerprint === undefined || cached.value.fingerprint === fingerprint)) {
     return { ...cached.value, cached: true };
   }
   const value = await loader();
   analysisCache.set(cacheKey, { createdAt: Date.now(), value });
+  while (analysisCache.size > MAX_ANALYSIS_CACHE_ENTRIES) {
+    analysisCache.delete(analysisCache.keys().next().value);
+  }
   return { ...value, cached: false };
 }
 
@@ -513,30 +518,49 @@ function recoveryToken() {
 
 export async function buildAlignedSimilarityGroups(
   side,
-  { refresh = false, threshold = 0.86, limit = 500, signal, onProgress } = {},
+  { refresh = false, threshold = 0.86, limit = 500, offset = 0, compareOffset = null,
+    signal, onProgress } = {},
 ) {
+  const parameters = normalizeSimilarityParameters({ threshold, limit, offset, compareOffset });
+  const { threshold: safeThreshold, limit: safeLimit, offset: safeOffset,
+    compareOffset: safeCompareOffset, windowSize, mode } = parameters;
   const directory = await verifyAlignedDirectory(side);
-  const safeThreshold = Math.min(Math.max(Number(threshold) || 0.86, 0.72), 0.98);
-  const safeLimit = Math.min(Math.max(Number(limit) || 500, 2), 500);
+  const before = await roleDatasetSnapshot(side);
   if (!directory) {
     return {
-      side, threshold: safeThreshold, total: 0, analyzedCount: 0, invalidCount: 0,
+      side, workspaceKey: PATHS.workspaceRoot, threshold: safeThreshold, total: 0, analyzedCount: 0, invalidCount: 0,
       truncated: false, groupCount: 0, groupedCount: 0, ungroupedCount: 0,
       method: "dct-hsv-edge-v1", groups: [], cached: false,
+      fingerprint: before.fingerprint, mode, offset: safeOffset,
+      compareOffset: safeCompareOffset, limit: safeLimit, windowSize,
+      pageCount: 0, pageIndex: Math.floor(safeOffset / windowSize),
+      comparePageIndex: safeCompareOffset === null ? null : Math.floor(safeCompareOffset / windowSize),
+      hasPrevious: safeOffset > 0, hasNext: false, selectedCount: 0,
+      windows: [safeOffset, ...(safeCompareOffset === null ? [] : [safeCompareOffset])]
+        .map((windowOffset, batch) => ({ batch, offset: windowOffset, count: 0,
+          analyzedCount: 0, invalidCount: 0, start: null, end: null })),
     };
   }
   const result = await cachedAnalysis(
     side,
-    `similarity:${safeThreshold.toFixed(3)}:${safeLimit}`,
+    `similarity:${JSON.stringify([safeThreshold, safeLimit, safeOffset, safeCompareOffset])}`,
     refresh,
-    () => runAssetHelper([
+    async () => ({ ...await runAssetHelper([
       "similarity", "--directory", directory, "--threshold", String(safeThreshold),
-      "--limit", String(safeLimit),
-    ], undefined, { signal, onProgress, timeoutMs: 600_000 }),
+      "--limit", String(safeLimit), "--offset", String(safeOffset),
+      ...(safeCompareOffset === null ? [] : ["--compare-offset", String(safeCompareOffset)]),
+    ], undefined, { signal, onProgress, timeoutMs: 600_000 }), fingerprint: before.fingerprint }),
+    { fingerprint: before.fingerprint },
   );
+  const after = await roleDatasetSnapshot(side);
+  if (before.fingerprint !== after.fingerprint) {
+    invalidateAnalysis(side);
+    throw new AssetError("分析期间素材已变化，请重新分析", "SIMILARITY_DATASET_CHANGED", 409);
+  }
   return {
     side,
     ...result,
+    workspaceKey: PATHS.workspaceRoot,
     groups: result.groups.map((group) => ({
       ...group,
       members: group.members.map((member) => ({
@@ -547,19 +571,56 @@ export async function buildAlignedSimilarityGroups(
   };
 }
 
-export async function roleDatasetSnapshot(side) {
+function normalizeSimilarityParameters({ threshold = 0.86, limit = 500, offset = 0,
+  compareOffset = null } = {}) {
+  const numeric = (value, fallback, label, integer = false) => {
+    const number = value === undefined || value === null ? fallback : Number(value);
+    if ((value !== undefined && value !== null && !["number", "string"].includes(typeof value))
+        || (typeof value === "string" && !value.trim())
+        || !Number.isFinite(number) || (integer && !Number.isSafeInteger(number))) {
+      throw new AssetError(`${label}需要有效${integer ? "整数" : "数值"}`, "SIMILARITY_PARAMETERS_INVALID");
+    }
+    return number;
+  };
+  const safeThreshold = Math.min(Math.max(numeric(threshold, 0.86, "相似阈值"), 0.72), 0.98);
+  const safeLimit = Math.min(Math.max(numeric(limit, 500, "分析上限", true), 2), 500);
+  const safeOffset = numeric(offset, 0, "批次起点", true);
+  const safeCompareOffset = compareOffset === undefined || compareOffset === null
+    ? null : numeric(compareOffset, 0, "比较批次起点", true);
+  if (safeOffset < 0 || (safeCompareOffset !== null && safeCompareOffset < 0)) {
+    throw new AssetError("批次起点不能为负数", "SIMILARITY_PARAMETERS_INVALID");
+  }
+  const windowSize = safeCompareOffset === null ? safeLimit : Math.min(Math.floor(safeLimit / 2), 250);
+  if (safeCompareOffset !== null && Math.abs(safeOffset - safeCompareOffset) < windowSize) {
+    throw new AssetError("请选择两个不重叠的图片批次", "SIMILARITY_WINDOWS_OVERLAP");
+  }
+  return { threshold: safeThreshold, limit: safeLimit, offset: safeOffset,
+    compareOffset: safeCompareOffset, windowSize, mode: safeCompareOffset === null ? "batch" : "paired" };
+}
+
+export async function roleDatasetSnapshot(side, { includeIdentities = false } = {}) {
   const directory = await verifyAlignedDirectory(side);
-  if (!directory) return { names: [], fingerprint: createHash("sha256").update("[]").digest("hex") };
+  if (!directory) return { names: [], fingerprint: createHash("sha256").update("[]").digest("hex"),
+    ...(includeIdentities ? { identities: new Map() } : {}) };
   const entries = (await readdir(directory, { withFileTypes: true }))
     .filter((entry) => IMAGE_NAME.test(entry.name)).sort((a, b) => a.name.localeCompare(b.name, "en"));
   const records = [];
+  const identities = new Map();
   for (const entry of entries) {
     const target = await resolveExistingAlignedImage(side, encodeURIComponent(entry.name));
     const info = await lstat(target, { bigint: true });
     records.push([entry.name, String(info.size), String(info.mtimeNs), String(info.ctimeNs)]);
+    if (includeIdentities) identities.set(entry.name, info);
   }
   return { names: records.map((record) => record[0]),
-    fingerprint: createHash("sha256").update(JSON.stringify(records)).digest("hex") };
+    fingerprint: createHash("sha256").update(JSON.stringify(records)).digest("hex"),
+    ...(includeIdentities ? { identities } : {}) };
+}
+
+function sameReviewedImage(info, expected, { afterMove = false } = {}) {
+  return Boolean(expected) && info.isFile() && !info.isSymbolicLink()
+    && sameFileIdentity(info, expected) && info.size === expected.size
+    && info.mtimeNs === expected.mtimeNs && (afterMove || info.ctimeNs === expected.ctimeNs);
 }
 
 export async function buildAlignedRoleGroups(side, { threshold = 0.5, signal, onProgress } = {}) {
@@ -910,26 +971,86 @@ export async function quarantineAlignedImage(side, encodedName) {
   return { side, token, name: path.basename(target), recoverable: true };
 }
 
-export async function quarantineAlignedImages(side, names, { maximum = 500 } = {}) {
+export async function quarantineAlignedImages(side, names, { maximum = 500, review } = {}) {
   if (!Array.isArray(names) || !names.length || names.length > maximum) {
     throw new AssetError(`批量隔离需要 1–${maximum} 个文件`, "QUARANTINE_BATCH_INVALID");
   }
   const uniqueNames = [...new Set(names.map((name) => String(name)))];
+  let reviewedFingerprint = null;
+  let reviewedIdentities = null;
+  if (review !== undefined) {
+    if (!review || typeof review !== "object" || Array.isArray(review)
+        || typeof review.fingerprint !== "string" || !/^[a-f0-9]{64}$/.test(review.fingerprint)
+        || review.side !== side || review.workspaceKey !== PATHS.workspaceRoot
+        || names.some((name) => typeof name !== "string")) {
+      throw new AssetError("相似图复核记录不属于当前项目与数据集，请重新分析", "SIMILARITY_REVIEW_INVALID", 409);
+    }
+    const snapshot = await roleDatasetSnapshot(side, { includeIdentities: true });
+    if (snapshot.fingerprint !== review.fingerprint) {
+      throw new AssetError("素材已变化，请重新分析后隔离", "SIMILARITY_DATASET_CHANGED", 409);
+    }
+    const result = await buildAlignedSimilarityGroups(side, normalizeSimilarityParameters(review));
+    if (result.fingerprint !== review.fingerprint) {
+      throw new AssetError("素材已变化，请重新分析后隔离", "SIMILARITY_DATASET_CHANGED", 409);
+    }
+    const eligible = new Set(result.groups.flatMap((group) => group.members
+      .filter((member) => !member.representative).map((member) => member.name)));
+    if (uniqueNames.some((name) => !eligible.has(name))) {
+      throw new AssetError("只能隔离本次候选组中已复核的非代表图", "SIMILARITY_SELECTION_INVALID", 409);
+    }
+    reviewedFingerprint = result.fingerprint;
+    reviewedIdentities = snapshot.identities;
+  }
   const targets = await Promise.all(uniqueNames.map((name) => (
     resolveExistingAlignedImage(side, encodeURIComponent(name))
   )));
+  if (reviewedFingerprint !== null
+      && (await roleDatasetSnapshot(side)).fingerprint !== reviewedFingerprint) {
+    throw new AssetError("素材已变化，请重新分析后隔离", "SIMILARITY_DATASET_CHANGED", 409);
+  }
   const { token, directory: destinationDirectory } = await createQuarantineTokenDirectory(side);
   const moved = [];
   try {
+    // Token creation awaits filesystem work after the earlier review check.
+    // Check again before moving, and retain each selected file's identity for
+    // later moves; our own completed moves will change the whole inventory.
+    if (reviewedFingerprint !== null
+        && (await roleDatasetSnapshot(side)).fingerprint !== reviewedFingerprint) {
+      throw new AssetError("素材已变化，请重新分析后隔离", "SIMILARITY_DATASET_CHANGED", 409);
+    }
     for (const target of targets) {
       const name = path.basename(target);
-      await rename(target, path.join(destinationDirectory, name));
+      if (reviewedIdentities !== null) {
+        await resolveExistingAlignedImage(side, encodeURIComponent(name));
+        if (!sameReviewedImage(await lstat(target, { bigint: true }), reviewedIdentities.get(name))) {
+          throw new AssetError("所选图片在隔离前已变化，请重新分析后隔离", "SIMILARITY_DATASET_CHANGED", 409);
+        }
+      }
+      const destination = path.join(destinationDirectory, name);
+      await rename(target, destination);
       moved.push(name);
+      if (reviewedIdentities !== null
+          && !sameReviewedImage(await lstat(destination, { bigint: true }), reviewedIdentities.get(name), { afterMove: true })) {
+        throw new AssetError("所选图片在隔离期间已变化，请检查恢复记录", "SIMILARITY_DATASET_CHANGED", 409);
+      }
     }
   } catch (error) {
+    const rollbackErrors = [];
     for (const name of moved) {
-      const source = path.join(destinationDirectory, name);
-      if (await pathExists(source)) await rename(source, path.join(alignedDirectory(side), name));
+      try {
+        if (reviewedIdentities !== null
+            && !sameReviewedImage(await lstat(path.join(destinationDirectory, name), { bigint: true }), reviewedIdentities.get(name), { afterMove: true })) {
+          throw new AssetError("恢复区图片已变化，原文件保留；请检查恢复记录", "QUARANTINE_IMAGE_CHANGED", 409);
+        }
+        await restoreAlignedImage(side, token, encodeURIComponent(name));
+      } catch (failure) {
+        rollbackErrors.push({ name, code: failure.code ?? "QUARANTINE_ROLLBACK_FAILED" });
+      }
+    }
+    invalidateAnalysis(side);
+    if (rollbackErrors.length) {
+      throw new AssetError("隔离未完成，部分图片保留在恢复区；请先检查恢复记录", "QUARANTINE_RECOVERY_REQUIRED", 500,
+        { side, token, originalCode: error.code ?? "QUARANTINE_MOVE_FAILED", rollbackErrors });
     }
     throw error;
   }

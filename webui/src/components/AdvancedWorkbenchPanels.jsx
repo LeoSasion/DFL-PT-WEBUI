@@ -23,6 +23,7 @@ import { runtimeApi } from "../runtime/api.js";
 import { DatasetAuditPanel } from "./ToolWorkbenchPanels.jsx";
 import { LoadingProgress } from "./ProgressFeedback.jsx";
 import { RoleGroupingPanel } from "./RoleGroupingPanel.jsx";
+import { SimilarityAuditPanel } from "./SimilarityAuditPanel.jsx";
 
 const REVIEW_PAGE_SIZE = 60;
 const LANDMARK_GROUPS = {
@@ -69,114 +70,6 @@ export function DatasetCleaningPanel(props) {
   );
 }
 
-function SimilarityAuditPanel({ side, refreshVersion, onError, onNotice, onNavigateDataset }) {
-  const { t } = useI18n();
-  const [threshold, setThreshold] = useState(0.86);
-  const [data, setData] = useState(null);
-  const [selected, setSelected] = useState([]);
-  const [busy, setBusy] = useState(false);
-  const [retry, setRetry] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      setData(null);
-      void runtimeApi.alignedSimilarity(side, {
-        threshold,
-        refresh: refreshVersion > 0 || retry > 0,
-      }).then((value) => {
-        if (cancelled) return;
-        setData(value);
-        setSelected([]);
-      }).catch((error) => {
-        if (!cancelled) onError(error);
-      });
-    }, 180);
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [onError, refreshVersion, retry, side, threshold]);
-
-  const selectedSet = useMemo(() => new Set(selected), [selected]);
-  const toggle = (name) => setSelected((current) => (
-    current.includes(name) ? current.filter((value) => value !== name) : [...current, name]
-  ));
-  const selectGroupDuplicates = (group) => {
-    const names = group.members.filter((member) => !member.representative).map((member) => member.name);
-    setSelected((current) => [...new Set([...current, ...names])]);
-  };
-  const quarantine = async () => {
-    if (!selected.length || !window.confirm(t(
-      "将选中的 {count} 张候选重复图移入可恢复隔离区吗？代表图不会自动处理。",
-      { count: selected.length },
-    ))) return;
-    setBusy(true);
-    try {
-      const result = await runtimeApi.quarantineAlignedBatch(side, selected);
-      onNotice(t("已隔离 {count} 张相似候选，可在数据集页恢复。", { count: result.count }));
-      setRetry((value) => value + 1);
-    } catch (error) {
-      onError(error);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (!data) return <PanelState loading icon={<IconSparkles size={26} />} title={t("正在建立视觉相似候选组…")} detail={t("本地使用 DCT、色彩与边缘描述子，最多分析 500 张，不调用外部识别服务。") } />;
-  return (
-    <div className="similarity-workbench">
-      {busy ? <LoadingProgress compact label={t("正在隔离相似候选…")} detail={t("批次共用一个可恢复令牌")} /> : null}
-      <header className="similarity-toolbar">
-        <div>
-          <strong>{t("视觉相似候选")}</strong>
-          <span>{t("{groups} 组 · {items} 张成组 · {single} 张未成组", {
-            groups: data.groupCount,
-            items: data.groupedCount,
-            single: data.ungroupedCount,
-          })}</span>
-        </div>
-        <label>
-          <span>{t("相似阈值")}</span>
-          <input type="range" min="0.72" max="0.98" step="0.01" value={threshold} onChange={(event) => setThreshold(Number(event.target.value))} />
-          <strong>{threshold.toFixed(2)}</strong>
-        </label>
-        <button className="button secondary" type="button" onClick={() => setRetry((value) => value + 1)}><IconRefresh size={15} />{t("重新分析")}</button>
-      </header>
-      <div className="similarity-summary">
-        <div><span>{t("已分析")}</span><strong>{data.analyzedCount}</strong></div>
-        <div><span>{t("候选组")}</span><strong>{data.groupCount}</strong></div>
-        <div><span>{t("已选择隔离")}</span><strong>{selected.length}</strong></div>
-        <p>{data.truncated ? t("数据量超过 500 张；当前仅预检前 500 张，暂不支持切换批次或跨批查重。") : t("当前 aligned 已完整分析。")}</p>
-      </div>
-      {data.groups.length ? (
-        <div className="similarity-groups">
-          {data.groups.map((group) => (
-            <section key={group.id}>
-              <header>
-                <div><strong>{t("候选组 {id}", { id: group.id.replace("similar-", "") })}</strong><span>{t("{count} 张 · 平均 {score}", { count: group.memberCount, score: group.meanScore.toFixed(3) })}</span></div>
-                <button type="button" onClick={() => selectGroupDuplicates(group)}><IconCheck size={14} />{t("选中非代表图")}</button>
-              </header>
-              <div className="similarity-members">
-                {group.members.map((member) => (
-                  <article className={`${member.representative ? "is-representative" : ""} ${selectedSet.has(member.name) ? "is-selected" : ""}`} key={member.name}>
-                    <button type="button" disabled={member.representative} onClick={() => toggle(member.name)} aria-pressed={selectedSet.has(member.name)}>
-                      <img src={member.imageUrl} alt="" loading="lazy" decoding="async" />
-                      <span>{member.representative ? t("代表图") : selectedSet.has(member.name) ? t("待隔离") : t("候选")}</span>
-                    </button>
-                    <div><strong title={member.name}>{member.name}</strong><small>{member.score.toFixed(3)}</small></div>
-                    <button type="button" onClick={() => onNavigateDataset(side, member)}>{t("查看")}</button>
-                  </article>
-                ))}
-              </div>
-            </section>
-          ))}
-        </div>
-      ) : <PanelState icon={<IconCheck size={26} />} title={t("当前阈值下没有相似组")} detail={t("可适当降低阈值生成更宽松的候选，但仍需人工复核。") } />}
-      <footer className="similarity-action-dock">
-        <div><IconArchive size={18} /><span><strong>{t("{count} 张待处理", { count: selected.length })}</strong><small>{t("批次共用一个恢复令牌，不会删除原图")}</small></span></div>
-        <button className="button primary" type="button" disabled={!selected.length || busy} onClick={() => void quarantine()}>{busy ? t("正在隔离…") : t("移入可恢复隔离区")}</button>
-      </footer>
-    </div>
-  );
-}
 
 function cloneLandmarks(points) {
   return points.map(([x, y]) => [Number(x), Number(y)]);

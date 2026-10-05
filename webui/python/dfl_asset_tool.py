@@ -1071,29 +1071,62 @@ def similarity_descriptor(image):
     return descriptor / (np.linalg.norm(descriptor) + 1e-8)
 
 
-def group_similar_images(directory, threshold=0.86, limit=MAX_SIMILARITY_ITEMS):
-    safe_threshold = min(max(float(threshold), 0.72), 0.98)
+def group_similar_images(directory, threshold=0.86, limit=MAX_SIMILARITY_ITEMS,
+                         offset=0, compare_offset=None):
+    threshold_value = float(threshold)
+    if not math.isfinite(threshold_value):
+        raise ValueError("similarity threshold must be finite")
+    safe_threshold = min(max(threshold_value, 0.72), 0.98)
+    if isinstance(limit, bool) or not math.isfinite(float(limit)) or int(limit) != limit:
+        raise ValueError("similarity limit must be an integer")
     safe_limit = min(max(int(limit), 2), MAX_SIMILARITY_ITEMS)
+    if isinstance(offset, bool) or int(offset) != offset or offset < 0:
+        raise ValueError("similarity offset must be a nonnegative integer")
+    paired = compare_offset is not None
+    if paired and (isinstance(compare_offset, bool) or int(compare_offset) != compare_offset
+                   or compare_offset < 0):
+        raise ValueError("similarity comparison offset must be a nonnegative integer")
+    safe_offset = int(offset)
+    window_size = min(safe_limit // 2, 250) if paired else safe_limit
+    if paired and abs(safe_offset - compare_offset) < window_size:
+        raise ValueError("similarity windows must not overlap")
     all_files = iter_images(directory)
-    files = all_files[:safe_limit]
+    offsets = [safe_offset, int(compare_offset)] if paired else [safe_offset]
+    windows = []
+    files = []
+    batches = []
+    for batch, window_offset in enumerate(offsets):
+        selected = all_files[window_offset:window_offset + window_size]
+        windows.append({
+            "batch": batch, "offset": window_offset, "count": len(selected),
+            "analyzedCount": 0, "invalidCount": 0,
+            "start": window_offset + 1 if selected else None,
+            "end": window_offset + len(selected) if selected else None,
+        })
+        files.extend(selected)
+        batches.extend([batch] * len(selected))
     records = []
     invalid_count = 0
     pair_total = len(files) * max(len(files) - 1, 0) // 2
     total_work = len(files) + pair_total
     completed = 0
     emit_progress("similarity-features", completed, total_work, "正在提取相似度特征")
-    for image_path in files:
+    for image_path, batch in zip(files, batches):
         try:
             image = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
             if image is None:
                 invalid_count += 1
+                windows[batch]["invalidCount"] += 1
                 continue
             records.append({
                 "name": image_path.name,
                 "descriptor": similarity_descriptor(image),
+                "batch": batch,
             })
+            windows[batch]["analyzedCount"] += 1
         except Exception:
             invalid_count += 1
+            windows[batch]["invalidCount"] += 1
         finally:
             completed += 1
             if progress_due(completed, total_work):
@@ -1141,6 +1174,9 @@ def group_similar_images(directory, threshold=0.86, limit=MAX_SIMILARITY_ITEMS):
     for indexes in grouped.values():
         if len(indexes) < 2:
             continue
+        cross_batch = len({records[index]["batch"] for index in indexes}) > 1
+        if paired and not cross_batch:
+            continue
         representative = max(
             indexes,
             key=lambda index: float(np.mean([similarities[index, other] for other in indexes])),
@@ -1150,6 +1186,7 @@ def group_similar_images(directory, threshold=0.86, limit=MAX_SIMILARITY_ITEMS):
                 "name": records[index]["name"],
                 "score": round(float(similarities[representative, index]), 4),
                 "representative": index == representative,
+                "batch": records[index]["batch"],
             } for index in indexes),
             key=lambda item: (-item["score"], item["name"].casefold()),
         )
@@ -1165,16 +1202,29 @@ def group_similar_images(directory, threshold=0.86, limit=MAX_SIMILARITY_ITEMS):
             "minimumScore": round(min(pair_scores), 4) if pair_scores else 1.0,
             "meanScore": round(float(np.mean(pair_scores)), 4) if pair_scores else 1.0,
             "members": members,
+            "crossBatch": cross_batch,
         })
     groups.sort(key=lambda item: (-item["memberCount"], -item["meanScore"], item["id"]))
     grouped_count = sum(group["memberCount"] for group in groups)
     return {
         "schemaVersion": 1,
+        "mode": "paired" if paired else "batch",
+        "offset": safe_offset,
+        "compareOffset": int(compare_offset) if paired else None,
+        "limit": safe_limit,
+        "windowSize": window_size,
+        "pageCount": math.ceil(len(all_files) / window_size),
+        "pageIndex": safe_offset // window_size,
+        "comparePageIndex": int(compare_offset) // window_size if paired else None,
+        "hasPrevious": safe_offset > 0,
+        "hasNext": safe_offset + window_size < len(all_files),
+        "windows": windows,
+        "selectedCount": len(files),
         "threshold": safe_threshold,
         "total": len(all_files),
         "analyzedCount": count,
         "invalidCount": invalid_count,
-        "truncated": len(all_files) > safe_limit,
+        "truncated": len(all_files) > len(files),
         "groupCount": len(groups),
         "groupedCount": grouped_count,
         "ungroupedCount": max(count - grouped_count, 0),
@@ -1448,6 +1498,7 @@ def main():
     parser.add_argument("--frames", type=Path)
     parser.add_argument("--file", type=Path)
     parser.add_argument("--offset", type=int, default=0)
+    parser.add_argument("--compare-offset", type=int)
     parser.add_argument("--limit", type=int, default=60)
     parser.add_argument("--side", choices=("src", "dst"))
     parser.add_argument("--threshold", type=float, default=0.86)
@@ -1515,7 +1566,8 @@ def main():
     if args.action == "similarity":
         if args.directory is None or not args.directory.is_dir():
             raise ValueError("aligned directory does not exist")
-        emit(group_similar_images(args.directory, args.threshold, args.limit))
+        emit(group_similar_images(args.directory, args.threshold, args.limit,
+                                 args.offset, args.compare_offset))
         return
 
     if args.action == "roles":

@@ -24,6 +24,7 @@ import {
   previewAlignedRepair,
   quarantineAlignedImage,
   quarantineAlignedImages,
+  roleDatasetSnapshot,
   restoreAlignedRepair,
   restoreAlignedImage,
   saveAlignedAnnotation,
@@ -86,16 +87,20 @@ async function readImageInput(request) {
 }
 
 async function sendImageServiceFile(response, file, { download = false } = {}) {
-  const info = await stat(file.path);
+  // Saved results carry the exact bytes checked against their original digest.
+  // Reopening their path could serve a replacement created after verification.
+  const bytes = Buffer.isBuffer(file.bytes) ? file.bytes : null;
+  const size = bytes ? bytes.length : (await stat(file.path)).size;
   response.writeHead(200, {
     "Content-Type": file.mimeType,
-    "Content-Length": info.size,
+    "Content-Length": size,
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
     ...(download ? {
       "Content-Disposition": `attachment; filename="image${path.extname(file.name)}"; filename*=UTF-8''${encodeURIComponent(file.name)}`,
     } : {}),
   });
+  if (bytes) { response.end(bytes); return; }
   createReadStream(file.path).on("error", () => response.destroy()).pipe(response);
 }
 const ME_CONFIG_KEYS = new Set(ME_CONFIG_PARAMETERS.map(parameter => parameter.configKey));
@@ -546,6 +551,12 @@ export class RuntimeServer {
     }
   }
 
+  async readSimilarityReviewState(side) {
+    const snapshot = await roleDatasetSnapshot(side);
+    return { side, workspaceKey: PATHS.workspaceRoot, names: snapshot.names,
+      fingerprint: snapshot.fingerprint };
+  }
+
   operationSpec(body = {}) {
     const kind = typeof body.kind === "string" ? body.kind.trim() : "";
     if (!OPERATION_KIND_SET.has(kind)) {
@@ -588,6 +599,8 @@ export class RuntimeServer {
           refresh,
           threshold: parameters.threshold,
           limit: parameters.limit,
+          offset: parameters.offset,
+          compareOffset: parameters.compareOffset,
           signal,
           onProgress,
         }),
@@ -1004,6 +1017,8 @@ export class RuntimeServer {
           refresh: url.searchParams.get("refresh") === "1",
           threshold: url.searchParams.get("threshold"),
           limit: url.searchParams.get("limit"),
+          offset: url.searchParams.get("offset"),
+          compareOffset: url.searchParams.get("compareOffset"),
         }),
       });
     }
@@ -1216,6 +1231,14 @@ export class RuntimeServer {
     if (request.method === "GET" && alignedImageMatch) {
       return streamAlignedImage(response, alignedImageMatch[1], alignedImageMatch[2]);
     }
+    const similarityReviewStateMatch = url.pathname.match(/^\/api\/assets\/(src|dst)\/similarity-review-state$/);
+    if (request.method === "GET" && similarityReviewStateMatch) {
+      this.assertNoWorkspaceMutation();
+      const data = await this.readSimilarityReviewState(similarityReviewStateMatch[1]);
+      // Do not present a read as settled if another write began while it ran.
+      this.assertNoWorkspaceMutation();
+      return sendJson(response, 200, { ok: true, data });
+    }
     const quarantineListMatch = url.pathname.match(/^\/api\/assets\/(src|dst)\/quarantine$/);
     if (request.method === "GET" && quarantineListMatch) {
       return sendJson(response, 200, {
@@ -1270,7 +1293,7 @@ export class RuntimeServer {
         ok: true,
         data: await this.withWorkspaceMutation("批量隔离 aligned 图片", async () => {
           const body = await readJsonBody(request);
-          return quarantineAlignedImages(quarantineBatchMatch[1], body.names);
+          return quarantineAlignedImages(quarantineBatchMatch[1], body.names, { review: body.review });
         }),
       });
     }

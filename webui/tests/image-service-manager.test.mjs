@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { link, mkdtemp, mkdir, readFile, rename, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -382,4 +382,222 @@ test("confirmed model is immutable while a local input is being uploaded", async
   assert.equal(submitted.model, previousModel);
   assert.equal(manager.getTask(task.id).model, previousModel);
   assert.equal(manager.settings().model, "another-confirmed-model");
+});
+
+test("a saved result with changed size is refused and recovered without another generation POST", async (t) => {
+  const { manager, calls } = await fixture(t);
+  const task = await finish(manager, await manager.createTask(request()));
+  const saved = await manager.resultFile(task.id, 0);
+  await writeFile(saved.path, "corrupted");
+  await assert.rejects(manager.resultFile(task.id, 0), { code: "IMAGE_RESULT_CHANGED" });
+  const recovered = await finish(manager, await manager.checkTask(task.id));
+  assert.equal(recovered.status, "completed");
+  assert.equal(recovered.providerTaskId, task.providerTaskId);
+  assert.deepEqual(await readFile(saved.path), PNG);
+  assert.equal(calls.filter(call => call.request.method === "POST").length, 1);
+  assert.equal(calls.filter(call => call.url === "https://cdn.example.com/result.png").length, 2);
+});
+
+test("same-size damage is detected by the original SHA-256 instead of being silently reused", async (t) => {
+  const { manager, calls } = await fixture(t);
+  const task = await finish(manager, await manager.createTask(request()));
+  const saved = await manager.resultFile(task.id, 0);
+  const changed = Buffer.from(PNG);
+  changed[40] ^= 1;
+  await writeFile(saved.path, changed);
+  await assert.rejects(manager.resultFile(task.id, 0), { code: "IMAGE_RESULT_CHANGED" });
+  const recovered = await finish(manager, await manager.checkTask(task.id));
+  assert.equal(recovered.status, "completed");
+  assert.deepEqual(await readFile(saved.path), PNG);
+  assert.equal(calls.filter(call => call.request.method === "POST").length, 1);
+  assert.equal(calls.filter(call => call.url === "https://cdn.example.com/result.png").length, 2);
+});
+
+test("a missing saved result is recovered from the same provider task", async (t) => {
+  const { manager, calls } = await fixture(t);
+  const task = await finish(manager, await manager.createTask(request()));
+  const saved = await manager.resultFile(task.id, 0);
+  await unlink(saved.path);
+  await assert.rejects(manager.resultFile(task.id, 0), { code: "IMAGE_RESULT_NOT_FOUND" });
+  const recovered = await finish(manager, await manager.checkTask(task.id));
+  assert.equal(recovered.providerTaskId, task.providerTaskId);
+  assert.deepEqual(await readFile(saved.path), PNG);
+  assert.equal(calls.filter(call => call.request.method === "POST").length, 1);
+});
+
+test("legacy result records without an original digest require redownload, never a fabricated local verification", async (t) => {
+  const { manager, paths, calls, fetch } = await fixture(t);
+  const task = await finish(manager, await manager.createTask(request()));
+  const legacy = manager.tasks.get(task.id);
+  delete legacy.results[0].sha256;
+  await manager.persist(legacy);
+  await manager.close();
+  const resumed = new ImageServiceManager({ paths, fetch, credentials: codec, resolveHostname: resolver, delay: async () => {} });
+  t.after(() => resumed.close());
+  await resumed.initialize();
+  await assert.rejects(resumed.resultFile(task.id, 0), { code: "IMAGE_RESULT_UNVERIFIED" });
+  assert.equal(resumed.tasks.get(task.id).results[0].sha256, undefined);
+  assert.equal(JSON.parse(await readFile(path.join(resumed.tasksRoot, `${task.id}.json`), "utf8")).results[0].sha256, undefined);
+  const recovered = await finish(resumed, await resumed.checkTask(task.id));
+  assert.equal(recovered.status, "completed");
+  assert.equal(recovered.providerTaskId, task.providerTaskId);
+  assert.match(resumed.tasks.get(task.id).results[0].sha256, /^[a-f0-9]{64}$/);
+  assert.deepEqual(await readFile((await resumed.resultFile(task.id, 0)).path), PNG);
+  assert.equal(calls.filter(call => call.request.method === "POST").length, 1);
+  assert.equal(calls.filter(call => call.url === "https://cdn.example.com/result.png").length, 2);
+});
+
+test("legacy records without a valid saved size cannot be treated as verified", async (t) => {
+  const { manager } = await fixture(t);
+  const task = await finish(manager, await manager.createTask(request()));
+  const result = manager.tasks.get(task.id).results[0];
+  for (const size of [undefined, 0, -1, 50 * 1024 * 1024 + 1]) {
+    result.size = size;
+    await assert.rejects(manager.resultFile(task.id, 0), { code: "IMAGE_RESULT_UNVERIFIED" });
+  }
+});
+
+test("linked result files cannot be read or overwritten through recovery", async (t) => {
+  const { manager, root, calls } = await fixture(t);
+  const task = await finish(manager, await manager.createTask(request()));
+  const saved = await manager.resultFile(task.id, 0);
+  const foreign = path.join(root, "outside-result.png");
+  await writeFile(foreign, PNG);
+  await unlink(saved.path);
+  try { await symlink(foreign, saved.path, "file"); }
+  catch (error) {
+    if (error.code === "EPERM" || error.code === "ENOSYS") { t.skip("file symlinks unavailable in this environment"); return; }
+    throw error;
+  }
+  await assert.rejects(manager.resultFile(task.id, 0), { code: "IMAGE_PATH_INVALID" });
+  const checked = await finish(manager, await manager.checkTask(task.id));
+  assert.equal(checked.status, "paused");
+  assert.deepEqual(await readFile(foreign), PNG);
+  assert.equal(calls.filter(call => call.request.method === "POST").length, 1);
+  assert.equal(calls.filter(call => call.url === "https://cdn.example.com/result.png").length, 1);
+});
+
+test("hard-linked result files cannot masquerade as the task-owned saved image", async (t) => {
+  const { manager, root, calls } = await fixture(t);
+  const task = await finish(manager, await manager.createTask(request()));
+  const saved = await manager.resultFile(task.id, 0);
+  const foreign = path.join(root, "outside-hardlink.png");
+  await writeFile(foreign, PNG);
+  await unlink(saved.path);
+  await link(foreign, saved.path);
+  await assert.rejects(manager.resultFile(task.id, 0), { code: "IMAGE_PATH_INVALID" });
+  const checked = await finish(manager, await manager.checkTask(task.id));
+  assert.equal(checked.status, "paused");
+  assert.deepEqual(await readFile(foreign), PNG);
+  assert.equal(calls.filter(call => call.request.method === "POST").length, 1);
+  assert.equal(calls.filter(call => call.url === "https://cdn.example.com/result.png").length, 1);
+});
+
+test("a task directory linked to another location is refused before any result publication", async (t) => {
+  const { manager, root, calls } = await fixture(t);
+  const task = await finish(manager, await manager.createTask(request()));
+  const directory = path.join(manager.resultsRoot, task.id);
+  const foreign = path.join(root, "foreign-task-directory");
+  await mkdir(foreign);
+  await writeFile(path.join(foreign, "result-1.png"), PNG);
+  await rename(directory, path.join(root, "original-result-directory"));
+  await symlink(foreign, directory, "junction");
+  await assert.rejects(manager.resultFile(task.id, 0), { code: "IMAGE_PATH_INVALID" });
+  const checked = await finish(manager, await manager.checkTask(task.id));
+  assert.equal(checked.status, "paused");
+  assert.deepEqual(await readFile(path.join(foreign, "result-1.png")), PNG);
+  assert.equal(calls.filter(call => call.request.method === "POST").length, 1);
+  assert.equal(calls.filter(call => call.url === "https://cdn.example.com/result.png").length, 1);
+});
+
+test("a result root that becomes a directory link is never used for reading or publishing", async (t) => {
+  const { manager, root, calls } = await fixture(t);
+  const task = await finish(manager, await manager.createTask(request()));
+  const original = path.join(root, "original-results-root");
+  await rename(manager.resultsRoot, original);
+  await symlink(original, manager.resultsRoot, "junction");
+  await assert.rejects(manager.resultFile(task.id, 0), { code: "IMAGE_PATH_INVALID" });
+  const checked = await finish(manager, await manager.checkTask(task.id));
+  assert.equal(checked.status, "paused");
+  assert.deepEqual(await readFile(path.join(original, task.id, "result-1.png")), PNG);
+  assert.equal(calls.filter(call => call.request.method === "POST").length, 1);
+});
+
+test("result publication rechecks its directory after the network download", async (t) => {
+  let managerRef;
+  let rootRef;
+  let foreign;
+  let posts = 0;
+  const { manager, root } = await fixture(t, { fetch: async (url, options) => {
+    if (options.method === "POST") { posts++; return json({ id: "p-directory-swap" }); }
+    if (url.includes("/v1/image/generations/")) return json(complete());
+    const task = [...managerRef.tasks.values()][0];
+    const directory = path.join(managerRef.resultsRoot, task.id);
+    foreign = path.join(rootRef, "foreign-during-download");
+    await mkdir(foreign);
+    await writeFile(path.join(foreign, "result-1.png"), "foreign file must be preserved");
+    await rename(directory, path.join(rootRef, "directory-before-download"));
+    await symlink(foreign, directory, "junction");
+    return new Response(PNG, { headers: { "content-type": "image/png" } });
+  } });
+  managerRef = manager;
+  rootRef = root;
+  const task = await finish(manager, await manager.createTask(request()));
+  assert.equal(task.status, "paused");
+  assert.equal(task.results.length, 0);
+  assert.equal(await readFile(path.join(foreign, "result-1.png"), "utf8"), "foreign file must be preserved");
+  assert.equal(posts, 1);
+});
+
+test("a failed recovery query remains visible when a previously completed local result is damaged", async (t) => {
+  let failQueries = false;
+  let posts = 0;
+  const { manager } = await fixture(t, { fetch: async (url, options) => {
+    if (options.method === "POST") { posts++; return json({ id: "p-visible-recovery" }); }
+    if (url.includes("/v1/image/generations/")) return failQueries
+      ? json({ error: "offline query failure" }, 503) : json(complete());
+    return new Response(PNG, { headers: { "content-type": "image/png" } });
+  } });
+  const task = await finish(manager, await manager.createTask(request()));
+  const saved = await manager.resultFile(task.id, 0);
+  await writeFile(saved.path, "damaged-before-query");
+  failQueries = true;
+  const checked = await finish(manager, await manager.checkTask(task.id));
+  assert.equal(checked.status, "paused");
+  assert.match(checked.error, /查询|平台/);
+  assert.equal(checked.providerTaskId, task.providerTaskId);
+  assert.equal(manager.listTasks()[0].status, "paused");
+  assert.equal(manager.listTasks()[0].error, checked.error);
+  assert.equal(posts, 1);
+});
+
+test("failed settlement queries preserve verified saved results and expose the retry error", async (t) => {
+  let failQueries = false;
+  let posts = 0;
+  let downloads = 0;
+  const { manager } = await fixture(t, { fetch: async (url, options) => {
+    if (options.method === "POST") { posts++; return json({ id: "p-preserved-result" }); }
+    if (url.includes("/v1/image/generations/")) return failQueries
+      ? json({ error: "offline" }, 503) : json(complete());
+    downloads++;
+    return new Response(PNG, { headers: { "content-type": "image/png" } });
+  } });
+  const task = await finish(manager, await manager.createTask(request()));
+  failQueries = true;
+  const checked = await finish(manager, await manager.checkTask(task.id));
+  assert.equal(checked.status, "completed");
+  assert.match(checked.error, /查询|平台/);
+  assert.equal(checked.providerTaskId, task.providerTaskId);
+  assert.deepEqual((await manager.resultFile(task.id, 0)).bytes, PNG);
+  assert.equal(posts, 1);
+  assert.equal(downloads, 1);
+});
+
+test("a verified result read retains the exact checked bytes after its file is replaced", async (t) => {
+  const { manager } = await fixture(t);
+  const task = await finish(manager, await manager.createTask(request()));
+  const saved = await manager.resultFile(task.id, 0);
+  await writeFile(saved.path, "replacement-after-verification");
+  assert.deepEqual(saved.bytes, PNG);
+  await assert.rejects(manager.resultFile(task.id, 0), { code: "IMAGE_RESULT_CHANGED" });
 });

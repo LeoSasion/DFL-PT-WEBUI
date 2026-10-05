@@ -441,11 +441,11 @@ export const runtimeApi = {
     method: "POST", body: JSON.stringify({ names, fingerprint }),
   }),
   alignedSimilarity: (side, {
-    refresh = false, threshold = 0.86, limit = 500, ...operationOptions
+    refresh = false, threshold = 0.86, limit = 500, offset = 0, compareOffset = null, ...operationOptions
   } = {}) => runOperation(
     "similarity",
     side,
-    { refresh, threshold, limit },
+    { refresh, threshold, limit, offset, compareOffset },
     operationOptions,
   ),
   alignedPack: (side, { refresh = false, ...operationOptions } = {}) => runOperation(
@@ -493,10 +493,13 @@ export const runtimeApi = {
     `/api/assets/${side}/aligned/${encodeURIComponent(name)}/quarantine`,
     { method: "POST" },
   ),
-  quarantineAlignedBatch: (side, names) => request(
+  quarantineAlignedBatch: (side, names, review, { signal, requestTimeoutMs = 30_000 } = {}) => withRequestDeadline(activeSignal => request(
     `/api/assets/${side}/aligned/quarantine-batch`,
-    { method: "POST", body: JSON.stringify({ names }) },
-  ),
+    { method: "POST", body: JSON.stringify({ names, ...(review ? { review } : {}) }), signal: activeSignal },
+  ), { signal, timeoutMs: requestTimeoutMs }),
+  similarityReviewState: (side, { signal, requestTimeoutMs = 10_000 } = {}) => withRequestDeadline(activeSignal => request(
+    `/api/assets/${side}/similarity-review-state`, { signal: activeSignal },
+  ), { signal, timeoutMs: requestTimeoutMs }),
   alignedQuarantine: (side, { offset = 0, limit = 60 } = {}) => request(
     `/api/assets/${side}/quarantine?offset=${offset}&limit=${limit}`,
   ),
