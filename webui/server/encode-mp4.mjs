@@ -3,8 +3,8 @@ import path from "node:path";
 import { PATHS } from "./paths.mjs";
 
 const mode = process.argv[2];
-if (!["standard", "lossless", "avi", "mov-lossless"].includes(mode)) {
-  process.stderr.write("[WEB] 编码模式无效；只允许 standard、lossless、avi 或 mov-lossless。\r\n");
+if (!["standard", "lossless", "avi", "mov-lossless", "master", "quality"].includes(mode)) {
+  process.stderr.write("[WEB] 编码模式无效；只允许 standard、lossless、avi、mov-lossless、master 或 quality。\r\n");
   process.exit(2);
 }
 const bitrate = process.argv[3] ?? "";
@@ -18,10 +18,13 @@ const common = [
   "videoed",
   "video-from-sequence",
 ];
-const extension = mode === "avi" ? "avi" : mode === "mov-lossless" ? "mov" : "mp4";
-const resultIsLossless = ["lossless", "mov-lossless"].includes(mode);
+const extension = mode === "master" ? "nut" : mode === "avi" ? "avi" : mode === "mov-lossless" ? "mov" : "mp4";
+const resultIsLossless = ["lossless", "mov-lossless", "master"].includes(mode);
 
-const steps = [
+function outputSteps(selectedMode) {
+ const extension = selectedMode === "master" ? "nut" : selectedMode === "avi" ? "avi" : selectedMode === "mov-lossless" ? "mov" : "mp4";
+ const resultIsLossless = ["lossless", "mov-lossless", "master"].includes(selectedMode);
+ return [
   {
     label: `正在生成 result.${extension}`,
     args: [
@@ -33,7 +36,7 @@ const steps = [
       "--reference-file",
       path.join(PATHS.workspaceRoot, "data_dst.*"),
       "--include-audio",
-      ...(bitrate ? ["--bitrate", bitrate] : []),
+      ...(bitrate ? ["--bitrate", bitrate] : selectedMode === "quality" ? ["--bitrate", "25"] : []),
       ...(resultIsLossless ? ["--lossless"] : []),
     ],
   },
@@ -51,6 +54,8 @@ const steps = [
     ],
   },
 ];
+}
+const steps = mode === "quality" ? [...outputSteps("master"), ...outputSteps("quality")] : outputSteps(mode);
 
 function runStep(step, index) {
   return new Promise((resolve, reject) => {
@@ -79,11 +84,14 @@ function runStep(step, index) {
 }
 
 try {
+  process.stdout.write(mode === "master" || mode === "quality"
+    ? "[WEB] FFV1 RGB 母版：封装后逐帧回读校验 RGB；原整数 PTS 与输出误差记录在 .media.json。\r\n"
+    : resultIsLossless ? "[WEB] H.264 CRF 0 只保证编码后的 YUV 域；YUV420p 转换并非 RGB 全链路无损。\r\n" : "");
   for (const [index, step] of steps.entries()) {
     await runStep(step, index);
   }
   process.stdout.write(
-    `\r\n\u001b[38;2;44;227;159m[WEB]\u001b[0m 两个 ${extension.toUpperCase()} 文件均已生成。\r\n`,
+    `\r\n\u001b[38;2;44;227;159m[WEB]\u001b[0m ${mode === "quality" ? "RGB 母版与 MP4 播放版" : `两个 ${extension.toUpperCase()} 文件`}均已生成。\r\n`,
   );
 } catch (error) {
   process.stderr.write(

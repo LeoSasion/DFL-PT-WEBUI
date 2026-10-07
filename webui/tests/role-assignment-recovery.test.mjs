@@ -21,7 +21,7 @@ async function fixture(run) {
   const restores = [];
   try {
     await originalFs.mkdir(server, { recursive:true });
-    for (const name of ["paths.mjs", "environment.mjs", "asset-manager.mjs", "role-assignment-manager.mjs"]) {
+    for (const name of ["paths.mjs", "environment.mjs", "helper-process.mjs", "process-tree.mjs", "asset-manager.mjs", "role-assignment-manager.mjs"]) {
       await originalFs.copyFile(path.join(serverRoot, name), path.join(server, name));
     }
     await originalFs.mkdir(runtime, { recursive:true });

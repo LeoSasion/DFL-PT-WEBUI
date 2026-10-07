@@ -42,7 +42,13 @@ import { DisabledExternalWindowAdapter } from "./external-window-adapter.mjs";
 import { JobManager } from "./job-manager.mjs";
 import { ModelBackupManager } from "./model-backup-manager.mjs";
 import { OperationManager } from "./operation-manager.mjs";
+import { assertHelperStopsConfirmed, closeHelperProcesses } from "./helper-process.mjs";
 import { ImageServiceManager } from "./image-service-manager.mjs";
+import { RestorationManager } from "./restoration-manager.mjs";
+import { createMaskAssistDraft, listMaskAssistDrafts, readMaskAssistDraft, publishMaskAssistCopies, resolveMaskAssistFile } from "./mask-assist-manager.mjs";
+import { bestFacesetManager } from "./best-faceset-manager.mjs";
+import { projectUiStateManager } from "./project-ui-state-manager.mjs";
+import { inspectMergePreview, resolveMergePreviewAsset } from "./merge-preview-manager.mjs";
 import { PATHS, pathExists } from "./paths.mjs";
 import { ProjectManager } from "./project-manager.mjs";
 import { buildDiagnosticSnapshot, inspectStorage } from "./system-diagnostics.mjs";
@@ -129,6 +135,16 @@ export const SUPPORTED_OPERATION_KINDS = Object.freeze([
   "pack",
   "coverage",
   "detect-scenes",
+  "mask-assist",
+  "mask-publish",
+  "best-faceset-init",
+  "best-faceset-analyze",
+  "best-faceset-select",
+  "best-faceset-publish",
+  "best-faceset-recover",
+  "best-faceset-review-create",
+  "best-faceset-review-decide",
+  "best-faceset-review-undo",
 ]);
 const OPERATION_KIND_SET = new Set(SUPPORTED_OPERATION_KINDS);
 const OPERATION_STAGE_LABELS = Object.freeze({
@@ -224,7 +240,11 @@ async function sendVideoArtifact(request, response, target) {
     });
   }
   const fileStat = await stat(target);
-  const contentType = path.extname(target).toLowerCase() === ".avi"
+  const contentType = path.extname(target).toLowerCase() === ".json"
+    ? "application/json; charset=utf-8"
+    : path.extname(target).toLowerCase() === ".nut"
+      ? "application/octet-stream"
+      : path.extname(target).toLowerCase() === ".avi"
     ? "video/x-msvideo"
     : path.extname(target).toLowerCase() === ".mov"
       ? "video/quicktime"
@@ -344,6 +364,9 @@ export class RuntimeServer {
     modelBackupManager = new ModelBackupManager(),
     operationManager = new OperationManager(),
     imageServiceManager = new ImageServiceManager(),
+    restorationManager = null,
+    facesetManager = bestFacesetManager,
+    uiStateManager = projectUiStateManager,
     externalWindowAdapter = new DisabledExternalWindowAdapter(),
     projectManager = new ProjectManager(),
     commandPreparer = prepareCommand,
@@ -359,6 +382,15 @@ export class RuntimeServer {
     this.modelBackupManager = modelBackupManager;
     this.operationManager = operationManager;
     this.imageServiceManager = imageServiceManager;
+    this.facesetManager = facesetManager;
+    this.uiStateManager = uiStateManager;
+    this.restorationActiveTaskId = null;
+    this.restorationStartReservation = false;
+    this.qualityOperationReservation = null;
+    this.restorationManager = restorationManager ?? new RestorationManager({
+      assertCanStart: async () => { this.assertQualityOperationIdle({ ignoreRestoration: true, allowAssetAudit: true }); this.restorationStartReservation = true; },
+      onActiveChange: taskId => { this.restorationStartReservation = false; this.restorationActiveTaskId = taskId; },
+    });
     this.imageServiceInitializationError = null;
     this.externalWindowAdapter = externalWindowAdapter;
     this.projectManager = projectManager;
@@ -376,16 +408,19 @@ export class RuntimeServer {
     this.projectRestartBusyWarningIssued = false;
     this.httpServer = null;
     this.webSocketServer = null;
+    this.isStopping = false;
   }
 
   async start({ host = "127.0.0.1", port = 4174 } = {}) {
     if (!LOOPBACK_HOSTS.has(host)) {
       throw new Error("本地运行时只允许监听 loopback 地址");
     }
+    this.isStopping = false;
     await Promise.all([
       this.jobManager.initialize(),
       this.operationManager.initialize(),
       this.trainingEvaluationManager.initialize(),
+      this.restorationManager.initialize(),
       Promise.resolve().then(() => this.imageServiceManager.initialize()).catch(error => {
         // An unreadable optional image-service record must not disable DFL.
         // Preserve the file and report an unknown state on this feature's API.
@@ -433,6 +468,7 @@ export class RuntimeServer {
     return [
       ...this.operationManager.list().filter((operation) => ACTIVE_OPERATION_STATES.has(operation?.status)),
       ...(this.imageServiceManager.activeTasks?.() ?? []),
+      ...(this.restorationManager.activeTasks?.() ?? []),
     ];
   }
 
@@ -499,6 +535,7 @@ export class RuntimeServer {
         { operationIds: activeOperations.map((operation) => operation.id) },
       );
     }
+    this.isStopping = true;
     if (!plannedRestart) {
       if (this.projectRestartTimer) clearTimeout(this.projectRestartTimer);
       this.projectRestartTimer = null;
@@ -506,7 +543,14 @@ export class RuntimeServer {
       this.projectRestartBusyWarningIssued = false;
     }
     await this.jobManager.flushAll?.();
+    const qualityOperations = activeOperations.filter(operation => this.operationManager.get(operation.id)?.cancellable);
+    await Promise.all(qualityOperations.map(operation => this.operationManager.cancel(operation.id)));
+    await Promise.all(qualityOperations.map(operation => this.operationManager.wait(operation.id)));
+    if (this.qualityOperationReservation?.stopUnconfirmed) throw runtimeConflict(
+      this.qualityOperationReservation.stopUnconfirmed, this.qualityOperationReservation.stopCode ?? "MASK_STOP_UNCONFIRMED");
+    await closeHelperProcesses();
     await this.imageServiceManager.close?.();
+    await this.restorationManager.close?.();
     for (const client of this.webSocketServer?.clients ?? []) client.close(1001, "服务停止");
     await new Promise((resolve) => {
       if (!this.httpServer?.listening) return resolve();
@@ -521,6 +565,15 @@ export class RuntimeServer {
   }
 
   assertNoWorkspaceMutation() {
+    assertHelperStopsConfirmed();
+    if (this.qualityOperationReservation?.stopUnconfirmed) throw runtimeConflict(
+      this.qualityOperationReservation.stopUnconfirmed, this.qualityOperationReservation.stopCode ?? "MASK_STOP_UNCONFIRMED");
+    if (this.isStopping) throw runtimeConflict("本地服务正在安全停止，请等待重启后再创建任务", "RUNTIME_STOPPING");
+    if (this.restorationStartReservation || this.restorationActiveTaskId || this.qualityOperationReservation) {
+      throw runtimeConflict("本地质量处理正在运行，请等待完成或安全取消后再操作工作区", "QUALITY_TASK_BUSY", {
+        taskId: this.restorationActiveTaskId, operation: this.qualityOperationReservation?.label,
+      });
+    }
     if (this.projectRestartPending) {
       throw runtimeConflict(
         "项目已切换，正在重启本地服务；请稍候",
@@ -534,6 +587,24 @@ export class RuntimeServer {
         { operation: this.workspaceMutation },
       );
     }
+  }
+  assertProjectUiWriteAllowed() {
+    assertHelperStopsConfirmed();
+    if (this.isStopping) throw runtimeConflict("本地服务正在安全停止，请等待重启后再保存选择", "RUNTIME_STOPPING");
+    if (this.qualityOperationReservation?.stopUnconfirmed) throw runtimeConflict(
+      this.qualityOperationReservation.stopUnconfirmed, this.qualityOperationReservation.stopCode ?? "HELPER_STOP_UNCONFIRMED");
+  }
+
+  assertQualityOperationIdle({ ignoreRestoration = false, allowAssetAudit = false } = {}) {
+    this.assertNoWorkspaceMutation();
+    const operations = ignoreRestoration
+      ? [...this.operationManager.list().filter(op => ACTIVE_OPERATION_STATES.has(op.status)), ...(this.imageServiceManager.activeTasks?.() ?? [])]
+      : this.activeOperations();
+    // An already-running CPU audit only reads the original aligned JPEGs;
+    // source restoration writes a separate directory and preserves those bytes.
+    const conflicts = operations.filter(operation => !(allowAssetAudit && operation.kind === "asset-audit"));
+    if (this.activeJobs().length || conflicts.length)
+      throw runtimeConflict("其他任务正在使用工作区或 GPU，请先等待完成或安全停止", "QUALITY_TASK_BUSY");
   }
 
   async withWorkspaceMutation(operation, callback, { allowActiveJobs = false } = {}) {
@@ -634,18 +705,69 @@ export class RuntimeServer {
       "detect-scenes": {
         label: `${side.toUpperCase()} 场景检测`,
         stage: "检测视频场景",
-        cancellable: false,
-        run: () => detectVideoScenes(side, { threshold: parameters.threshold }),
+        run: ({ signal, onProgress }) => detectVideoScenes(side, { algorithm: parameters.algorithm, threshold: parameters.threshold, signal, onProgress }),
       },
+      "mask-assist": {
+        label: `${side.toUpperCase()} BiSeNet 辅助遮罩`, stage: "生成辅助遮罩", exclusive: true,
+        run: ({ signal, onProgress }) => createMaskAssistDraft(side, { names: parameters.names, device: parameters.device ?? "cuda", signal, onProgress }),
+      },
+      "mask-publish": {
+        label: `${side.toUpperCase()} 保存遮罩数据集副本`, stage: "保存完整数据集副本", exclusive: true,
+        run: ({ signal, onProgress }) => publishMaskAssistCopies(side, parameters.draftId, { reviewed: parameters.reviewed === true, signal, onProgress }),
+      },
+      "best-faceset-init": {
+        label: `${side.toUpperCase()} 最佳训练人脸`, stage: "建立完整数据集计划", exclusive: true,
+        run: ({ signal, onProgress }) => this.facesetManager.create(side, { targetCount: parameters.targetCount,
+          identityReferences: parameters.identityReferences, qualityModel: parameters.qualityModel, signal, onProgress }),
+      },
+      "best-faceset-analyze": {
+        label: `${side.toUpperCase()} 分批分析训练人脸`, stage: "过滤坏图并累计质量与覆盖特征", exclusive: true,
+        run: ({ signal, onProgress }) => parameters.all === true
+          ? this.facesetManager.analyzeAll(side, parameters.planId, { device: parameters.device, signal, onProgress })
+          : this.facesetManager.analyze(side, parameters.planId, { offset: parameters.offset,
+            limit: parameters.limit, device: parameters.device, signal, onProgress }),
+      },
+      "best-faceset-select": {
+        label: `${side.toUpperCase()} 生成代表性训练子集`, stage: "全局选择姿态与表情覆盖", exclusive: true,
+        run: ({ signal, onProgress }) => this.facesetManager.select(side, parameters.planId,
+          { identityReferences: parameters.identityReferences, signal, onProgress }),
+      },
+      "best-faceset-publish": {
+        label: `${side.toUpperCase()} 保存最佳训练人脸`, stage: parameters.dryRun ? "预演三类结果发布" : "保存三类独立副本", exclusive: true,
+        run: ({ signal, onProgress }) => this.facesetManager.publish(side, parameters.planId,
+          { dryRun: parameters.dryRun === true, expectedReferences: parameters.expectedReferences, expectedRevision: parameters.expectedRevision, signal, onProgress }),
+      },
+      "best-faceset-recover": {
+        label: `${side.toUpperCase()} 撤回训练子集发布`, stage: parameters.dryRun ? "检查已发布副本" : "保留副本并撤回推荐", exclusive: true,
+        run: ({ signal, onProgress }) => this.facesetManager.recover(side, parameters.planId,
+          { dryRun: parameters.dryRun === true, signal, onProgress }),
+      },
+      ...Object.fromEntries(["create", "decide", "undo"].map(action => [`best-faceset-review-${action}`, {
+        label: `${side.toUpperCase()} ${action === "create" ? "建立人工复核版本" : action === "undo" ? "撤销人工决定" : "保存人工复核决定"}`,
+        stage: "检查素材并保存复核版本", exclusive: true,
+        run: ({ signal, onProgress }) => this.facesetManager.review(side, parameters.planId, action,
+          { expectedRevision: parameters.expectedRevision, requestId: parameters.requestId, identityReferences: parameters.identityReferences,
+            members: parameters.members, decision: parameters.decision, signal, onProgress }),
+      }])),
     };
-    return { kind, side, ...definitions[kind] };
+    if (parameters.projectKey != null) this.uiStateManager.project(parameters.projectKey);
+    return { kind, side, planId: parameters.planId ?? null, ...definitions[kind] };
   }
 
   async startOperation(body) {
     const spec = this.operationSpec(body);
-    return this.operationManager.start(
+    const reservation = spec.exclusive ? { kind: spec.kind, label: spec.label } : null;
+    const releaseReservation = () => {
+      if (reservation && !reservation.stopUnconfirmed && this.qualityOperationReservation === reservation) this.qualityOperationReservation = null;
+    };
+    if (spec.exclusive) {
+      this.assertQualityOperationIdle();
+      this.qualityOperationReservation = reservation;
+    } else this.assertNoWorkspaceMutation();
+    try { const operation = await this.operationManager.start(
       spec.kind,
       async ({ signal, report }) => {
+        try {
         await report({ stage: "准备输入" });
         if (signal.aborted) throw new DOMException("cancelled", "AbortError");
         await report({ stage: spec.stage });
@@ -666,13 +788,27 @@ export class RuntimeServer {
         if (progressError) throw progressError;
         await report({ stage: "整理结果" });
         return result;
+        } catch (error) {
+          if (reservation && ["MASK_STOP_UNCONFIRMED", "HELPER_STOP_UNCONFIRMED"].includes(error?.code)) {
+            reservation.stopUnconfirmed = error.message; reservation.stopCode = error.code;
+          }
+          throw error;
+        } finally { releaseReservation(); }
       },
       {
         label: spec.label,
         cancellable: spec.cancellable !== false,
         detail: `${spec.side.toUpperCase()} · ${spec.kind}`,
+        resultTarget: { projectKey: PATHS.workspaceRoot, side: spec.side, planId: spec.planId },
       },
     );
+      // Cancellation before the runner starts still has to release its reservation.
+      if (reservation) void this.operationManager.wait(operation.id).finally(releaseReservation).catch(() => {});
+      return operation;
+    } catch (error) {
+      releaseReservation();
+      throw error;
+    }
   }
 
   async inspectSystemStorage(requiredBytes) {
@@ -741,6 +877,9 @@ export class RuntimeServer {
             error: { code: "SESSION_REQUIRED", message: "本地服务会话已失效，请刷新页面" },
           });
         }
+        if (isWriteRequest(request) && this.isStopping) {
+          throw runtimeConflict("本地服务正在安全停止，请等待重启后再创建任务", "RUNTIME_STOPPING");
+        }
         return await this.handleApi(request, response, url);
       }
       return await this.serveStatic(request, response, url);
@@ -750,6 +889,71 @@ export class RuntimeServer {
   }
 
   async handleApi(request, response, url) {
+    const mergePreview = url.pathname.match(/^\/api\/tools\/merge-preview\/([a-z0-9][a-z0-9-]{5,63})$/i);
+    if (request.method === "GET" && mergePreview)
+      return sendJson(response, 200, { ok: true, data: await inspectMergePreview(mergePreview[1]) });
+    const mergePreviewImage = url.pathname.match(/^\/api\/tools\/merge-preview\/([a-z0-9][a-z0-9-]{5,63})\/(source|merged|mask)\/([^/]+)$/i);
+    if (request.method === "GET" && mergePreviewImage)
+      return sendImageServiceFile(response, await resolveMergePreviewAsset(mergePreviewImage[1], mergePreviewImage[2], mergePreviewImage[3]));
+    const facesetDraft = url.pathname.match(/^\/api\/best-facesets\/(src|dst)\/draft$/);
+    if (request.method === "GET" && facesetDraft)
+      return sendJson(response, 200, { ok: true, data: await this.uiStateManager.draft(facesetDraft[1], { projectKey: url.searchParams.get("projectKey") }) });
+    if (request.method === "POST" && facesetDraft) {
+      this.assertProjectUiWriteAllowed();
+      return sendJson(response, 200, { ok: true, data: await this.uiStateManager.saveDraft(facesetDraft[1], await readJsonBody(request)) });
+    }
+    if (request.method === "GET" && url.pathname === "/api/training-inputs")
+      return sendJson(response, 200, { ok: true, data: await this.uiStateManager.inputs({ projectKey: url.searchParams.get("projectKey") }) });
+    if (request.method === "POST" && url.pathname === "/api/training-inputs") {
+      this.assertProjectUiWriteAllowed();
+      return sendJson(response, 200, { ok: true, data: await this.uiStateManager.saveInput(await readJsonBody(request)) });
+    }
+    if (request.method === "GET" && url.pathname === "/api/best-facesets/status")
+      return sendJson(response, 200, { ok: true, data: await this.facesetManager.status() });
+    const facesetPlans = url.pathname.match(/^\/api\/best-facesets\/(src|dst)\/plans$/);
+    if (request.method === "GET" && facesetPlans)
+      return sendJson(response, 200, { ok: true, data: await this.facesetManager.list(facesetPlans[1]) });
+    const facesetPlan = url.pathname.match(/^\/api\/best-facesets\/(src|dst)\/plans\/(plan-[a-f0-9]{32})$/);
+    if (request.method === "GET" && facesetPlan)
+      return sendJson(response, 200, { ok: true, data: await this.facesetManager.inspect(facesetPlan[1], facesetPlan[2],
+        { offset: Number(url.searchParams.get("offset") ?? 0), limit: Number(url.searchParams.get("limit") ?? 120), status: url.searchParams.get("status"), verifySource: true }) });
+    const facesetFile = url.pathname.match(/^\/api\/best-facesets\/(src|dst)\/plans\/(plan-[a-f0-9]{32})\/files\/(\d+)\/(original|published)$/);
+    if (request.method === "GET" && facesetFile) {
+      const file = await this.facesetManager.file(facesetFile[1], facesetFile[2], Number(facesetFile[3]), facesetFile[4]);
+      return sendImageServiceFile(response, file);
+    }
+    if (request.method === "GET" && url.pathname === "/api/restoration/inputs")
+      return sendJson(response, 200, { ok: true, data: await this.restorationManager.listInputs({ side: url.searchParams.get("side"), offset: Number(url.searchParams.get("offset") ?? 0), limit: Number(url.searchParams.get("limit") ?? 500) }) });
+    if (request.method === "GET" && url.pathname === "/api/restoration/tasks")
+      return sendJson(response, 200, { ok: true, data: await this.restorationManager.listTasks() });
+    if (request.method === "POST" && url.pathname === "/api/restoration/tasks")
+      return sendJson(response, 201, { ok: true, data: await this.restorationManager.createTask(await readJsonBody(request)) });
+    const restorationTask = url.pathname.match(/^\/api\/restoration\/tasks\/([a-z0-9-]+)$/);
+    if (request.method === "GET" && restorationTask)
+      return sendJson(response, 200, { ok: true, data: await this.restorationManager.getTask(restorationTask[1]) });
+    const restorationCancel = url.pathname.match(/^\/api\/restoration\/tasks\/([a-z0-9-]+)\/cancel$/);
+    if (request.method === "POST" && restorationCancel)
+      return sendJson(response, 200, { ok: true, data: await this.restorationManager.cancelTask(restorationCancel[1]) });
+    const restorationImage = url.pathname.match(/^\/api\/restoration\/tasks\/([a-z0-9-]+)\/images\/([^/]+)$/);
+    if (request.method === "GET" && restorationImage) {
+      const file = await this.restorationManager.resultImage(restorationImage[1], decodeURIComponent(restorationImage[2]));
+      if (Buffer.isBuffer(file.buffer)) {
+        response.writeHead(200, { "Content-Type": "image/png", "Content-Length": file.buffer.length, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
+        return response.end(file.buffer);
+      }
+      return sendReviewImage(response, typeof file === "string" ? file : file.path);
+    }
+    const maskDrafts = url.pathname.match(/^\/api\/mask-assist\/(src|dst)\/drafts$/);
+    if (request.method === "GET" && maskDrafts)
+      return sendJson(response, 200, { ok: true, data: await listMaskAssistDrafts(maskDrafts[1]) });
+    const maskDraft = url.pathname.match(/^\/api\/mask-assist\/(src|dst)\/drafts\/([a-z0-9-]+)$/);
+    if (request.method === "GET" && maskDraft)
+      return sendJson(response, 200, { ok: true, data: await readMaskAssistDraft(maskDraft[1], maskDraft[2]) });
+    const maskFile = url.pathname.match(/^\/api\/mask-assist\/(src|dst)\/drafts\/([a-z0-9-]+)\/files\/(\d+)\/(original|copy|overlay|mask)$/);
+    if (request.method === "GET" && maskFile) {
+      const file = await resolveMaskAssistFile(maskFile[1], maskFile[2], Number(maskFile[3]), maskFile[4]);
+      return sendReviewImage(response, typeof file === "string" ? file : file.path);
+    }
     if (url.pathname.startsWith("/api/image-service/") && this.imageServiceInitializationError) {
       throw this.imageServiceInitializationError;
     }
@@ -1378,7 +1582,7 @@ export class RuntimeServer {
       return sendJson(response, 200, { ok: true, data: { opened: true } });
     }
     const workspaceArtifactMatch = url.pathname.match(
-      /^\/api\/workspace\/artifacts\/(result(?:_mask)?\.(?:mp4|avi|mov))$/,
+      /^\/api\/workspace\/artifacts\/(result(?:_mask)?\.(?:mp4|avi|mov|nut)(?:\.media\.json)?)$/,
     );
     if (request.method === "GET" && workspaceArtifactMatch) {
       return sendVideoArtifact(

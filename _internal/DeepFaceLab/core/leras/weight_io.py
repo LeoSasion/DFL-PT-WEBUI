@@ -1,6 +1,6 @@
 """Strict loading for Torch helper networks and trusted DFL auxiliary weights.
 
-The distributed S3FD, FAN and FaceEnhancer ``.npy`` files are pickled named
+The distributed S3FD and FAN ``.npy`` files are pickled named
 NumPy tensors, not NumPy archives. They do not contain TensorFlow programs.
 Only complete, finite, shape-compatible mappings are applied to a network.
 """

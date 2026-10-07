@@ -8,6 +8,7 @@ title DFL-PT-WEBUI Tools
 echo.
 
 call "%~dp0..\_internal\setenv.bat"
+if errorlevel 1 exit /b %errorlevel%
 
 mkdir "%WORKSPACE%\data_src" 2>nul
 

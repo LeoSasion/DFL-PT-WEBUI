@@ -12,39 +12,13 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from core.safe_pickle import load_records_file
 
 from .config import MEConfig
 
 
 class LegacyMEImportError(ValueError):
     pass
-
-
-class _NumpyUnpickler(pickle.Unpickler):
-    """Only reconstruct numeric NumPy arrays; never import checkpoint code."""
-    def find_class(self, module, name):
-        if module == 'numpy' and name in ('ndarray', 'dtype'):
-            return getattr(np, name)
-        if module in ('numpy.core.multiarray', 'numpy._core.multiarray') and name == '_reconstruct':
-            return np._core.multiarray._reconstruct
-        if module in ('numpy.core.numeric', 'numpy._core.numeric') and name == '_frombuffer':
-            return np._core.numeric._frombuffer
-        raise LegacyMEImportError(f'Unsupported pickle global: {module}.{name}')
-
-
-class _HashingReader:
-    def __init__(self, stream):
-        self.stream, self.hash = stream, hashlib.sha256()
-
-    def read(self, count=-1):
-        data = self.stream.read(count)
-        self.hash.update(data)
-        return data
-
-    def readline(self, count=-1):
-        data = self.stream.readline(count)
-        self.hash.update(data)
-        return data
 
 
 def legacy_me_components(archi):
@@ -72,35 +46,34 @@ def _named_parameters(model, prefix=''):
 
 def _read_mapping(path, expected_count):
     try:
-        with path.open('rb') as stream:
-            reader = _HashingReader(stream)
-            first = _NumpyUnpickler(reader).load()
-            if type(first) is int:
-                if first != expected_count:
-                    raise LegacyMEImportError(f'{path.name}: tensor count {first} != {expected_count}')
-                mapping = {}
-                for _ in range(first):
-                    record = _NumpyUnpickler(reader).load()
-                    if not isinstance(record, dict) or len(record) != 1:
-                        raise LegacyMEImportError(f'{path.name}: each tensor record must contain exactly one name')
-                    name, value = next(iter(record.items()))
-                    if not isinstance(name, str) or name in mapping:
-                        raise LegacyMEImportError(f'{path.name}: invalid or duplicate tensor name')
-                    mapping[name] = value
-                container = 'counted-tensor-records'
-            elif isinstance(first, dict):
-                mapping, container = first, 'tensor-dictionary'
-            else:
-                raise LegacyMEImportError(f'{path.name}: expected a TF tensor mapping or tensor count')
-            if reader.read(1):
-                raise LegacyMEImportError(f'{path.name}: unexpected trailing data')
-            if len(mapping) != expected_count:
-                raise LegacyMEImportError(f'{path.name}: tensor count {len(mapping)} != {expected_count}')
-            return mapping, container, reader.hash.hexdigest()
+        records, digest = load_records_file(path, profile='weights', max_records=expected_count + 1, return_sha256=True)
+        if not records:
+            raise LegacyMEImportError(f'{path.name}: empty weights file')
+        first = records[0]
+        if type(first) is int:
+            if first != expected_count or len(records) != first + 1:
+                raise LegacyMEImportError(f'{path.name}: tensor count {first} != {expected_count} or incomplete records')
+            mapping = {}
+            for record in records[1:]:
+                if not isinstance(record, dict) or len(record) != 1:
+                    raise LegacyMEImportError(f'{path.name}: each tensor record must contain exactly one name')
+                name, value = next(iter(record.items()))
+                if not isinstance(name, str) or name in mapping:
+                    raise LegacyMEImportError(f'{path.name}: invalid or duplicate tensor name')
+                mapping[name] = value
+            container = 'counted-tensor-records'
+        elif isinstance(first, dict) and len(records) == 1:
+            mapping, container = first, 'tensor-dictionary'
+        else:
+            raise LegacyMEImportError(f'{path.name}: expected a TF tensor mapping or tensor count')
+        if len(mapping) != expected_count:
+            raise LegacyMEImportError(f'{path.name}: tensor count {len(mapping)} != {expected_count}')
+        return mapping, container, digest
     except LegacyMEImportError:
         raise
     except (OSError, EOFError, pickle.UnpicklingError, TypeError, ValueError, OverflowError) as error:
-        raise LegacyMEImportError(f'{path.name}: invalid TF weights file: {error}') from error
+        detail = str(error).replace('Forbidden pickle global:', 'Unsupported pickle global:')
+        raise LegacyMEImportError(f'{path.name}: invalid TF weights file: {detail}') from error
 
 
 def _prepare_component(model, mapping, filename):

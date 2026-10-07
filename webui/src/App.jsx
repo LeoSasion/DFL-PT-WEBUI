@@ -10,14 +10,13 @@ import {
 } from "react";
 import { AppShell, ProjectHeader, WorkflowBar } from "./components/Chrome.jsx";
 import { ConsoleDock } from "./components/ConsoleDock.jsx";
-import { NewTaskDialog, StopConfirmDialog, Toast } from "./components/Overlays.jsx";
+import { DeferredDialog, StopConfirmDialog, Toast } from "./components/Overlays.jsx";
 import { BackgroundOperations } from "./components/BackgroundOperations.jsx";
 import { ProjectSwitchDialog } from "./components/ProjectSwitchDialog.jsx";
 import { WorkbenchGrid } from "./components/TrainingView.jsx";
 import { selectTrainingJob, resolveSavedTrainingModel, getSavedTrainingModelState } from "./domain/training-context.js";
 import { LoadingProgress, ProgressHud } from "./components/ProgressFeedback.jsx";
 import {
-  getInitialReadinessDestination,
   navigationWorkflowStages,
   pipelineTasks,
   workflowStageDestinations,
@@ -27,7 +26,8 @@ import { runtimeApi } from "./runtime/api.js";
 import { useRuntime } from "./runtime/useRuntime.js";
 import { useTrainingHistory } from "./runtime/useTrainingHistory.js";
 import { isFailedJob } from "./domain/job-presentation.js";
-import { getNextWorkflowStep, getUsageReadiness } from "./domain/workflow-readiness.js";
+import { getNextWorkflowStep, getUsageReadiness, getWorkflowArtifactState, getTrainingSaveStatus } from "./domain/workflow-readiness.js";
+import { latestWorkflowJob } from "./domain/workflow-job-state.js";
 import { FirstUseGuide } from "./components/FirstUseGuide.jsx";
 import { ReleaseStrip, useReleaseInfo } from "./components/ReleaseFeedbackPanel.jsx";
 
@@ -39,14 +39,14 @@ const pipelineCommandMap = {
   xseg: ["xseg.train", "xseg.apply_src", "xseg.apply_dst"],
   me: ["train.me"],
   merge: ["merge.me"],
-  export: ["encode.mp4", "encode.mp4_lossless"],
+  export: ["encode.quality", "encode.mp4", "encode.mp4_lossless", "encode.master", "encode.avi", "encode.mov_lossless"],
 };
 
 const activeStates = new Set(["queued", "starting", "running", "waiting_input", "stopping"]);
 const frameCommandFilter = (command) => ["src.extract_frames", "dst.extract_frames"].includes(command.id);
 const faceCommandFilter = (command) => ["src.extract_faces", "dst.extract_faces"].includes(command.id);
 const trainingCommandFilter = (command) => command.category === "training" || command.id === "model.import_me_tf";
-const mergeCommandFilter = (command) => command.category === "merge";
+const mergeCommandFilter = (command) => command.category === "merge" && command.id !== "merge.preview_me";
 const exportCommandFilter = (command) => ["model", "encode"].includes(command.category) && command.id !== "model.import_me_tf";
 
 function lazyNamed(loader, exportName) {
@@ -61,7 +61,10 @@ const QualityDiagnosticsView = lazyNamed(() => import("./components/QualityDiagn
 const ToolLabView = lazyNamed(() => import("./components/ToolLabView.jsx"), "ToolLabView");
 const WorkspaceView = lazyNamed(() => import("./components/WorkspaceView.jsx"), "WorkspaceView");
 const ExportView = lazyNamed(() => import("./components/ExportView.jsx"), "ExportView");
+const MergePreviewPanel = lazyNamed(() => import("./components/MergePreviewPanel.jsx"), "MergePreviewPanel");
 const RoleSelectionView = lazyNamed(() => import("./components/RoleGroupingPanel.jsx"), "RoleSelectionView");
+const NewTaskDialog = lazyNamed(() => import("./components/NewTaskDialog.jsx"), "NewTaskDialog");
+const ProjectPickerDialog = lazyNamed(() => import("./components/ProjectPickerDialog.jsx"), "ProjectPickerDialog");
 const MemoWorkbenchGrid = memo(WorkbenchGrid);
 
 function workspaceTaskReady(taskId, workspace) {
@@ -95,11 +98,14 @@ export function App() {
   } = runtime;
   const { language, localizeCommand, t } = useI18n();
   const [activeNav, setActiveNav] = useState("overview");
-  const [selectedStage, setSelectedStage] = useState("material");
-  const [activeTask, setActiveTask] = useState("extract");
+  const [selectedStage, setSelectedStage] = useState("train");
+  const [activeTask, setActiveTask] = useState("me");
   const [previewRefresh, setPreviewRefresh] = useState(0);
   const [consoleCollapsed, setConsoleCollapsed] = useState(true);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
+  const [taskInitialStep, setTaskInitialStep] = useState("choice");
+  const [projectPickerOpen, setProjectPickerOpen] = useState(false);
+  const [trainingInputs, setTrainingInputs] = useState(null);
   const [stopTargetJobId, setStopTargetJobId] = useState(null);
   const [switchProject, setSwitchProject] = useState(null);
   const [taskType, setTaskType] = useState("src.extract_frames");
@@ -119,7 +125,7 @@ export function App() {
   const [pendingAction, setPendingAction] = useState(null);
   const [settingsFocus, setSettingsFocus] = useState(null);
   const navigationTouchedRef = useRef(false);
-  const initialWorkspaceNavigationRef = useRef(null);
+  const backgroundResultsTarget = useRef(null);
 
   useEffect(() => {
     if (!xsegDirty) return undefined;
@@ -231,12 +237,12 @@ export function App() {
         state: diagnosticSnapshotCount >= 2 ? "done" : "waiting",
         time: diagnosticSnapshotCount >= 2
           ? t("已有 {count} 个评估快照", { count: diagnosticSnapshotCount })
-          : t("等待至少两个评估快照"),
+          : t("可选：至少两个快照用于趋势比较"),
       };
     }
     const commandIds = pipelineCommandMap[task.id] ?? [];
     const matchingJobs = jobs.filter((candidate) => commandIds.includes(candidate.commandId));
-    const latestJobs = commandIds
+    const latestJobs = task.id === "export" ? [latestWorkflowJob(jobs, commandIds)].filter(Boolean) : commandIds
       .map((commandId) => matchingJobs.find((candidate) => candidate.commandId === commandId))
       .filter(Boolean);
     const latestStates = latestJobs.map((candidate) => candidate.state);
@@ -244,8 +250,8 @@ export function App() {
     const artifactReady = workspaceTaskReady(task.id, workspaceSnapshot);
     if (!job) {
       return artifactReady
-        ? { ...task, state: "done", time: t("工作区已有可用产物") }
-        : task.id === "sort" ? { ...task, label:t("选择人物"), time:t("待复核") }
+        ? { ...task, state: task.id === "sort" ? "done" : "available", time: t("检测到工作区已有产物；使用前检查") }
+        : task.id === "sort" ? { ...task, label:t("选择人物"), time:t(workspaceSnapshot?.readiness?.faces ? "待复核" : "未运行") }
         : task.id === "xseg" ? { ...task, time:t("可选") }
         : task;
     }
@@ -254,18 +260,24 @@ export function App() {
     ));
     const isActive = latestStates.some((state) => activeStates.has(state));
     const isAlternativeGroup = task.id === "export";
-    const isComplete = artifactReady || (task.id !== "sort" && (isAlternativeGroup
+    const isComplete = task.id !== "me" && (task.id !== "sort" && (isAlternativeGroup
       ? latestStates.some((state) => state === "succeeded")
       : requiredStates.every((state) => state === "succeeded")));
     const hasPartialSuccess = latestStates.some((state) => state === "succeeded");
     const failedJob = latestJobs.find(isFailedJob);
+    const saveStatus = task.id === "me" ? getTrainingSaveStatus(job, resolveSavedTrainingModel(workspaceSnapshot?.models, job)) : null;
+    const saveUnconfirmed = saveStatus?.saveState === "unconfirmed";
+    const currentComplete = isComplete || saveStatus?.saveState === "confirmed";
     return {
       ...task,
-      state: isActive ? "active" : isComplete ? "done" : failedJob ? "failed" : "waiting",
+      state: isActive ? "active" : saveUnconfirmed ? "unconfirmed" : failedJob ? "failed" : currentComplete ? "done" : artifactReady ? "available" : "waiting",
       time: isActive
         ? job.state === "waiting_input" ? t("等待输入") : t("运行中")
-        : isComplete
-          ? artifactReady ? t("工作区已有可用产物") : t("已完成")
+        : saveUnconfirmed ? t("已有历史检查点；最近保存未确认")
+        : failedJob ? t("最近任务失败；已有产物另行检查")
+        : currentComplete
+          ? t(task.id === "me" ? "本次保存与退出已确认" : "最近任务已完成")
+        : artifactReady ? t("检测到已有产物；最近任务未确认完成")
           : failedJob?.state === "orphaned"
             ? t("连接已丢失")
             : failedJob
@@ -279,36 +291,41 @@ export function App() {
   const workflowStates = useMemo(() => {
     const stateFor = (commandId, artifactReady = false) => {
       const job = jobs.find((candidate) => candidate.commandId === commandId);
-      if (!job) return artifactReady ? "done" : "waiting";
+      if (!job) return artifactReady ? "available" : "waiting";
       if (activeStates.has(job.state)) return "active";
-      if (job.state === "succeeded" || artifactReady) return "done";
+      if (commandId === "train.me") {
+        const save = getTrainingSaveStatus(job, resolveSavedTrainingModel(workspaceSnapshot?.models, job));
+        if (save.saveState === "unconfirmed") return "unconfirmed";
+        if (save.saveState === "confirmed") return "done";
+      }
       if (isFailedJob(job)) return "failed";
+      if (commandId !== "train.me" && job.state === "succeeded") return "done";
+      if (artifactReady) return "available";
       return "waiting";
     };
     const combinedStateFor = (commandIds, artifactReady = false, requiresReview = false) => {
       const states = commandIds.map((commandId) => stateFor(commandId));
       if (states.includes("active")) return "active";
-      if (artifactReady || (!requiresReview && states.every((state) => state === "done"))) return "done";
       if (states.includes("failed")) return "failed";
+      if (states.includes("unconfirmed")) return "unconfirmed";
+      if (!requiresReview && states.every((state) => state === "done")) return "done";
+      if (artifactReady) return requiresReview ? "done" : "available";
       return "waiting";
     };
     const readiness = workspaceSnapshot?.readiness ?? {};
+    const artifacts = getWorkflowArtifactState(workspaceSnapshot);
+    const latestEncoding = latestWorkflowJob(jobs, pipelineCommandMap.export);
+    const cleanState = combinedStateFor(["src.sort_faces", "dst.sort_faces"], workspaceTaskReady("sort", workspaceSnapshot), true);
     return {
       material: readiness.materials ? "done" : "waiting",
       frames: combinedStateFor(["src.extract_frames", "dst.extract_frames"], readiness.frames),
       faces: combinedStateFor(["src.extract_faces", "dst.extract_faces"], readiness.faces),
-      clean: combinedStateFor(["src.sort_faces", "dst.sort_faces"], workspaceTaskReady("sort", workspaceSnapshot), true),
+      clean: cleanState === "waiting" && readiness.faces ? "review" : cleanState,
       mask: combinedStateFor(["xseg.train", "xseg.apply_src", "xseg.apply_dst"], readiness.xseg),
-      train: stateFor("train.me", readiness.me),
+      train: stateFor("train.me", artifacts.meAvailable),
       diagnose: diagnosticSnapshotCount >= 2 ? "done" : "waiting",
-      merge: stateFor("merge.me", readiness.merged),
-      encode: jobs.some(job => job.commandId.startsWith("encode.") && activeStates.has(job.state))
-        ? "active"
-        : readiness.encoded || ["encode.mp4", "encode.mp4_lossless", "encode.avi", "encode.mov_lossless"].some((commandId) => stateFor(commandId) === "done")
-          ? "done"
-          : ["encode.mp4", "encode.mp4_lossless"].some((commandId) => stateFor(commandId) === "failed")
-            ? "failed"
-            : "waiting",
+      merge: stateFor("merge.me", artifacts.exportConfiguredReady),
+      encode: latestEncoding ? stateFor(latestEncoding.commandId, artifacts.encodedAvailable) : artifacts.encodedAvailable ? "available" : "waiting",
     };
   }, [diagnosticSnapshotCount, jobs, workspaceSnapshot]);
 
@@ -327,29 +344,9 @@ export function App() {
   );
 
   useEffect(() => {
-    if (!workspaceSnapshot || navigationTouchedRef.current) return;
-    setSelectedStage(nextWorkflowStep.stage);
-    setActiveTask(nextWorkflowStep.task);
+    if (!workspaceSnapshot || navigationTouchedRef.current || newTaskOpen) return;
     if (nextWorkflowStep.commandId) setTaskType(nextWorkflowStep.commandId);
-  }, [nextWorkflowStep, workspaceSnapshot]);
-
-  useEffect(() => {
-    if (!workspaceSnapshot) return;
-    const currentWorkspace = runtime.health?.runtime?.current?.workspace;
-    if (
-      currentWorkspace
-      && workspaceSnapshot.root
-      && currentWorkspace.toLocaleLowerCase() !== workspaceSnapshot.root.toLocaleLowerCase()
-    ) return;
-    const workspaceKey = workspaceSnapshot.root ?? currentWorkspace ?? "workspace";
-    if (initialWorkspaceNavigationRef.current === workspaceKey) return;
-    initialWorkspaceNavigationRef.current = workspaceKey;
-    if (navigationTouchedRef.current || activeNav !== "overview") return;
-    const destination = getInitialReadinessDestination(nextWorkflowStep.stage);
-    if (!destination?.nav) return;
-    setActiveNav(destination.nav);
-    setConsoleCollapsed(true);
-  }, [activeNav, nextWorkflowStep.stage, runtime.health?.runtime?.current?.workspace, workspaceSnapshot]);
+  }, [newTaskOpen, nextWorkflowStep, workspaceSnapshot]);
 
   useEffect(() => {
     navigationTouchedRef.current = false;
@@ -363,19 +360,18 @@ export function App() {
     return confirmed;
   }, [t, xsegDirty]);
 
-  const handleNavigate = useCallback((id, label) => {
+  const handleNavigate = useCallback((id) => {
     if (id !== activeNav && !confirmDiscardXSeg()) return;
     navigationTouchedRef.current = true;
     setActiveNav(id);
-    const nextStage = id === "overview" ? nextWorkflowStep.stage : navigationWorkflowStages[id];
+    const nextStage = navigationWorkflowStages[id];
     if (nextStage) setSelectedStage(nextStage);
-    if (id === "overview") setActiveTask(nextWorkflowStep.task);
+    if (id === "overview") setActiveTask("me");
     if (id === "diagnostics") {
       setActiveTask("diagnose");
     }
     setConsoleCollapsed(id !== "overview");
-    showToast(t("已切换到「{label}」工作区", { label }));
-  }, [activeNav, confirmDiscardXSeg, nextWorkflowStep, showToast, t]);
+  }, [activeNav, confirmDiscardXSeg]);
 
   const handleStageSelect = useCallback((stage) => {
     const destination = workflowStageDestinations[stage.id];
@@ -385,8 +381,7 @@ export function App() {
     if (destination?.nav) setActiveNav(destination.nav);
     if (destination?.task) setActiveTask(destination.task);
     setConsoleCollapsed(destination?.nav !== "overview");
-    showToast(t("已定位到「{label}」阶段", { label: stage.label }));
-  }, [activeNav, confirmDiscardXSeg, showToast, t]);
+  }, [activeNav, confirmDiscardXSeg]);
 
   const handleTaskSelect = useCallback((task) => {
     navigationTouchedRef.current = true;
@@ -401,7 +396,6 @@ export function App() {
       setSelectedStage("diagnose");
       setActiveNav("diagnostics");
       setConsoleCollapsed(true);
-      showToast(t("已打开独立的质量诊断环节"));
       return;
     }
     if (task.id === "me") setSelectedStage("train");
@@ -417,6 +411,7 @@ export function App() {
       setConsoleCollapsed(false);
       showToast(t("已切换到任务：{label}", { label: existing.label }));
     } else if (commandIds.length) {
+      setTaskInitialStep("parameters");
       setTaskType(commandIds[0]);
       setNewTaskOpen(true);
       showToast(t("「{label}」尚未启动，可从“新建任务”运行", { label: task.label }));
@@ -435,11 +430,35 @@ export function App() {
     return job;
   }, [runAction, startJob, t]);
 
-  const openCommand = useCallback((commandId) => {
-    setTaskDefaults(null);
+  const openCommand = useCallback((commandId, parameters = null) => {
+    setTaskDefaults(parameters);
     setTaskType(commandId);
+    setTaskInitialStep("parameters");
     setNewTaskOpen(true);
   }, []);
+  const useTrainingInput = useCallback(async (side, planId) => {
+    if (!workspaceScope) return;
+    try {
+      const current = await runtimeApi.trainingInputs({ projectKey: workspaceScope });
+      const updated = await runtimeApi.saveTrainingInput({ projectKey: workspaceScope, expectedRevision: current.revision, side, selection: { kind: "selected", planId } });
+      setTrainingInputs(updated); openCommand("train.me");
+    } catch (error) { showError(error); }
+  }, [workspaceScope, openCommand, showError]);
+  const openMergeReview = useCallback(() => { setToolFocus({ tab: "merge", nonce: Date.now() }); setActiveNav("tools"); }, []);
+  const openOperationResult = useCallback(async operation => {
+    if (!confirmDiscardXSeg()) return;
+    try {
+      const current = await runtimeApi.operation(operation.id);
+      if (current.resultTarget?.projectKey !== workspaceScope) throw new Error("项目已切换，请在原项目查看此结果。");
+      const tabs = { "asset-audit": "audit", "pose-atlas": "atlas", similarity: "audit", roles: "audit", pack: "metadata", coverage: "extract", "detect-scenes": "video" };
+      const tab = tabs[current.kind] ?? "quality";
+      setToolFocus({ tab, mode: current.kind === "similarity" ? "similarity" : current.kind === "roles" ? "roles" : current.kind.startsWith("mask-") ? "masks" : "best", side: current.resultTarget.side,
+        planId: current.result?.planId ?? current.resultTarget.planId, draftId: current.result?.draftId ?? (current.kind.startsWith("mask-") ? current.result?.id : null), nonce: Date.now() });
+      setActiveNav("tools");
+      navigationTouchedRef.current = true;
+      setConsoleCollapsed(true);
+    } catch (error) { showError(error); }
+  }, [workspaceScope, showError, confirmDiscardXSeg]);
 
   const activateRecommendedAction = useCallback(() => {
     if (nextWorkflowStep.pending) return;
@@ -632,7 +651,7 @@ export function App() {
       showToast(value, "warning");
     }
   }, [showToast, t]);
-  const openNewTask = useCallback(() => { setTaskDefaults(null); setNewTaskOpen(true); }, []);
+  const openNewTask = useCallback(() => { setTaskDefaults(null); setTaskInitialStep("choice"); setNewTaskOpen(true); }, []);
   const toggleConsole = useCallback(() => setConsoleCollapsed((current) => !current), []);
   const retryRuntimeConnection = useCallback(() => void refreshRuntime(), [refreshRuntime]);
   const safeStopSelectedJob = useCallback(() => {
@@ -645,14 +664,15 @@ export function App() {
   const savedTrainingModel = resolveSavedTrainingModel(workspaceSnapshot?.models,trainingJob);
   const savedModelState = workspaceSnapshot ? getSavedTrainingModelState(workspaceSnapshot.models,trainingJob) : "loading";
   const resumeTraining = () => {
+    setTaskInitialStep("parameters");
     setTaskType("train.me");
     setTaskDefaults({ ...(trainingJob?.parameters ?? {}), forceModelName:savedTrainingModel?.name ?? "", silentStart:Boolean(savedTrainingModel),
       allowConfigChange:false, resetOptimizer:false, resetDataState:false, debugSamples:false, stopAtTarget:false, initializeFrom:"" });
     setNewTaskOpen(true);
   };
   const modelSummaryAside = useMemo(
-    () => <ModelSummaryAside workspace={workspaceSnapshot} />,
-    [workspaceSnapshot],
+    () => <ModelSummaryAside workspace={workspaceSnapshot} trainingJob={trainingJob} savedModel={savedTrainingModel} />,
+    [workspaceSnapshot, trainingJob, savedTrainingModel],
   );
 
   let mainContent;
@@ -732,7 +752,7 @@ export function App() {
     mainContent = (
       <CommandCenterView
         title={t("模型训练")}
-        description={t("配置 ME 训练、预训练与微调，或导入旧 ME 网络权重；XSeg 提供辅助遮罩。")}
+        description={t("可直接使用已准备的 PAK / aligned 人脸集。选择人脸集所在目录，配置 ME 训练、预训练或微调。")}
         actions={<div className="training-page-actions"><button type="button" className="button secondary" onClick={() => handleNavigate("overview",t("总览"))}>{t("训练预览与曲线")}</button><button type="button" className="button primary" disabled={trainingJob && activeStates.has(trainingJob.state)} onClick={resumeTraining}>{savedTrainingModel ? t("继续训练") : savedModelState === "empty" ? t("新建训练") : t("选择训练模型")}</button></div>}
         commands={commands}
         filter={trainingCommandFilter}
@@ -743,6 +763,8 @@ export function App() {
   } else if (activeNav === "diagnostics") {
     mainContent = (
       <QualityDiagnosticsView
+        workspace={workspaceSnapshot}
+        onOpenMerge={() => openCommand("merge.me")}
         evaluationJob={evaluationJob}
         refreshKey={evaluationJob?.latestEvaluationSnapshotId}
         onEvaluate={evaluateTraining}
@@ -755,6 +777,8 @@ export function App() {
     );
   } else if (activeNav === "merge") {
     mainContent = (
+      <div className="merge-workflow-page">
+      <MergePreviewPanel key={workspaceScope} workspace={workspaceSnapshot} jobs={jobs} onOpenCommand={openCommand} onOpenJob={openJobLog} onError={showError}/>
       <CommandCenterView
         title={t("模型应用")}
         description={t("使用所选 ME PyTorch 模型合成人脸，产物写入 merged 与 merged_mask 序列。")}
@@ -763,6 +787,7 @@ export function App() {
         onOpenCommand={openCommand}
         aside={modelSummaryAside}
       />
+      </div>
     );
   } else if (activeNav === "export") {
     mainContent = (
@@ -779,6 +804,7 @@ export function App() {
         onError={showError}
         onNotice={showToast}
         onNavigateDataset={openDatasetSample}
+        onUseTrainingInput={useTrainingInput}
         poseFocus={poseAtlasFocus}
         toolFocus={toolFocus}
       />
@@ -801,7 +827,9 @@ export function App() {
       <MemoWorkbenchGrid
         pipeline={{
           activeTask,
-          tasks: livePipelineTasks,
+          title: "训练与评估",
+          description: "已有 PAK / aligned 可直接配置训练；需要处理素材时进入预处理。",
+          tasks: livePipelineTasks.filter(task => ["me", "diagnose"].includes(task.id)).map((task, index) => ({ ...task, index: index + 1 })),
           onSelectTask: handleTaskSelect,
         }}
         training={{
@@ -853,11 +881,12 @@ export function App() {
           serviceState={runtime.serviceState}
           telemetry={runtime.telemetry}
           onNewTask={openNewTask}
+          onProjectMenu={() => setProjectPickerOpen(true)}
           onMenu={() => handleNavigate("video",t("工作区"))}
         />
         <ReleaseStrip release={releaseState.release} onOpen={() => { setSettingsFocus({ target: "release", request: Date.now() }); handleNavigate("settings", t("版本与反馈")); }} />
         <div className="narrow-screen-notice" role="status">
-          {t("当前为紧凑布局；建议将窗口展开至 1024 px 以上。所有功能仍可通过纵向滚动使用。")}
+          {t("紧凑布局 · 页面可上下滚动")}
         </div>
         {runtime.serviceState === "loading" ? (
           <LoadingProgress
@@ -878,12 +907,13 @@ export function App() {
         ) : null}
         {activeNav !== "tools" && (
           <WorkflowBar
+            activeNav={activeNav}
             selectedStage={selectedStage}
             stageStates={workflowStates}
             onSelectStage={handleStageSelect}
           />
         )}
-        {["video", "overview", "workflow.frames", "workflow.faces", "workflow.roles", "training"].includes(activeNav) && (
+        {["video", "workflow.frames", "workflow.faces", "workflow.roles"].includes(activeNav) && (
           <FirstUseGuide readiness={usageReadiness} workspace={workspaceSnapshot} project={runtime.health?.project} nextStep={nextWorkflowStep} onNext={activateRecommendedAction} onProjects={() => { setSettingsFocus({ target: "projects", request: Date.now() }); handleNavigate("settings", t("受管项目工作区")); }} />
         )}
         <div className="route-content"><Suspense
@@ -900,6 +930,7 @@ export function App() {
           {mainContent}
         </Suspense></div>
         <div className="console-dock-slot">
+          <div className="background-results-slot" ref={backgroundResultsTarget} />
           <div className="global-feedback-anchor">
             <div className="global-feedback-stack">
               <Toast
@@ -913,6 +944,8 @@ export function App() {
                 serviceOnline={runtime.serviceState === "online"}
                 onError={showError}
                 onNotice={showToast}
+                onOpenResult={openOperationResult}
+                resultsTarget={backgroundResultsTarget}
               />
               <ProgressHud />
             </div>
@@ -942,7 +975,7 @@ export function App() {
           />
         </div>
       </main>
-      <NewTaskDialog
+      {newTaskOpen && <DeferredDialog label={t("新建任务")} onClose={() => setNewTaskOpen(false)}><NewTaskDialog
         open={newTaskOpen}
         taskType={taskType}
         workspacePath={workspacePath}
@@ -951,19 +984,25 @@ export function App() {
         workspace={workspaceSnapshot}
         telemetry={runtime.telemetry}
         initialParameters={taskDefaults}
+        initialStep={taskInitialStep}
+        projectKey={workspaceScope}
+        trainingInputs={trainingInputs}
+        onTrainingInputsChange={setTrainingInputs}
+        onOpenMergeReview={openMergeReview}
         recommendedCommandId={nextWorkflowStep.commandId}
         onTaskType={(value) => {setTaskDefaults(null); setTaskType(value);}}
         onPreflight={preflight}
         onResolvePreflight={handleResolvePreflight}
         onClose={() => setNewTaskOpen(false)}
         onCreate={handleCreateTask}
-      />
+      /></DeferredDialog>}
       <StopConfirmDialog
         open={Boolean(stopTargetJobId)}
         onCancel={() => setStopTargetJobId(null)}
         onConfirm={() => void handleStopConfirm()}
       />
       <ProjectSwitchDialog project={switchProject} onClose={() => setSwitchProject(null)} onReady={() => window.location.reload()}/>
+      {projectPickerOpen && <DeferredDialog label={t("项目与工作区")} onClose={() => setProjectPickerOpen(false)}><ProjectPickerDialog open health={runtime.health} activeJobCount={jobs.filter(job => activeStates.has(job.state)).length} blockedReason={xsegDirty ? t("当前遮罩修改尚未保存，请先保存或放弃修改再切换项目。") : null} onClose={() => setProjectPickerOpen(false)} onSwitchProject={setSwitchProject} onNotice={showToast}/></DeferredDialog>}
     </AppShell>
   );
 }

@@ -1,11 +1,16 @@
-import { readdirSync } from "node:fs";
-import { readdir, readFile, realpath, stat } from "node:fs/promises";
+import { createReadStream, readdirSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { lstat, readdir, readFile, realpath, stat } from "node:fs/promises";
+import { runHelperProcess } from "./helper-process.mjs";
 import path from "node:path";
 import { buildDflEnvironment } from "./environment.mjs";
 import { summarizeXSegLabels } from "./asset-manager.mjs";
 import { PATHS, assertWithin, pathExists } from "./paths.mjs";
 import { createTrainingModelKey } from "./training-evaluation-manager.mjs";
 import { getGpuTelemetry } from "./telemetry.mjs";
+import { RestorationManager } from "./restoration-manager.mjs";
+import { bestFacesetManager } from "./best-faceset-manager.mjs";
+import { mergePreviewDirectory, assertMergePreviewLocation, inspectMergePreview } from "./merge-preview-manager.mjs";
 import { ME_CONFIG_PARAMETERS, ME_DEFAULT_CONFIG, configFromParameters, validateMeConfig } from "../shared/me-training-options.mjs";
 
 const GPU_PARAMETERS = [
@@ -57,11 +62,20 @@ const FACE_PARAMETERS = [
     id: "detector",
     label: "检测器",
     type: "select",
-    default: "s3fd",
+    default: "yolo26s-face",
     options: [
-      { value: "s3fd", label: "S3FD（推荐）" },
+      { value: "s3fd", label: "S3FD（当前兼容基线）" },
+      { value: "yolo11m-face", label: "YOLO11m-face（H3CE 对照基线）" },
+      { value: "yolo12l-face", label: "YOLO12l-face（质量候选）" },
+      { value: "yolo26s-face", label: "YOLO26s-face（推荐）" },
       { value: "manual", label: "手动" },
     ],
+    help: "新提取推荐 YOLO26s，已通过固定难例与 Astra 视觉复核；S3FD 可用于旧流程兼容。缺少本地权重时会阻止启动。",
+  },
+  {
+    id: "landmarkModel", label: "关键点方案", type: "select", default: "tufa",
+    options: [{ value: "tufa", label: "TUFA（推荐）" }, { value: "fan", label: "FAN（旧流程兼容）" }],
+    help: "普通人脸使用原生 TUFA68 对齐，同时保留 TUFA98 眼嘴审核；HEAD 使用真实 FAN3D 对齐与 TUFA98 审核。已有 aligned 不会被自动改写。",
   },
   {
     id: "faceType",
@@ -102,7 +116,7 @@ const FACE_PARAMETERS = [
     id: "jpegQuality",
     label: "JPEG 质量",
     type: "number",
-    default: 90,
+    default: 100,
     min: 50,
     max: 100,
     integer: true,
@@ -111,15 +125,73 @@ const FACE_PARAMETERS = [
   ...GPU_PARAMETERS,
 ];
 
+async function verifyLandmarkSelection(context = {}) {
+  if (context.parameters?.landmarkModel !== "tufa") return;
+  try {
+    const { code, stdout, stderr } = await runHelperProcess(PATHS.python, [
+      path.join(PATHS.internalRoot, "DeepFaceLab", "facelib", "LandmarkCandidates.py"),
+      "--verify-assets", "--model", "tufa", "--face-type", context.parameters.faceType ?? "whole_face",
+    ], { cwd: PATHS.repositoryRoot, env: buildDflEnvironment("current"), timeoutMs: 60_000, maxBytes: 256 * 1024, label: "关键点资产校验" });
+    if (code !== 0) throw new Error(stderr);
+    if (JSON.parse(stdout.trim()).ok !== true) throw new Error("资产验证未通过");
+  } catch (error) {
+    throw new CommandValidationError("TUFA 关键点资产或依赖未通过校验；请先准备官方本地资产，或明确选择 FAN 兼容方案。", "VISION_LANDMARK_ASSET_INVALID", { reason: String(error.stderr ?? error.message).slice(0, 600) });
+  }
+}
+
+async function verifyDetectorSelection(context = {}) {
+  const id = context.parameters?.detector;
+  if (!id || ["s3fd", "manual"].includes(id)) return;
+  const catalog = JSON.parse(await readFile(path.join(PATHS.repositoryRoot, "tools", "vision-model-candidates.json"), "utf8"));
+  const expected = catalog.detectorAssets.find(asset => asset.id === id);
+  const research = path.join(PATHS.repositoryRoot, "workspace", ".vision-models");
+  const installed = path.join(PATHS.internalRoot, "vision_models", "production", id);
+  const directory = await pathExists(installed) ? installed : research;
+  if (directory === installed) {
+    const info = await lstat(directory);
+    if (!info.isDirectory() || info.isSymbolicLink()) throw new CommandValidationError("已安装视觉资产目录无效", "VISION_ASSET_INVALID");
+  }
+  let manifest;
+  try { manifest = JSON.parse(await readFile(path.join(directory, ...(directory === installed ? ["assets.json"] : ["detectors", "assets.json"])), "utf8")); }
+  catch { throw new CommandValidationError("检测器资源未准备；请使用项目安装器导入已校验的视觉资源包。", "VISION_ASSET_MISSING"); }
+  const matches = manifest.models?.filter(item => item.id === id) ?? [];
+  if (manifest.schemaVersion !== 1 || !expected || matches.length !== 1)
+    throw new CommandValidationError("检测器候选没有唯一的有效资产记录", "VISION_ASSET_MISSING");
+  const asset = matches[0];
+  if (["sha256", "sizeBytes", "runtime", "task", "scale", "architecture", "family"].some(key => asset[key] !== expected[key]) || typeof asset.path !== "string")
+    throw new CommandValidationError("检测器资产协议与固定来源不符", "VISION_ASSET_INVALID");
+  const target = assertWithin(directory, path.resolve(directory, asset.path));
+  const resolved = await realpath(target);
+  assertWithin(directory, resolved);
+  const info = await stat(resolved);
+  if (!info.isFile() || info.size !== expected.sizeBytes)
+    throw new CommandValidationError("检测器权重与固定来源大小不符", "VISION_ASSET_INVALID");
+  const digest = createHash("sha256");
+  for await (const chunk of createReadStream(resolved)) digest.update(chunk);
+  if (digest.digest("hex") !== expected.sha256)
+    throw new CommandValidationError("检测器权重与固定来源散列不符", "VISION_ASSET_INVALID");
+}
+
+async function verifyFaceEnhancement(modelId) {
+  if (!["mambairv2", "realesrgan-x4plus"].includes(modelId)) throw new CommandValidationError("请选择 MambaIRv2 或 Real-ESRGAN", "PARAMETER_INVALID");
+  const script = "import sys,json;sys.path.insert(0,sys.argv[1]);from facelib.FaceEnhancement import validate_enhancement_assets;print(json.dumps(validate_enhancement_assets(sys.argv[2])))";
+  const result = await runHelperProcess(PATHS.python, ["-c", script, PATHS.currentDflRoot, modelId], {
+    cwd: PATHS.repositoryRoot, env: buildDflEnvironment("current"), timeoutMs: 60_000, maxBytes: 256 * 1024, label: "人脸修复资源校验",
+  });
+  if (result.code !== 0) throw new CommandValidationError("人脸修复资源或可选依赖尚未准备，请在安装器中导入修复资源与依赖", "FACE_ENHANCEMENT_UNAVAILABLE", { reason: result.stderr.slice(-600) });
+  return JSON.parse(result.stdout);
+}
+
 const SORT_PARAMETERS = [
   {
     id: "method",
-    label: "排序方式",
+    label: "旧批次排序方式",
     type: "select",
-    default: "final-fast",
+    default: "quality-coverage",
     options: [
-      { value: "final-fast", label: "final-fast（推荐）" },
-      { value: "final", label: "final" },
+      { value: "quality-coverage", label: "批次质量分项与姿态 / 眼口排序（最多 500 张）" },
+      { value: "final-fast", label: "姿态覆盖 + 源框尺寸代理（非清晰度评分）" },
+      { value: "final", label: "姿态覆盖 + CPBD 清晰度" },
       { value: "origname", label: "origname（恢复原顺序）" },
       { value: "blur", label: "blur" },
       { value: "motion-blur", label: "motion-blur" },
@@ -135,6 +207,10 @@ const SORT_PARAMETERS = [
       { value: "absdiff", label: "absdiff" },
     ],
   },
+  { id: "dryRun", label: "仅预览排序计划", type: "boolean", default: false, help: "预览源/目标与归档清单，素材保留。" },
+  { id: "targetCount", label: "批次质量排序保留上限", type: "number", default: 2000, min: 1, max: 500000, integer: true, help: "仅作用于当前批次；超过本批数量时全部保留。选择代表性训练集请使用「质量方案 → 最佳训练人脸」。原件与历史排序恢复记录保留。" },
+  { id: "offset", label: "质量排序批次起点（从 0 开始）", type: "number", default: 0, min: 0, max: 500000, integer: true, help: "仅用于批次质量排序；范围外保留原名与原字节。" },
+  { id: "limit", label: "本批质量排序数量", type: "number", default: 500, min: 1, max: 500, integer: true, help: "本轮最多 500 张，范围与全部分项写入回执；完整训练集选择使用最佳训练人脸。" },
 ];
 
 const TRAIN_PARAMETERS = [
@@ -307,6 +383,7 @@ function resolveWorkspacePath(value, label) {
 
 async function requireMeFaceset(value, label) {
   const target = resolveWorkspacePath(value, label);
+  await bestFacesetManager.requireSelected(target);
   if (!(await pathExists(target))) throw new CommandValidationError(`${label}不存在`, "INPUT_MISSING", { path: target });
   try { assertWithin(await realpath(PATHS.workspaceRoot), await realpath(target), label); }
   catch { throw new CommandValidationError(`${label}链接指向当前项目 workspace 外`, "PARAMETER_INVALID"); }
@@ -398,6 +475,8 @@ async function inspectTrainingResources(parameters = {}) {
 }
 
 const MERGE_PARAMETERS = [
+  { id: "dstFaceset", label: "DST 人脸集", type: "text", default: "data_dst/aligned", maxLength: 1024, format: "workspace-path",
+    help: "选择与本次合成匹配的 aligned 文件夹，也可使用已复核的修复或遮罩副本。" },
   {
     id: "forceModelName",
     label: "指定模型名称",
@@ -436,6 +515,8 @@ const MERGE_PARAMETERS = [
       { value: 7, label: "XSeg-dst" },
       { value: 8, label: "XSeg-prd × XSeg-dst" },
       { value: 9, label: "learned × XSeg 组合" },
+      { value: 10, label: "已复核 DST 遮罩（要求原帧绑定）" },
+      { value: 11, label: "learned-prd × 已复核 DST 遮罩" },
     ],
   },
   {
@@ -491,7 +572,7 @@ const MERGE_PARAMETERS = [
     id: "colorTransfer",
     label: "颜色迁移",
     type: "select",
-    default: "none",
+    default: "robust-lab",
     options: [
       { value: "none", label: "关闭" },
       { value: "rct", label: "rct" },
@@ -502,9 +583,18 @@ const MERGE_PARAMETERS = [
       { value: "idt-m", label: "idt-m" },
       { value: "sot-m", label: "sot-m" },
       { value: "mix-m", label: "mix-m" },
+      { value: "robust-lab", label: "稳健 Lab 前景统计" },
+      { value: "lab-quantile", label: "Lab 前景分位数" },
     ],
     advanced: true,
   },
+  { id: "randomSeed", label: "颜色随机种子", type: "number", default: 0, min: 0, max: 4294967295, integer: true, advanced: true },
+  { id: "geometryMode", label: "中心与尺度稳定", type: "select", default: "off", advanced: true,
+    options: [{ value: "off", label: "关闭" }, { value: "bounded-center-scale", label: "有界中心与尺度（保留眼嘴表情）" }] },
+  { id: "geometryStrength", label: "稳定强度", type: "number", default: 50, min: 0, max: 100, integer: true, advanced: true },
+  { id: "blendMode", label: "边缘融合", type: "select", default: "legacy", advanced: true,
+    options: [{ value: "legacy", label: "原有融合" }, { value: "distance", label: "距离场羽化" }, { value: "multiband", label: "多频段融合" }] },
+  { id: "blendWidth", label: "边缘宽度（脸尺寸 %）", type: "number", default: 4, min: 0, max: 20, integer: true, advanced: true },
   {
     id: "sharpenMode",
     label: "锐化模式",
@@ -537,6 +627,9 @@ const MERGE_PARAMETERS = [
     integer: true,
     advanced: true,
   },
+  { id: "superResolutionModel", label: "预测脸修复模型", type: "select", default: "mambairv2", advanced: true,
+    options: [{ value: "mambairv2", label: "MambaIRv2 Large x4" }, { value: "realesrgan-x4plus", label: "Real-ESRGAN x4plus" }],
+    help: "仅在超分辨率力度大于零时使用；与源帧修复分别评测。" },
   {
     id: "imageDenoise",
     label: "图片降噪",
@@ -666,9 +759,15 @@ function buildMergeEnvironment(profile, context) {
       motionBlur: parameters.motionBlur,
       faceScale: parameters.faceScale,
       colorTransfer: parameters.colorTransfer,
+      randomSeed: parameters.randomSeed,
+      geometryMode: parameters.geometryMode,
+      geometryStrength: parameters.geometryStrength,
+      blendMode: parameters.blendMode,
+      blendWidth: parameters.blendWidth,
       sharpenMode: parameters.sharpenMode,
       sharpenAmount: parameters.sharpenAmount,
       superResolution: parameters.superResolution,
+      superResolutionModel: parameters.superResolutionModel,
       imageDenoise: parameters.imageDenoise,
       bicubicDegrade: parameters.bicubicDegrade,
       colorDegrade: parameters.colorDegrade,
@@ -678,8 +777,7 @@ function buildMergeEnvironment(profile, context) {
 
 async function requireMergeXseg(context = {}) {
   // Guided learned/landmark masks never invoke the lazy XSeg predictor.
-  if (context.launchMode === "guided" && Number(context.parameters?.maskMode) >= 1
-      && Number(context.parameters.maskMode) < 6) return { xsegDirectory: null };
+  if (context.launchMode === "guided" && [1, 2, 3, 4, 5, 10, 11].includes(Number(context.parameters?.maskMode))) return { xsegDirectory: null };
   const directories = [
     path.join(PATHS.workspaceRoot, "xseg_model"),
     path.join(PATHS.internalRoot, "model_generic_xseg"),
@@ -765,6 +863,9 @@ function buildDatasetUtility({
   args,
   parameters = [],
   locks,
+  allowEmpty = false,
+  validate = null,
+  interactive = true,
 }) {
   return {
     id,
@@ -775,17 +876,18 @@ function buildDatasetUtility({
     category: "dataset",
     stage: "clean",
     side,
-    interactive: true,
+    interactive,
     parameters,
     controls: [],
     locks: locks ?? [`workspace:data_${side}_aligned`],
-    async preflight() {
+    async preflight(context) {
       await requireFile(PATHS.python, "内置 Python 不存在，请在启动器中修复依赖", "RUNTIME_MISSING");
       await requireFile(PATHS.currentMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
-      await requireDirectoryWithFiles(
+      if (!allowEmpty) await requireDirectoryWithFiles(
         datasetDirectory(side),
         `${side.toUpperCase()} aligned 人脸集不存在或为空`,
       );
+      return await validate?.(context);
     },
     build(context) {
       return {
@@ -826,12 +928,22 @@ function createDatasetUtilityDefinitions() {
     add("faces_enhance", {
       label: `高清修复 ${upper} aligned`,
       shortLabel: `${upper} 修复`,
-      parameters: GPU_PARAMETERS,
+      interactive: false,
+      parameters: [
+        { id: "enhancementModel", label: "Aligned 修复模型", type: "select", default: "mambairv2", options: [
+          { value: "mambairv2", label: "MambaIRv2 Large x4" }, { value: "realesrgan-x4plus", label: "Real-ESRGAN x4plus" }] },
+        { id: "offset", label: "批次起点（从 0 开始）", type: "number", default: 0, min: 0, max: 500000, integer: true },
+        { id: "limit", label: "本批修复数量", type: "number", default: 500, min: 1, max: 500, integer: true,
+          help: "独立完整副本保留全部未选择人脸；增强结果需要复核。" }, ...GPU_PARAMETERS],
       locks: [`workspace:data_${side}_aligned`, "gpu"],
+      validate: context => verifyFaceEnhancement(context.parameters.enhancementModel),
       args: (directory, parameters) => {
         const values = ["facesettool", "enhance", "--input-dir", directory];
         appendValue(values, "--force-gpu-idxs", parameters.gpuIndexes);
         appendBoolean(values, "--cpu-only", parameters.cpuOnly);
+        appendValue(values, "--enhancement-model", parameters.enhancementModel);
+        appendValue(values, "--offset", parameters.offset);
+        appendValue(values, "--limit", parameters.limit);
         return values;
       },
     });
@@ -856,8 +968,10 @@ function createDatasetUtilityDefinitions() {
     add("recover_names", {
       label: `恢复 ${upper} 原始文件名`,
       shortLabel: `${upper} 恢复名`,
-      args: (directory) => [
+      parameters: [{ id: "dryRun", label: "仅预览恢复计划", type: "boolean", default: false }],
+      args: (directory, parameters) => [
         "util", "--input-dir", directory, "--recover-original-aligned-filename",
+        ...(parameters.dryRun ? ["--dry-run"] : []),
       ],
     });
     add("metadata_save", {
@@ -868,7 +982,28 @@ function createDatasetUtilityDefinitions() {
     add("metadata_restore", {
       label: `恢复 ${upper} faceset 元数据`,
       shortLabel: `${upper} 元数据恢复`,
-      args: (directory) => ["util", "--input-dir", directory, "--restore-faceset-metadata"],
+      parameters: [{ id: "dryRun", label: "仅预览恢复计划", type: "boolean", default: false }],
+      args: (directory, parameters) => ["util", "--input-dir", directory, "--restore-faceset-metadata", ...(parameters.dryRun ? ["--dry-run"] : [])],
+    });
+    const receiptPath = parameters => {
+      if (!/^faceset-[a-f0-9]{32}$/.test(parameters.batchId) || !["trash", "history"].includes(parameters.historyKind))
+        throw new CommandValidationError("请选择实际批次回执；批次编号格式无效", "FACESET_RECEIPT_INVALID");
+      return path.join(datasetDirectory(side) + "_" + parameters.historyKind, parameters.batchId, "receipt.json");
+    };
+    add("recover_batch", {
+      label: `恢复 ${upper} 排序或元数据批次`, shortLabel: `${upper} 批次恢复`, allowEmpty: true,
+      parameters: [
+        { id: "historyKind", label: "批次记录位置", type: "select", default: "trash", options: [{ value: "trash", label: "排序归档 aligned_trash" }, { value: "history", label: "恢复历史 aligned_history" }] },
+        { id: "batchId", label: "批次编号", type: "text", default: "", maxLength: 40, placeholder: "faceset- 后接 32 位批次编号" },
+        { id: "dryRun", label: "仅预览恢复冲突", type: "boolean", default: true, help: "取消勾选后按 SHA 恢复原件；后来编辑的文件不会被覆盖。" },
+      ],
+      validate: async context => {
+        const receipt = receiptPath(context.parameters);
+        await requireFile(receipt, "此项目没有该批次回执", "FACESET_RECEIPT_MISSING");
+        if (await realpath(receipt) !== path.resolve(receipt)) throw new CommandValidationError("批次路径含链接", "FACESET_RECEIPT_INVALID");
+        return { receipt };
+      },
+      args: (directory, parameters) => ["util", "--input-dir", directory, "--recover-receipt", receiptPath(parameters), ...(parameters.dryRun ? ["--dry-run"] : [])],
     });
   }
   return result;
@@ -1024,7 +1159,9 @@ function buildModelMerge(model, profile, label) {
     stage: "merge",
     side: "dst",
     interactive: true,
-    parameters: MERGE_PARAMETERS,
+    parameters: [...MERGE_PARAMETERS,
+      { id: "previewJobId", label: "已复核小样任务", type: "text", default: "", advanced: true, maxLength: 64,
+        help: "从小样采用参数时自动绑定，预检会再次检查素材、模型和参数一致性；普通合成可留空。" }],
     controls: [],
     locks: ["workspace:model", "workspace:data_dst_merged", "gpu"],
     async preflight(context = {}) {
@@ -1035,9 +1172,24 @@ function buildModelMerge(model, profile, label) {
         "PROJECT_INCOMPLETE",
       );
       await requireDirectoryWithFiles(path.join(PATHS.workspaceRoot, "data_dst"), "DST 视频帧不存在");
-      await requireDirectoryWithFiles(datasetDirectory("dst"), "DST aligned 人脸集不存在或为空");
+      const faceset = await requireMeFaceset(context.parameters?.dstFaceset || "data_dst/aligned", "DST 合成人脸集");
+      if (faceset.packed) throw new CommandValidationError("合成人脸集需要解包后的 aligned 文件夹", "PARAMETER_INVALID");
       await requireMeCheckpoint(context.parameters?.forceModelName);
-      return requireMergeXseg(context);
+      if (context.parameters?.previewJobId) {
+        const preview = await inspectMergePreview(context.parameters.previewJobId);
+        if (preview.status !== "complete" || preview.completeCount !== preview.items.length
+            || preview.preview.modelName !== context.parameters.forceModelName
+            || path.resolve(PATHS.workspaceRoot, preview.preview.alignedPath).toLocaleLowerCase("en-US") !== path.resolve(faceset.path).toLocaleLowerCase("en-US")) {
+          throw new CommandValidationError("小样与本次模型或人脸集不一致，请重新生成小样或清除绑定后检查普通合成", "MERGE_PREVIEW_CONFIG_CHANGED");
+        }
+        const expected = JSON.parse(buildMergeEnvironment(profile, context).DFL_WEB_MERGE_CONFIG);
+        const recorded = preview.preview.requestedParameters;
+        if (!recorded || Object.keys(expected).some(key => recorded[key] !== expected[key])) {
+          throw new CommandValidationError("本次合成参数已与小样不同，请重新生成小样或清除绑定后检查普通合成", "MERGE_PREVIEW_CONFIG_CHANGED");
+        }
+      }
+      if (Number(context.parameters?.superResolution) > 0) await verifyFaceEnhancement(context.parameters.superResolutionModel);
+      return { ...await requireMergeXseg(context), dstFaceset: faceset.path };
     },
     build(context) {
       const args = [
@@ -1050,7 +1202,7 @@ function buildModelMerge(model, profile, label) {
         "--output-mask-dir",
         path.join(PATHS.workspaceRoot, "data_dst", "merged_mask"),
         "--aligned-dir",
-        datasetDirectory("dst"),
+        context.preflight?.dstFaceset ?? resolveWorkspacePath(context.parameters.dstFaceset || "data_dst/aligned", "DST 合成人脸集"),
         "--model-dir",
         path.join(PATHS.workspaceRoot, "model"),
         "--model",
@@ -1075,6 +1227,46 @@ function buildModelMerge(model, profile, label) {
         path.join(PATHS.workspaceRoot, "data_dst", "merged_mask"),
         `${label} 合成结束，但 merged_mask 目录没有图片`,
       );
+    },
+  };
+}
+
+function buildMergePreview() {
+  const merge = buildModelMerge("ME", "current", "ME");
+  return {
+    ...merge,
+    id: "merge.preview_me",
+    label: "生成 ME 合成小样",
+    shortLabel: "合成小样",
+    description: "使用当前合成参数处理明确范围内的 1–20 帧，保存独立结果与遮罩，供全片合成前复核。",
+    parameters: [
+      { id: "frameStart", label: "起始帧", type: "number", integer: true, min: 1, max: 100000000, default: 1, help: "按 DST 帧文件名排序，从第 1 帧开始计数。" },
+      { id: "frameCount", label: "小样帧数", type: "number", integer: true, min: 1, max: 20, default: 5, help: "最多 20 帧；输出到独立目录，不能直接作为全片导出输入。" },
+      ...MERGE_PARAMETERS,
+    ],
+    locks: ["workspace:model", "workspace:data_dst", "workspace:merge-preview", "gpu"],
+    async preflight(context = {}) {
+      if (context.launchMode !== "guided") throw new CommandValidationError("合成小样必须使用引导模式确认帧范围与合成参数", "LAUNCH_MODE_INVALID");
+      const result = await merge.preflight(context);
+      const entries = await readdir(path.join(PATHS.workspaceRoot, "data_dst"), { withFileTypes: true });
+      const frameTotal = entries.filter(entry => entry.isFile() && /\.(png|jpe?g|tiff?)$/i.test(entry.name)).length;
+      const { frameStart, frameCount } = context.parameters;
+      if (frameStart - 1 + frameCount > frameTotal) throw new CommandValidationError(`小样范围 ${frameStart}–${frameStart + frameCount - 1} 超出 ${frameTotal} 张 DST 帧，请调整范围`, "PARAMETER_OUT_OF_RANGE");
+      await assertMergePreviewLocation("preflight-check");
+      return { ...result, frameTotal, preview: true };
+    },
+    build(context) {
+      const result = merge.build(context);
+      const directory = mergePreviewDirectory(context.jobId);
+      const replace = (flag, value) => { result.args[result.args.indexOf(flag) + 1] = value; };
+      replace("--output-dir", path.join(directory, "merged"));
+      replace("--output-mask-dir", path.join(directory, "merged_mask"));
+      result.args.push("--preview-frame-start", String(context.parameters.frameStart), "--preview-frame-count", String(context.parameters.frameCount));
+      return result;
+    },
+    async postflight(context) {
+      const result = await inspectMergePreview(context.jobId);
+      if (result.status !== "complete" || result.completeCount !== context.parameters.frameCount) throw new CommandValidationError("独立合成小样不完整，请查看任务日志", "MERGE_PREVIEW_INCOMPLETE");
     },
   };
 }
@@ -1128,6 +1320,42 @@ function buildAdditionalEncode(id, label, mode, extension) {
   };
 }
 
+async function completedRestoration(side, taskId) {
+  if (typeof taskId !== "string" || !/^rst-[a-f0-9]{32}$/.test(taskId))
+    throw new CommandValidationError("请选择已完成的修复记录", "RESTORATION_TASK_INVALID");
+  const manager = new RestorationManager();
+  const recordPath = await manager.safePath(path.join(manager.root, "tasks", `${taskId}.json`));
+  const task = JSON.parse(await readFile(recordPath, "utf8"));
+  if (task.taskId !== taskId || task.side !== side) throw new CommandValidationError("修复记录不属于当前数据侧", "RESTORATION_TASK_INVALID");
+  manager.tasks.set(taskId, task);
+  return manager.resolveOutputDirectory(taskId);
+}
+
+function buildRestoredExtraction(side) {
+  return {
+    id: `${side}.extract_restored`, label: `提取 ${side.toUpperCase()} 修复副本人脸`, shortLabel: "修复副本提取",
+    description: "从已完成修复记录重新提取，保存为独立 aligned 数据集；保留原帧与原 aligned。",
+    profile: "current", category: "extract", stage: "faces", side, interactive: true,
+    parameters: [{ id: "restorationTaskId", label: "修复记录", type: "text", default: "", maxLength: 36 }, ...FACE_PARAMETERS],
+    controls: [], locks: [`workspace:data_${side}_aligned`, "gpu"],
+    async preflight(context = {}) {
+      await requireFile(PATHS.python, "内置 Python 不存在", "RUNTIME_MISSING");
+      await requireFile(PATHS.currentMain, "提取入口不存在", "PROJECT_INCOMPLETE");
+      await completedRestoration(side, context.parameters.restorationTaskId);
+      await verifyDetectorSelection(context);
+      await verifyLandmarkSelection(context);
+      if (await pathExists(path.join(PATHS.workspaceRoot, `data_${side}`, "aligned_restored", context.parameters.restorationTaskId)))
+        throw new CommandValidationError("该修复记录已提取，请使用已有副本人脸集", "RESTORED_FACESET_EXISTS");
+    },
+    build(context) {
+      return { executable: process.execPath, args: [path.join(PATHS.serverDirectory, "extract-restored.mjs"), side, JSON.stringify(context.parameters)], env: buildDflEnvironment("current") };
+    },
+    async postflight({ parameters }) {
+      await requireDirectoryWithFiles(path.join(PATHS.workspaceRoot, `data_${side}`, "aligned_restored", parameters.restorationTaskId), "修复副本提取未产生 aligned");
+    },
+  };
+}
+
 function buildVideoCut(side) {
   const upper = side.toUpperCase();
   return {
@@ -1177,6 +1405,8 @@ function buildVideoCut(side) {
 }
 
 const definitions = Object.freeze({
+  "src.extract_restored": buildRestoredExtraction("src"),
+  "dst.extract_restored": buildRestoredExtraction("dst"),
   "runtime.prepare_vision": {
     id: "runtime.prepare_vision", label: "准备视觉依赖", shortLabel: "视觉依赖",
     description: "下载并校验提帧、切脸与角色分组需要的固定版本依赖，仅写入项目目录。",
@@ -1250,7 +1480,7 @@ const definitions = Object.freeze({
     id: "src.extract_faces",
     label: "提取 SRC 人脸",
     shortLabel: "SRC 人脸",
-    description: "使用 S3FD 从 SRC 帧提取 aligned 人脸。",
+    description: "使用所选检测器从 SRC 帧提取 aligned 人脸。",
     profile: "current",
     category: "extract",
     stage: "faces",
@@ -1259,9 +1489,11 @@ const definitions = Object.freeze({
     parameters: FACE_PARAMETERS,
     controls: [],
     locks: ["workspace:data_src_aligned", "gpu"],
-    async preflight() {
+    async preflight(context = {}) {
       await requireFile(PATHS.python, "内置 Python 不存在，请在启动器中修复依赖", "RUNTIME_MISSING");
       await requireFile(PATHS.currentMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
+      await verifyDetectorSelection(context);
+      await verifyLandmarkSelection(context);
       await requireDirectoryWithFiles(
         path.join(PATHS.workspaceRoot, "data_src"),
         "workspace/data_src 不存在或没有帧",
@@ -1277,6 +1509,7 @@ const definitions = Object.freeze({
         path.join(PATHS.workspaceRoot, "data_src", "aligned"),
       ];
       appendValue(args, "--detector", context.parameters.detector);
+      appendValue(args, "--landmark-model", context.parameters.landmarkModel);
       appendValue(args, "--face-type", context.parameters.faceType);
       appendValue(args, "--image-size", context.parameters.imageSize);
       appendValue(args, "--max-faces-from-image", context.parameters.maxFaces);
@@ -1350,7 +1583,7 @@ const definitions = Object.freeze({
     id: "dst.extract_faces",
     label: "提取 DST 人脸",
     shortLabel: "DST 人脸",
-    description: "使用 S3FD 从 DST 帧提取 aligned 人脸。",
+    description: "使用所选检测器从 DST 帧提取 aligned 人脸。",
     profile: "current",
     category: "extract",
     stage: "faces",
@@ -1359,9 +1592,11 @@ const definitions = Object.freeze({
     parameters: FACE_PARAMETERS,
     controls: [],
     locks: ["workspace:data_dst_aligned", "gpu"],
-    async preflight() {
+    async preflight(context = {}) {
       await requireFile(PATHS.python, "内置 Python 不存在，请在启动器中修复依赖", "RUNTIME_MISSING");
       await requireFile(PATHS.currentMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
+      await verifyDetectorSelection(context);
+      await verifyLandmarkSelection(context);
       await requireDirectoryWithFiles(
         path.join(PATHS.workspaceRoot, "data_dst"),
         "workspace/data_dst 不存在或没有帧",
@@ -1377,6 +1612,7 @@ const definitions = Object.freeze({
         path.join(PATHS.workspaceRoot, "data_dst", "aligned"),
       ];
       appendValue(args, "--detector", context.parameters.detector);
+      appendValue(args, "--landmark-model", context.parameters.landmarkModel);
       appendValue(args, "--face-type", context.parameters.faceType);
       appendValue(args, "--image-size", context.parameters.imageSize);
       appendValue(args, "--max-faces-from-image", context.parameters.maxFaces);
@@ -1609,7 +1845,7 @@ const definitions = Object.freeze({
     id: "src.sort_faces",
     label: "排序 SRC aligned",
     shortLabel: "SRC 排序",
-    description: "整理 SRC aligned 人脸；未在向导中指定时保留 DFL 的 CLI 问答。",
+    description: "可恢复的旧 SRC 批次排序。选择完整代表性训练子集请使用「质量方案 → 最佳训练人脸」。",
     profile: "current",
     category: "sort",
     stage: "clean",
@@ -1634,6 +1870,10 @@ const definitions = Object.freeze({
         path.join(PATHS.workspaceRoot, "data_src", "aligned"),
       ];
       appendValue(args, "--by", context.parameters.method);
+      appendBoolean(args, "--dry-run", context.parameters.dryRun);
+      appendValue(args, "--target-count", context.parameters.targetCount);
+      appendValue(args, "--offset", context.parameters.offset);
+      appendValue(args, "--limit", context.parameters.limit);
       return {
         executable: PATHS.python,
         args,
@@ -1651,7 +1891,7 @@ const definitions = Object.freeze({
     id: "dst.sort_faces",
     label: "排序 DST aligned",
     shortLabel: "DST 排序",
-    description: "整理 DST aligned 人脸；未在向导中指定时保留 DFL 的 CLI 问答。",
+    description: "可恢复的旧 DST 批次排序。选择完整代表性训练子集请使用「质量方案 → 最佳训练人脸」。",
     profile: "current",
     category: "sort",
     stage: "clean",
@@ -1676,6 +1916,10 @@ const definitions = Object.freeze({
         path.join(PATHS.workspaceRoot, "data_dst", "aligned"),
       ];
       appendValue(args, "--by", context.parameters.method);
+      appendBoolean(args, "--dry-run", context.parameters.dryRun);
+      appendValue(args, "--target-count", context.parameters.targetCount);
+      appendValue(args, "--offset", context.parameters.offset);
+      appendValue(args, "--limit", context.parameters.limit);
       return {
         executable: PATHS.python,
         args,
@@ -1926,9 +2170,9 @@ const definitions = Object.freeze({
   },
   "encode.mp4_lossless": {
     id: "encode.mp4_lossless",
-    label: "导出无损 MP4",
-    shortLabel: "无损 MP4",
-    description: "以无损模式依次编码 result.mp4 和 result_mask.mp4。",
+    label: "导出 MP4（YUV 编码无损）",
+    shortLabel: "MP4 CRF 0",
+    description: "以 CRF 0 编码 MP4；保持编码后的 YUV 样本，RGB 转换和 AAC 音频不保证无损。",
     profile: "current",
     category: "encode",
     stage: "encode",
@@ -2000,7 +2244,28 @@ const definitions = Object.freeze({
   },
   "export.dfm_me": buildModelExport("ME", "current", "ME"),
   "merge.me": buildModelMerge("ME", "current", "ME"),
+  "merge.preview_me": buildMergePreview(),
   "encode.avi": buildAdditionalEncode("encode.avi", "导出 AVI", "avi", "avi"),
+  "encode.master": {
+    ...buildAdditionalEncode("encode.master", "导出 RGB 母版", "master", "nut"),
+    description: "生成 FFV1 RGB 母版 result.nut 与 result_mask.nut；回读校验像素、帧时间和音轨，并保存 .media.json。",
+    async postflight() {
+      await buildAdditionalEncode("encode.master", "导出 RGB 母版", "master", "nut").postflight();
+      for (const name of ["result.nut.media.json", "result_mask.nut.media.json"])
+        await requireNonEmptyFile(path.join(PATHS.workspaceRoot, name), `母版缺少媒体校验记录：${name}`);
+    },
+  },
+  "encode.quality": {
+    ...buildAdditionalEncode("encode.quality", "导出母版与播放版", "quality", "mp4"),
+    description: "先生成并验证 FFV1 RGB 母版，再生成高质量 MP4 播放版；保留成片、遮罩与媒体记录。",
+    async postflight() {
+      for (const extension of ["nut", "mp4"]) {
+        await buildAdditionalEncode("encode.quality", "导出母版与播放版", "quality", extension).postflight();
+        for (const prefix of ["result", "result_mask"])
+          await requireNonEmptyFile(path.join(PATHS.workspaceRoot, `${prefix}.${extension}.media.json`), "导出缺少媒体校验记录");
+      }
+    },
+  },
   "encode.mov_lossless": buildAdditionalEncode(
     "encode.mov_lossless",
     "导出无损 MOV",

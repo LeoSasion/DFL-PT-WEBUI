@@ -1,0 +1,3 @@
+# Export numerical parity / ONNX validation only. Runtime still needs onnx.
+-r requirements.txt
+onnxruntime==1.23.2

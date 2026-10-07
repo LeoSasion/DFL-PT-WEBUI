@@ -15,6 +15,8 @@ import numpy.linalg as npla
 from core.qtex.qt_compat import *
 
 from core import imagelib, pathex
+from core.interact import interact as io
+from core.safe_pickle import load_file as load_data_pickle_file, validate_session_mapping, preserve_rejected_file
 from core.cv2ex import *
 from core.imagelib import SegIEPoly, SegIEPolys, SegIEPolyType, sd
 from core.qtex import *
@@ -1246,7 +1248,12 @@ class MainWindow(QXMainWindow):
         self.cfg_root_path = cfg_root_path
 
         self.cfg_path = cfg_root_path / 'MainWindow_cfg.dat'
-        self.cfg_dict = pickle.loads(self.cfg_path.read_bytes()) if self.cfg_path.exists() else {}
+        try:
+            self.cfg_dict = validate_session_mapping(load_data_pickle_file(self.cfg_path, profile='session')) if self.cfg_path.exists() else {}
+        except (OSError, ValueError) as error:
+            self.cfg_dict = {}
+            archive = preserve_rejected_file(self.cfg_path)
+            io.log_err(f'XSeg 编辑器配置读取失败，原文件已保留到 {archive}：{error}')
 
         self.cached_images = {}
         self.cached_has_ie_polys = {}

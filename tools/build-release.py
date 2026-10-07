@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 import fnmatch
 import hashlib
 import io
+import importlib.metadata
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -78,6 +79,53 @@ def digest_file(path: Path) -> str:
         for block in iter(lambda: f.read(CHUNK), b""):
             h.update(block)
     return h.hexdigest()
+
+
+def verify_launcher_build(plan):
+    """Prevent shipping a stale native host beside changed environment/UI source."""
+    record = json.loads(local('launcher/bin/launcher-build.json').read_text(encoding='utf-8'))
+    executable = record.get('executable', {})
+    if record.get('schemaVersion') != 1 or executable.get('file') != 'DFL-PT-WEBUI.Launcher.exe' or not record.get('sources'):
+        raise ReleaseError('Native launcher build has no verifiable source record')
+    binary = local('launcher/bin/' + executable['file'])
+    if binary.stat().st_size != executable.get('bytes') or digest_file(binary) != executable.get('sha256'):
+        raise ReleaseError('Native launcher executable differs from its build record')
+    checked = set()
+    for item in record['sources']:
+        name = relative(item['path'])
+        if name.startswith(('launcher/ui/node_modules/', 'launcher/vendor/')):
+            continue  # Build-only dependency hashes remain in the shipped record.
+        entry = plan.entries.get(name)
+        if entry is None or not entry.blob:
+            raise ReleaseError('Native launcher source is absent from the release snapshot: ' + name)
+        with entry.content() as stream:
+            data = stream.read()
+        candidates = [data]
+        # Git normalizes text according to .gitattributes before storing blobs.
+        # A Windows build record may therefore hash CRLF while its identical
+        # source snapshot has LF. Only reconstruct these line terminators;
+        # every other byte and the recorded raw size/hash must still match.
+        is_text_source = PurePosixPath(name).name == '.npmrc' or PurePosixPath(name).suffix.lower() in {'.ps1', '.psm1', '.psd1', '.cs', '.js', '.mjs', '.jsx',
+                                                               '.json', '.html', '.css', '.manifest', '.xml', '.txt', '.md'}
+        if is_text_source:
+            lf = data.replace(b'\r\n', b'\n')
+            if b'\r' not in lf:
+                candidates.extend((lf, lf.replace(b'\n', b'\r\n')))
+                # An edited Windows file can contain mixed LF/CRLF. Its exact
+                # build bytes still exist locally: require their recorded raw
+                # hash/size, then compare only their normalized line endings
+                # with the immutable Git blob. No other change is accepted.
+                working_source = REPO.joinpath(*PurePosixPath(name).parts)
+                if working_source.is_file() and not working_source.is_symlink():
+                    working_bytes = local(name).read_bytes()
+                    if working_bytes.replace(b'\r\n', b'\n') == lf:
+                        candidates.append(working_bytes)
+        if not any(len(candidate) == item['bytes'] and hashlib.sha256(candidate).hexdigest() == item['sha256']
+                   for candidate in candidates):
+            raise ReleaseError('Native launcher was built from different source; rebuild it: ' + name)
+        checked.add(name)
+    if 'launcher/host/DflEnvironment.cs' not in checked:
+        raise ReleaseError('Native launcher environment contract is absent from its build record')
 
 
 @dataclass(frozen=True)
@@ -248,6 +296,61 @@ class Plan:
                 "npmPackages": self.packages}
 
 
+def git_source_entry(name: str, size: int, oid: str) -> Entry:
+    if PurePosixPath(name).suffix.lower() not in {'.bat', '.cmd'}:
+        return Entry(name, size, 'source', blob=oid)
+    # Git archives contain LF text, but Windows CMD misreads UTF-8 LF batch
+    # wrappers after chcp 65001. Export only project Git scripts with CRLF;
+    # leave every runtime/vendor tree and pinned binary/license byte alone.
+    raw = git('cat-file', 'blob', oid)
+    try:
+        if b'\0' in raw:
+            raise ValueError('NUL/UTF-16 content')
+        raw.decode('utf-8', errors='strict')
+    except (UnicodeDecodeError, ValueError) as error:
+        raise ReleaseError('Git batch source must be UTF-8 text without NUL bytes: ' + name) from error
+    exported = raw.replace(b'\r\n', b'\n').replace(b'\n', b'\r\n')
+    return Entry(name, len(exported), 'source', blob=oid, data=exported)
+
+
+def add_python_runtime_distribution(plan: Plan, item: dict):
+    """Include every non-excluded import file from this checkout's locked wheel."""
+    try:
+        distribution = importlib.metadata.distribution(item['name'])
+    except importlib.metadata.PackageNotFoundError as exc:
+        raise ReleaseError('Locked Python distribution is missing: ' + item['name']) from exc
+    if distribution.version != item['version']:
+        raise ReleaseError('Locked Python package version differs: ' + item['name'])
+    site_packages = REPO / '.venv/Lib/site-packages'
+    if Path(distribution.locate_file('')).resolve() != site_packages.resolve():
+        raise ReleaseError('Locked Python distribution is outside the project runtime: ' + item['name'])
+    files = distribution.files
+    if not files:
+        raise ReleaseError('Locked Python distribution has no file inventory: ' + item['name'])
+    for entry in files:
+        # Normalize RECORD's ../../Scripts paths without following links yet.
+        source = Path(os.path.abspath(distribution.locate_file(entry)))
+        try:
+            relative_name = source.relative_to(site_packages).as_posix()
+        except ValueError:
+            if not source.resolve().is_relative_to((REPO / '.venv').resolve()):
+                raise ReleaseError('Locked Python wheel file escapes the project runtime: ' + str(entry))
+            continue  # Wheel launchers and documentation outside import paths.
+        destination = '.venv/Lib/site-packages/' + relative_name
+        # numpy.testing imports this wheel-owned module under tests; the
+        # explicit runtime allowlist takes precedence over suite exclusions.
+        keep = relative_name in plan.config.get('pythonRuntimeInclude', [])
+        if not keep and (matches(destination, plan.config['runtimeExclude'])
+                         or matches(destination, plan.config['portableExclude'])):
+            continue
+        if not source.resolve().is_relative_to(site_packages.resolve()):
+            raise ReleaseError('Locked Python wheel file escapes site-packages: ' + destination)
+        if not source.is_file():
+            raise ReleaseError('Locked Python runtime file is missing: ' + destination)
+        if destination not in plan.entries:
+            plan.file(destination, category='python-runtime')
+
+
 def plan_release(kind: str, config: dict, commit: str, weights: str) -> Plan:
     plan = Plan(kind, config, commit, weights)
     for record in git("ls-tree", "-rlz", "--full-tree", commit).split(b"\0"):
@@ -261,7 +364,7 @@ def plan_release(kind: str, config: dict, commit: str, weights: str) -> Plan:
             continue
         if kind_name != "blob" or mode not in {"100644", "100755"}:
             raise ReleaseError(f"Git links/submodules require an explicit distribution policy: {name}")
-        plan.add(Entry(name, int(size), "source", blob=oid))
+        plan.add(git_source_entry(name, int(size), oid))
     # Generic XSeg is an inference asset required in both source and portable
     # archives. It must never disappear behind the optional helper-weight flag.
     generic_bytes = git("show", commit + ":" + config["genericXSegManifest"])
@@ -276,7 +379,22 @@ def plan_release(kind: str, config: dict, commit: str, weights: str) -> Plan:
         plan.file(item["source"], item["path"], category, expected=item["sha256"])
     if kind == "source":
         return plan
+    if 'launcher/bin/launcher-build.json' in config.get('runtimeFiles', []):
+        verify_launcher_build(plan)
     for name in config["runtimeTrees"]:
+        if name == '.venv/Lib/site-packages' and config.get('pythonSbomManifest'):
+            sbom = json.loads(git('show', commit + ':' + config['pythonSbomManifest']))
+            profile = config.get('pythonRuntimeProfile', 'production')
+            if sbom.get('target') != 'win_amd64-cp312' or profile not in sbom.get('profiles', {}):
+                raise ReleaseError('Missing fixed Windows Python runtime SBOM/profile')
+            records = {}
+            for key in sbom['profiles'][profile]:
+                item = sbom['packages'][key]
+                add_python_runtime_distribution(plan, item)
+                records[key] = item
+            payload = encoded({'schemaVersion': 1, 'profile': profile, 'target': sbom['target'], 'packages': records})
+            plan.add(Entry('release/python-runtime-sbom.json', len(payload), 'python-sbom', data=payload))
+            continue
         plan.tree(name, category="built-webui" if name == "webui/dist" else "runtime")
     for name in config["runtimeFiles"]:
         if name in plan.entries:
@@ -299,13 +417,14 @@ def plan_release(kind: str, config: dict, commit: str, weights: str) -> Plan:
             if item.get("licenseStatus") != "verified":
                 plan.warnings.append("Bundling awaits a documented upstream source/license review: " + item["path"])
     else:
-        plan.warnings.append("Four auxiliary weights are omitted; run tools/prepare-vision-runtime.ps1 before using extraction/enhancement.")
+        plan.warnings.append("Compatibility S3FD/FAN weights are omitted; run tools/prepare-vision-runtime.ps1 before using those extraction modes.")
     notes = ("DFL-PT-WEBUI portable runtime\n"
              "Start with the project launcher or 启动 WebUI.bat; startup repairs pyvenv.cfg for the current directory.\n"
              "Microsoft Edge WebView2 Runtime and an appropriate NVIDIA driver are host prerequisites.\n"
              "Auxiliary weight policy: " + weights + ".\n"
              + ("Obtain auxiliary weights: powershell -NoProfile -ExecutionPolicy Bypass -File .\\tools\\prepare-vision-runtime.ps1\n" if weights == "download" else "")
              + "Verified generic XSeg inference weights are included under _internal/model_generic_xseg in both archive kinds.\n"
+             + "Default YOLO/TUFA and optional restoration resources use a separate hash-verified resource pack. See release/vision-assets.json; local installation is separate from public distribution admission.\n"
              "Packaging and file integrity checks do not constitute functional, training, dual-GPU or visual-quality validation.\n").encode("utf-8")
     plan.add(Entry("RELEASE-RUNTIME-NOTES.txt", len(notes), "release-note", data=notes))
     plan.npm()

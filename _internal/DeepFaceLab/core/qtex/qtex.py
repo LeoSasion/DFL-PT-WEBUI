@@ -78,10 +78,10 @@ def QImage_to_np(q_img, fmt=QImage.Format_BGR888):
     width = q_img.width()
     height = q_img.height()
 
-    b = q_img.constBits()
-    b.setsize(height * width * 3)
-    arr = np.frombuffer(b, np.uint8).reshape((height, width, 3))
-    return arr#[::-1]
+    # Qt row padding must be retained while interpreting PySide6's memoryview.
+    rows = np.frombuffer(q_img.constBits(), np.uint8,
+                         count=height * q_img.bytesPerLine()).reshape(height, q_img.bytesPerLine())
+    return rows[:, :width * 3].reshape(height, width, 3).copy()
 
 def QPixmap_from_np(img):
     return QPixmap.fromImage(QImage_from_np(img))

@@ -3,7 +3,8 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
-  getInitialReadinessDestination,
+  getNavigationWorkflowGroup,
+  getWorkflowNavigation,
   navigationWorkflowStages,
   workflowStageDestinations,
   workflowStages,
@@ -27,7 +28,7 @@ test("workflow destinations cover the dedicated command and product pages", () =
     faces: { nav: "workflow.faces", task: "src" },
     clean: { nav: "workflow.clean", task: "sort" },
     mask: { nav: "xseg", task: "xseg" },
-    train: { nav: "overview", task: "me" },
+    train: { nav: "training", task: "me" },
     diagnose: { nav: "diagnostics", task: "diagnose" },
     merge: { nav: "merge", task: "merge" },
     encode: { nav: "export", task: "export" },
@@ -43,16 +44,30 @@ test("primary navigation keeps the workflow highlight synchronized", () => {
   assert.equal(navigationWorkflowStages.export, "encode");
 });
 
-test("initial readiness navigation only claims the pre-training setup stages", async () => {
-  assert.deepEqual(getInitialReadinessDestination("material"), { nav: "video" });
-  assert.deepEqual(getInitialReadinessDestination("frames"), { nav: "workflow.frames", task: "extract" });
-  assert.deepEqual(getInitialReadinessDestination("faces"), { nav: "workflow.faces", task: "src" });
-  assert.equal(getInitialReadinessDestination("train"), null);
-  assert.equal(getInitialReadinessDestination("diagnose"), null);
+test("preparation pages expose their steps and a direct training exit", () => {
+  for (const page of ["video", "src", "dst", "xseg", "workflow.frames", "workflow.faces", "workflow.clean", "workflow.roles"]) {
+    assert.equal(getNavigationWorkflowGroup(page), "preprocess");
+    assert.deepEqual(getWorkflowNavigation(page).stages.map(stage => stage.id), ["material", "frames", "faces", "clean", "mask", "train"]);
+  }
+});
 
-  const source = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
-  assert.match(source, /initialWorkspaceNavigationRef\.current === workspaceKey/);
-  assert.match(source, /navigationTouchedRef\.current \|\| activeNav !== "overview"/);
+test("all training pages show only three independent workflow groups", () => {
+  for (const page of ["overview", "training", "diagnostics"]) {
+    const navigation = getWorkflowNavigation(page);
+    assert.equal(navigation.group, "training");
+    assert.equal(navigation.kind, "groups");
+    assert.deepEqual(navigation.stages.map(group => group.label), ["预处理", "训练", "后处理"]);
+    for (const group of navigation.stages) assert.ok(workflowStageDestinations[group.stage]);
+  }
+});
+
+test("postprocessing starts from a training return link and exposes merge and encode", () => {
+  for (const page of ["merge", "export"]) {
+    assert.equal(getNavigationWorkflowGroup(page), "postprocess");
+    assert.deepEqual(getWorkflowNavigation(page).stages.map(stage => stage.id), ["train", "merge", "encode"]);
+  }
+  assert.equal(getNavigationWorkflowGroup("tools"), null);
+  assert.equal(getNavigationWorkflowGroup("settings"), null);
 });
 
 test("terminal safe stop targets the selected training session", async () => {

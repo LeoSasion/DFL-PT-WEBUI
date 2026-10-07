@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 rem DFL-PT-WEBUI project-local environment. Preserve Windows user directories.
 for %%D in ("%~dp0..") do set "DFL_PT_ROOT=%%~fD"
 set "INTERNAL=%DFL_PT_ROOT%\_internal"
@@ -16,5 +17,18 @@ set "NODE_BIN_PATH=%INTERNAL%\node\bin"
 set "FFMPEG_PATH=%INTERNAL%\ffmpeg"
 set "XNVIEWMP_PATH=%INTERNAL%\XnViewMP"
 set "PATH=%PYTHON_PATH%;%NODE_BIN_PATH%;%FFMPEG_PATH%;%XNVIEWMP_PATH%;%PATH%"
-set "WORKSPACE=%DFL_PT_ROOT%\workspace"
+rem Re-read the active selection on every call. Fail closed rather than target
+rem the wrong project's images after WebUI has switched projects.
+set "WORKSPACE="
+set "DFL_ACTIVE_PROJECT_ID="
+for /f "usebackq tokens=1,* delims=|" %%I in (`""%PYTHON_EXECUTABLE%" -I "%DFL_PT_ROOT%\launcher\resolve-active-project.py" --root "%DFL_PT_ROOT%" --field bat"`) do (
+  set "DFL_ACTIVE_PROJECT_ID=%%I"
+  set "WORKSPACE=%%J"
+)
+if not defined WORKSPACE (
+  echo [ERROR] Active project could not be resolved. Reopen WebUI project selection.
+  exit /b 2
+)
+set "DFL_WORKSPACE=%WORKSPACE%"
+echo [DFL-PT-WEBUI] Project: %DFL_ACTIVE_PROJECT_ID%  Workspace: "%WORKSPACE%"
 set "DFL_ROOT=%INTERNAL%\DeepFaceLab"

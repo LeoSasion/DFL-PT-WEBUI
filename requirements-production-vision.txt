@@ -1,0 +1,7 @@
+# CUDA Torch/torchvision are installed from the fixed runtime lock, not resolved
+# from the generic PyPI index. Keep old timm for the pinned TUFA source contract.
+torchvision==0.24.1+cu128
+ultralytics==8.4.142
+timm==0.4.12
+yacs==0.1.8
+einops==0.8.1

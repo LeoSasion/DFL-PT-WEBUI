@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { IconRefresh } from "@tabler/icons-react";
 import { runtimeApi } from "../runtime/api.js";
 import { cancelOperationAndCheck } from "../runtime/operation-cancellation.js";
 import { useI18n } from "../i18n.jsx";
 import { LoadingProgress } from "./ProgressFeedback.jsx";
 
-export function BackgroundOperations({ projectId, serviceOnline, onError, onNotice }) {
+export function BackgroundOperations({ projectId, serviceOnline, onError, onNotice, onOpenResult, resultsTarget }) {
   const { t } = useI18n();
   const [operations, setOperations] = useState([]);
+  const [results, setResults] = useState([]), [dismissed, setDismissed] = useState(new Set());
+  const [resultsExpanded, setResultsExpanded] = useState(false);
+  const resultsToggle = useRef(null);
   const [cancellations, setCancellations] = useState({});
   const [connection, setConnection] = useState("connecting");
   const [monitorError, setMonitorError] = useState(null);
@@ -46,6 +50,7 @@ export function BackgroundOperations({ projectId, serviceOnline, onError, onNoti
   useEffect(() => {
     if (!projectId) return undefined;
     const dispose = runtimeApi.watchOperations({
+      onRecords: records => setResults(records.filter(item => item.resultTarget && ["succeeded", "cancelled", "failed", "interrupted"].includes(item.status)).sort((a, b) => String(b.finishedAt).localeCompare(String(a.finishedAt))).slice(0, 3)),
       onUpdate: activeRecords => {
         operationsRef.current = activeRecords;
         setOperations(activeRecords);
@@ -59,7 +64,7 @@ export function BackgroundOperations({ projectId, serviceOnline, onError, onNoti
       onError: setMonitorError,
       onSettled: operation => {
         const { t: translate, onNotice: notice, onError: error } = handlers.current;
-        const label = operation.label || translate("后台分析");
+        const label = translate(operation.label || "后台分析");
         if (operation.status === "succeeded") notice?.(translate("后台操作已完成：{label}", { label }));
         else if (operation.status === "cancelled") notice?.(translate("后台操作已取消：{label}", { label }));
         else error?.(new Error(translate("后台操作需要检查：{label}", { label }) + " · "
@@ -82,7 +87,22 @@ export function BackgroundOperations({ projectId, serviceOnline, onError, onNoti
     try { await current.refresh(); }
     finally { if (monitor.current === current) setChecking(false); }
   };
+  const visibleResults = results.filter(item => !dismissed.has(item.id));
+  const openResult = operation => { setResultsExpanded(false); onOpenResult?.(operation); };
+  const resultCards = visibleResults.map(operation => <article className="background-result-card" key={operation.id}>
+      <div><strong>{t(operation.label)}</strong><span>{t(operation.status === "succeeded" ? "处理完成" : operation.status === "cancelled" ? "已取消，可检查已完成部分" : "需要检查结果")} · {operation.resultTarget.side?.toUpperCase()}</span></div>
+      <button type="button" className="button secondary" disabled={!serviceOnline} onClick={() => openResult(operation)}>{t(operation.status === "succeeded" ? "查看结果" : "查看并继续")}</button>
+      <button type="button" className="text-button" aria-label={`${t("收起结果")} ${t(operation.label)}`} onClick={() => setDismissed(current => new Set([...current, operation.id]))}>{t("收起")}</button>
+    </article>);
   return <>
+    {visibleResults.length && resultsTarget?.current ? createPortal(<section className="background-results-inline" aria-label={t("最近后台结果")}
+      onKeyDown={event => { if (event.key === "Escape" && resultsExpanded) { event.stopPropagation(); setResultsExpanded(false); resultsToggle.current?.focus(); } }}>
+      <strong title={t(visibleResults[0].label)}>{t(visibleResults[0].label)}</strong>
+      <span>{t(visibleResults[0].status === "succeeded" ? "处理完成" : "需要检查结果")} · {visibleResults[0].resultTarget.side?.toUpperCase()}</span>
+      <button type="button" className="text-button" disabled={!serviceOnline} onClick={() => openResult(visibleResults[0])}>{t("查看结果")}</button>
+      <button type="button" className="text-button" ref={resultsToggle} aria-expanded={resultsExpanded} onClick={() => setResultsExpanded(value => !value)}>{t("最近结果 {count}", { count: visibleResults.length })}</button>
+      {resultsExpanded ? <div className="background-results-popover">{resultCards}</div> : null}
+    </section>, resultsTarget.current) : null}
     {monitorError || (operations.length > 0 && stale) ? <div className="background-operation-notice" role="status">
       <div><strong>{t("后台进度连接中断")}</strong><span>{t("正在自动重连；操作是否结束仍需确认。")}</span></div>
       <button type="button" className="button secondary" disabled={checking} onClick={() => void checkProgress()}><IconRefresh size={15}/>{checking ? t("检查中…") : t("检查进度")}</button>
@@ -99,7 +119,7 @@ export function BackgroundOperations({ projectId, serviceOnline, onError, onNoti
             : [operation.stage, operation.detail].filter(Boolean).join(" · ");
       return <LoadingProgress
         key={operation.id}
-        label={operation.label || t("后台分析")}
+        label={t(operation.label || "后台分析")}
         detail={detail}
         value={operation.percent}
         current={operation.current}

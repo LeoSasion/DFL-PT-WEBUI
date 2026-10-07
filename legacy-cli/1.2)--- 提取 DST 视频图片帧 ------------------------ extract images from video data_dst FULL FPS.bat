@@ -10,6 +10,7 @@ echo.
 echo [最近使用] 已写入，如果需要清空历史请手动删除！
 
 call "%~dp0..\_internal\setenv.bat"
+if errorlevel 1 exit /b %errorlevel%
 
 mkdir "%WORKSPACE%\data_dst" 2>nul
 

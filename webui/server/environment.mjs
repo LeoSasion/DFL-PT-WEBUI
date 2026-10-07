@@ -10,29 +10,19 @@ export function buildDflEnvironment(profile, additions = {}) {
 
   const internal = PATHS.internalRoot;
   const inheritedEnvironment = Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => key.toUpperCase() !== "PATH"),
+    Object.entries(process.env).filter(([key]) => !["PATH", "PYTHONHOME", "PYTHONPATH", "QT_QPA_PLATFORM_PLUGIN_PATH"].includes(key.toUpperCase())),
   );
   const pythonRoot = path.join(PATHS.repositoryRoot, ".venv");
   const pythonScripts = path.join(pythonRoot, "Scripts");
-  const localProfile = path.join(internal, "_e", "u");
   const runtimePaths = [
     pythonScripts,
-    path.join(internal, "CUDA"),
-    path.join(internal, "CUDNN"),
-    path.join(internal, "CUDNN", "Win6.x"),
-    path.join(internal, "XnViewMP"),
+    path.join(internal, "node", "bin"),
     path.join(internal, "ffmpeg"),
-    process.env.PATH ?? "",
+    Object.entries(process.env).find(([key]) => key.toUpperCase() === "PATH")?.[1] ?? "",
   ];
 
   return {
     ...inheritedEnvironment,
-    TMP: path.join(internal, "_e", "t"),
-    TEMP: path.join(internal, "_e", "t"),
-    USERPROFILE: localProfile,
-    HOMEPATH: localProfile,
-    LOCALAPPDATA: path.join(localProfile, "AppData", "Local"),
-    APPDATA: path.join(localProfile, "AppData", "Roaming"),
     PYTHONHOME: "",
     PYTHONPATH: "",
     PYTHONEXECUTABLE: PATHS.python,
@@ -41,10 +31,12 @@ export function buildDflEnvironment(profile, additions = {}) {
     PYTHONW_EXECUTABLE: path.join(pythonScripts, "pythonw.exe"),
     PYTHON_BIN_PATH: PATHS.python,
     PYTHON_LIB_PATH: path.join(pythonRoot, "Lib", "site-packages"),
-    QT_QPA_PLATFORM_PLUGIN_PATH: path.join(pythonRoot, "Lib", "site-packages", "PyQt5", "Qt", "plugins"),
-    XNVIEWMP_PATH: path.join(internal, "XnViewMP"),
+    QT_QPA_PLATFORM_PLUGIN_PATH: path.join(pythonRoot, "Lib", "site-packages", "PySide6", "plugins"),
     FFMPEG_PATH: path.join(internal, "ffmpeg"),
     WORKSPACE: PATHS.workspaceRoot,
+    DFL_WORKSPACE: PATHS.workspaceRoot,
+    DFL_ACTIVE_PROJECT_WORKSPACE: PATHS.workspaceRoot,
+    DFL_ACTIVE_PROJECT_ID: PATHS.activeProject.id,
     DFL_ROOT: profile === "legacy" ? PATHS.legacyDflRoot : PATHS.currentDflRoot,
     PYTHONIOENCODING: "utf-8",
     PATH: runtimePaths.filter(Boolean).join(delimiter),

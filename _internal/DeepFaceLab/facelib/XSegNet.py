@@ -7,6 +7,7 @@ import numpy as np
 
 from core.interact import interact as io
 from core.leras import nn
+from core.safe_pickle import load_file as load_data_pickle_file
 
 
 class XSegNet(object):
@@ -172,7 +173,7 @@ class XSegNet(object):
 
         from core.leras.weight_io import load_weight_mapping
         try:
-            mapping = pickle.loads(filename.read_bytes())
+            mapping = load_data_pickle_file(filename, profile='weights')
             load_weight_mapping(self.model, mapping)
         except (OSError, pickle.UnpicklingError, EOFError, ValueError, TypeError, RuntimeError) as error:
             io.log_err(f"XSeg 权重加载失败：{filename}: {error}")

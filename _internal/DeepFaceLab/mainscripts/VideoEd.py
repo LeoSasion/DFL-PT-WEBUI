@@ -2,7 +2,6 @@ import subprocess
 import shutil
 import tempfile
 import numpy as np
-import ffmpeg
 from pathlib import Path
 from core import pathex
 from core import osex
@@ -36,29 +35,41 @@ def extract_video(input_file, output_dir, output_ext=None, fps=None):
             help_message="png 为无损，但在机械硬盘上提取速度可能更慢，并且比 jpg 占用更多磁盘空间。",
         )
 
-    for filename in pathex.get_image_paths(output_path, ['.' + output_ext]):
-        Path(filename).unlink()
-
-    job = ffmpeg.input(str(input_file_path))
-
-    kwargs = {'pix_fmt': 'rgb24'}
-    if fps != 0:
-        kwargs.update({'r': str(fps)})
-
-    if output_ext == 'jpg':
-        kwargs.update({'q:v': '2'})  # highest quality for jpg
-
-    job = job.output(str(output_path / ('%5d.' + output_ext)), **kwargs)
-
-    ffmpeg_cmd = osex.get_ffmpeg_path()
-    if ffmpeg_cmd is None:
-        raise FileNotFoundError('未找到 ffmpeg。请安装 ffmpeg，或将 ffmpeg 可执行文件放到 tools/ 目录（Windows：tools/ffmpeg.exe），或设置环境变量 DFL_FFMPEG 指向 ffmpeg。')
-
-    try:
-        job = job.run(cmd=ffmpeg_cmd)
-    except ffmpeg.Error as error:
-        io.log_err("ffmpeg 执行失败，命令行：" + str(job.compile(cmd=ffmpeg_cmd)))
-        raise RuntimeError("FFmpeg processing failed") from error
+    from core.media_timeline import extract_frames, MANIFEST_NAME
+    ffmpeg_cmd, ffprobe_cmd = osex.get_ffmpeg_path(), osex.get_ffprobe_path()
+    if not ffmpeg_cmd or not ffprobe_cmd:
+        raise FileNotFoundError('提帧需要项目内 FFmpeg 与 ffprobe。')
+    # Keep the prior image sequence and its timeline together, and publish only
+    # after decoded source PTS and every extracted file have been checked.
+    with tempfile.TemporaryDirectory(prefix='.extract-', dir=output_path.parent) as temporary:
+        staging = Path(temporary) / 'new'
+        timeline = extract_frames(input_file_path, staging, ffmpeg_cmd, ffprobe_cmd, output_ext, fps)
+        import uuid
+        backup = output_path / ('.frame-extract-backup-' + uuid.uuid4().hex)
+        existing = [Path(item) for item in pathex.get_image_paths(output_path)]
+        if (output_path / MANIFEST_NAME).exists():
+            existing.append(output_path / MANIFEST_NAME)
+        moved, installed = [], []
+        try:
+            if existing:
+                backup.mkdir()
+            for image in existing:
+                saved = backup / image.name
+                image.replace(saved)
+                moved.append((image, saved))
+            for result in staging.iterdir():
+                destination = output_path / result.name
+                result.replace(destination)
+                installed.append(destination)
+        except Exception:
+            for result in installed:
+                if result.exists():
+                    result.replace(staging / result.name)
+            for original, saved in reversed(moved):
+                saved.replace(original)
+            raise
+        io.log_info(f'已提取 {len(timeline["frames"])} 帧，源 PTS/颜色/音轨清单：{MANIFEST_NAME}')
+        return timeline
 
 
 def cut_video(input_file, from_time=None, to_time=None, audio_track_id=None, bitrate=None):
@@ -80,31 +91,39 @@ def cut_video(input_file, from_time=None, to_time=None, audio_track_id=None, bit
     if bitrate is None:
         bitrate = max(1, io.input_int("输出码率（Mbps）", 25))
 
-    kwargs = {
-        "c:v": "libx264",
-        "b:v": "%dM" % (bitrate),
-        "pix_fmt": "yuv420p",
-    }
-
-    job = ffmpeg.input(str(input_file_path), ss=from_time, to=to_time)
-
-    job_v = job['v:0']
-    job_a = job['a:' + str(audio_track_id) + '?']
-
-    job = ffmpeg.output(job_v, job_a, str(output_file_path), **kwargs).overwrite_output()
-
     ffmpeg_cmd = osex.get_ffmpeg_path()
     if ffmpeg_cmd is None:
         raise FileNotFoundError('未找到 ffmpeg。请安装 ffmpeg，或将 ffmpeg 可执行文件放到 tools/ 目录（Windows：tools/ffmpeg.exe），或设置环境变量 DFL_FFMPEG 指向 ffmpeg。')
 
+    from core.media_timeline import run
+    if isinstance(audio_track_id, bool) or int(audio_track_id) != audio_track_id or int(audio_track_id) < 0:
+        raise ValueError('Audio track index must be a nonnegative integer')
+    if not 1 <= int(bitrate) <= 1000:
+        raise ValueError('Video bitrate must be between 1 and 1000 Mbps')
+    # Each value is one fixed argument, including Unicode/space-containing paths.
+    # A failed encoding cannot overwrite a previous successful cut.
+    import uuid
+    pending = output_file_path.with_name('.cut-' + uuid.uuid4().hex + output_file_path.suffix)
     try:
-        job = job.run(cmd=ffmpeg_cmd)
-    except ffmpeg.Error as error:
-        io.log_err("ffmpeg 执行失败，命令行：" + str(job.compile(cmd=ffmpeg_cmd)))
-        raise RuntimeError("FFmpeg processing failed") from error
+        run([ffmpeg_cmd, '-hide_banner', '-nostdin', '-y', '-ss', str(from_time), '-to', str(to_time),
+             '-i', input_file_path, '-map', '0:v:0', '-map', f'0:a:{int(audio_track_id)}?',
+             '-c:v', 'libx264', '-b:v', f'{int(bitrate)}M', '-pix_fmt', 'yuv420p', pending])
+        if not pending.is_file() or not pending.stat().st_size:
+            raise RuntimeError('FFmpeg produced an empty cut')
+        if output_file_path.exists():
+            backup = output_file_path.with_name(output_file_path.stem + '.backup-' + uuid.uuid4().hex + output_file_path.suffix)
+            shutil.copyfile(output_file_path, backup)
+        pending.replace(output_file_path)
+    finally:
+        pending.unlink(missing_ok=True)
 
 
 def denoise_image_sequence(input_dir, ext=None, factor=None):
+    import json
+    from core.faceset_transaction import execute_plan, sha256
+    from core.media_timeline import MANIFEST_NAME
+    from merger.temporal_geometry import bind_timeline
+
     input_path = Path(input_dir)
 
     if not input_path.is_dir():
@@ -127,29 +146,42 @@ def denoise_image_sequence(input_dir, ext=None, factor=None):
     if factor is None:
         factor = np.clip(io.input_int("降噪强度？", 7, add_info="1-20"), 1, 20)
 
+    factor = float(factor)
+    if not np.isfinite(factor) or not 1 <= factor <= 20:
+        raise ValueError('Denoising factor must be between 1 and 20')
+
+    # A denoised frame retains its original PTS, but has different pixels.
+    # Validate the current binding before processing; never bless an already
+    # stale manifest by merely replacing its hashes after the fact.
+    timeline_path = input_path / MANIFEST_NAME
+    timeline = None
+    if timeline_path.exists():
+        bind_timeline(image_paths)
+        timeline = json.loads(timeline_path.read_text(encoding='utf-8'))
+        if not isinstance(timeline.get('processingHistory', []), list):
+            raise ValueError('Invalid source-frame processing history')
+    source_hashes = {path.name: sha256(path) for path in image_paths}
+    timeline_hash = sha256(timeline_path) if timeline is not None else None
+
     ffmpeg_cmd = osex.get_ffmpeg_path()
     if ffmpeg_cmd is None:
         raise FileNotFoundError('未找到 ffmpeg。请安装 ffmpeg，或将 ffmpeg 可执行文件放到 tools/ 目录（Windows：tools/ffmpeg.exe），或设置环境变量 DFL_FFMPEG 指向 ffmpeg。')
-    # Separate FFmpeg's input and output and validate every frame before replacing
-    # originals. The old in-place sequence could truncate its own input files.
+    # Separate FFmpeg's input and output, then publish pictures and their timing
+    # manifest through one recoverable batch with durable original backups.
     from core.cv2ex import cv2_imread
     from DFLIMG import DFLIMG
     with tempfile.TemporaryDirectory(prefix='.denoise-', dir=input_path.parent) as temporary:
         staging = Path(temporary)
-        source, result, backup = [staging / name for name in ('input', 'output', 'original')]
-        for folder in (source, result, backup):
+        source, result = [staging / name for name in ('input', 'output')]
+        for folder in (source, result):
             folder.mkdir()
         for index, path in enumerate(image_paths, 1):
             shutil.copyfile(path, source / f'{index:06d}{image_paths_suffix}')
-        kwargs = {'q:v': '2'} if image_paths_suffix in ('.jpg', '.jpeg') else {}
         pattern = '%06d' + image_paths_suffix
-        job = (ffmpeg.input(str(source / pattern), start_number=1)
-               .filter('hqdn3d', factor, factor, 5, 5)
-               .output(str(result / pattern), start_number=1, **kwargs).overwrite_output())
-        try:
-            job.run(cmd=ffmpeg_cmd, capture_stdout=True, capture_stderr=True)
-        except ffmpeg.Error as error:
-            raise RuntimeError('FFmpeg denoising failed') from error
+        from core.media_timeline import run
+        quality = ['-q:v', '2'] if image_paths_suffix in ('.jpg', '.jpeg') else []
+        run([ffmpeg_cmd, '-hide_banner', '-nostdin', '-y', '-start_number', '1', '-i', source / pattern,
+             '-vf', f'hqdn3d={factor}:{factor}:5:5', '-start_number', '1', *quality, result / pattern])
         processed = sorted(result.glob('*' + image_paths_suffix))
         if len(processed) != len(image_paths):
             raise RuntimeError('FFmpeg denoising returned an incomplete image sequence')
@@ -162,132 +194,64 @@ def denoise_image_sequence(input_dir, ext=None, factor=None):
                 denoised = DFLIMG.load(output)
                 denoised.set_dict(metadata.get_dict())
                 denoised.save()
-        replaced = []
-        try:
-            for original, output in zip(image_paths, processed):
-                saved = backup / original.name
-                original.replace(saved)
-                replaced.append((original, saved))
-                output.replace(original)
-        except Exception:
-            for original, saved in reversed(replaced):
-                saved.replace(original)
-            raise
+        changes, records = [], []
+        for original, output in zip(image_paths, processed):
+            output_hash = sha256(output)
+            changes.append({'source': original.name, 'target': original.name,
+                            'source_sha256': source_hashes[original.name],
+                            'payload_path': output, 'payload_sha256': output_hash})
+            records.append({'file': original.name, 'inputImageSha256': source_hashes[original.name],
+                            'outputImageSha256': output_hash})
+        if timeline is not None:
+            by_name = {frame['file']: frame for frame in timeline['frames']}
+            for record in records:
+                frame = by_name[record['file']]
+                frame.setdefault('originalImageSha256', frame['imageSha256'])
+                frame['imageSha256'] = record['outputImageSha256']
+            timeline.setdefault('processingHistory', []).append({
+                'operation': 'denoise', 'filter': 'hqdn3d',
+                'parameters': {'lumaSpatial': factor, 'chromaSpatial': factor,
+                               'lumaTemporal': 5, 'chromaTemporal': 5},
+                'sourcePtsPreserved': True, 'frames': records})
+            changes.append({'source': MANIFEST_NAME, 'target': MANIFEST_NAME,
+                            'source_sha256': timeline_hash,
+                            'payload': (json.dumps(timeline, ensure_ascii=False, indent=2,
+                                                   allow_nan=False) + '\n').encode('utf-8')})
+        if (any(sha256(path) != source_hashes[path.name] for path in image_paths)
+                or timeline is not None and sha256(timeline_path) != timeline_hash):
+            raise RuntimeError('Source frames or timing manifest changed during denoising')
+        receipt = execute_plan(input_path, changes, operation='denoise', details={
+            'filter': 'hqdn3d', 'factor': factor, 'timingManifestUpdated': timeline is not None,
+            'sourcePtsPreserved': True, 'frames': records})
+        io.log_info('去噪图片与时间清单已一起提交；原件和恢复回执：' + receipt['receipt_path'])
+        return receipt
 
 
 def video_from_sequence(input_dir, output_file, reference_file=None, ext=None, fps=None, bitrate=None, include_audio=False, lossless=None):
-    input_path = Path(input_dir)
-    output_file_path = Path(output_file)
-    reference_file_path = Path(reference_file) if reference_file is not None else None
-
+    from core.media_timeline import encode_sequence
+    input_path, target = Path(input_dir), Path(output_file)
     if not input_path.is_dir():
-        raise FileNotFoundError(f"未找到输入目录：{input_path}")
-
-    if not output_file_path.parent.exists():
-        output_file_path.parent.mkdir(parents=True, exist_ok=True)
-
-    out_ext = output_file_path.suffix
-
-    if ext is None:
-        ext = io.input_str("输入图片格式（扩展名）", "png")
-
+        raise FileNotFoundError(f'未找到输入目录：{input_path}')
+    target.parent.mkdir(parents=True, exist_ok=True)
+    reference = Path(reference_file) if reference_file else None
+    if reference and reference.suffix == '.*':
+        reference = pathex.get_first_file_by_stem(reference.parent, reference.stem)
+    if reference_file and (reference is None or not Path(reference).is_file()):
+        raise FileNotFoundError('未找到参考视频。')
+    ext = ext or io.input_str('输入图片格式（扩展名）', 'png')
     if lossless is None:
-        lossless = io.input_bool("是否使用无损编码", False)
-
-    video_id = None
-    audio_id = None
-    ref_in_a = None
-    if reference_file_path is not None:
-        if reference_file_path.suffix == '.*':
-            reference_file_path = pathex.get_first_file_by_stem(reference_file_path.parent, reference_file_path.stem)
-        else:
-            if not reference_file_path.exists():
-                reference_file_path = None
-
-        if reference_file_path is None:
-            raise FileNotFoundError("未找到参考视频。")
-
-        # probing reference file
-        ffprobe_cmd = osex.get_ffprobe_path()
-        if ffprobe_cmd is None:
-            raise FileNotFoundError('未找到 ffprobe。请安装 ffmpeg（通常会自带 ffprobe），或将 ffprobe 可执行文件放到 tools/ 目录（Windows：tools/ffprobe.exe），或设置环境变量 DFL_FFPROBE 指向 ffprobe。')
-
-        probe = ffmpeg.probe(str(reference_file_path), cmd=ffprobe_cmd)
-
-        # getting first video and audio streams id with fps
-        for stream in probe['streams']:
-            if video_id is None and stream['codec_type'] == 'video':
-                video_id = stream['index']
-                fps = stream['r_frame_rate']
-
-            if audio_id is None and stream['codec_type'] == 'audio':
-                audio_id = stream['index']
-
-        if audio_id is not None:
-            # has audio track
-            ref_in_a = ffmpeg.input(str(reference_file_path))[str(audio_id)]
-
-    if fps is None:
-        # if fps not specified and not overwritten by reference-file
-        fps = max(1, io.input_int("请输入 FPS", 25))
-
+        lossless = io.input_bool('是否使用编码器无损模式（MP4仍有YUV颜色转换；RGB母版请输出.nut）', False)
+    images = [Path(item) for item in pathex.get_image_paths(input_path, image_extensions=['.' + ext.lstrip('.')])]
+    if not images:
+        raise ValueError('输入目录没有可封装的图片。')
+    if fps is None and reference is None and not any((parent / 'frames.timeline.json').is_file() for parent in (input_path, input_path.parent)):
+        fps = max(1, io.input_int('请输入明确的恒定 FPS（没有源时间清单）', 25))
     if not lossless and bitrate is None:
-        bitrate = max(1, io.input_int("输出视频码率（MB/s）", 16))
-
-    input_image_paths = pathex.get_image_paths(input_path, image_extensions=['.' + ext.lstrip('.')])
-    if not input_image_paths:
-        raise ValueError("输入目录没有可封装的图片。")
-
-    i_in = ffmpeg.input('pipe:', format='image2pipe', r=fps)
-
-    output_args = [i_in]
-
-    if include_audio and ref_in_a is not None:
-        output_args += [ref_in_a]
-
-    output_args += [str(output_file_path)]
-
-    output_kwargs = {}
-
-    if lossless:
-        output_kwargs.update({
-            "c:v": "libx264",
-            "crf": "0",
-            "pix_fmt": "yuv420p",
-        })
-    else:
-        output_kwargs.update({
-            "c:v": "libx264",
-            "b:v": "%dM" % (bitrate),
-            "pix_fmt": "yuv420p",
-        })
-
-    ffmpeg_cmd = osex.get_ffmpeg_path()
-    if ffmpeg_cmd is None:
-        raise FileNotFoundError('未找到 ffmpeg。请安装 ffmpeg，或将 ffmpeg 可执行文件放到 tools/ 目录（Windows：tools/ffmpeg.exe），或设置环境变量 DFL_FFMPEG 指向 ffmpeg。')
-
-    if include_audio and ref_in_a is not None:
-        output_kwargs.update({
-            "c:a": "aac",
-            "b:a": "192k",
-            "ar": "48000",
-            "strict": "experimental",
-        })
-
-    job = (ffmpeg.output(*output_args, **output_kwargs).overwrite_output())
-
-    try:
-        job_run = job.run_async(cmd=ffmpeg_cmd, pipe_stdin=True)
-
-        for image_path in input_image_paths:
-            with open(image_path, "rb") as f:
-                image_bytes = f.read()
-                job_run.stdin.write(image_bytes)
-
-        job_run.stdin.close()
-        return_code = job_run.wait()
-        if return_code != 0 or not output_file_path.is_file() or output_file_path.stat().st_size == 0:
-            raise RuntimeError(f'FFmpeg video export failed (exit {return_code})')
-    except (OSError, ffmpeg.Error) as error:
-        io.log_err("ffmpeg 失败，任务命令行：" + str(job.compile(cmd=ffmpeg_cmd)))
-        raise RuntimeError("FFmpeg video export failed") from error
+        bitrate = max(1, io.input_int('输出视频码率（Mbps）', 16))
+    ffmpeg_cmd, ffprobe_cmd = osex.get_ffmpeg_path(), osex.get_ffprobe_path()
+    if not ffmpeg_cmd or not ffprobe_cmd:
+        raise FileNotFoundError('视频封装需要项目内 FFmpeg 与 ffprobe。')
+    record = encode_sequence(images, target, ffmpeg_cmd, ffprobe_cmd, reference=reference, fps=fps,
+                             bitrate=bitrate or 16, lossless=lossless, include_audio=include_audio)
+    io.log_info('视频导出已回读验证：' + record['mode'] + '；时间与验证记录：' + target.name + '.media.json')
+    return record

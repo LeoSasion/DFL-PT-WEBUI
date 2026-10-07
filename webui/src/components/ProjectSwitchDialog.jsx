@@ -50,7 +50,7 @@ export function ProjectSwitchDialog({ project, onClose, onReady }) {
       {busy ? <LoadingProgress inline compact tone="amber" label={label} detail={t("目标项目：{name}", { name: project.name })} rememberDuration={false}/> : null}
       {state.error ? <div className="workspace-read-error" role="alert"><p>{t(state.error.message)}</p>{state.phase === "unconfirmed" ? <p>{t("切换请求可能已生效。继续检查只读取状态，不会重复提交切换。")}</p> : null}</div> : null}
     </div>
-    <footer><button ref={initialFocusRef} className="button secondary" type="button" disabled={busy} onClick={onClose}>{t("返回设置")}</button>
+    <footer><button ref={initialFocusRef} className="button secondary" type="button" disabled={busy} onClick={onClose}>{t("返回项目管理")}</button>
       <button className="button primary" type="button" disabled={busy} onClick={() => void run(checkOnly)}>{checkOnly ? t("继续检查") : t("确认切换")}</button></footer>
   </section></div>;
 }

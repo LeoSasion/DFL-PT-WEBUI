@@ -586,7 +586,7 @@ export class JobManager extends EventEmitter {
     if (exitCode === 0 && !job.error && !job.stopReason) {
       const definition = getCommandDefinition(job.commandId);
       try {
-        await definition?.postflight?.({ parameters: job.parameters, launchMode: job.launchMode });
+        await definition?.postflight?.({ parameters: job.parameters, launchMode: job.launchMode, jobId: job.id });
       } catch (error) {
         job.error = error instanceof Error ? error.message : String(error);
         this.record(job, "terminal.output", {

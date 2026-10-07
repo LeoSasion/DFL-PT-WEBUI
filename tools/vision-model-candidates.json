@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "selectionPolicy": "quality-only",
+  "defaultPromotion": "requires-reviewed-quality-evidence",
+  "performanceInRanking": false,
+  "groups": [
+    {"task": "detection", "reference": "yolo11m-face", "referenceProject": "H3CE_v2", "candidates": ["yolo12l-face", "yolo26s-face"], "compatibility": ["s3fd"]},
+    {"task": "landmarks", "reference": "tufa98", "referenceProject": "H3CE_v2", "candidates": ["orformer98", "regression98"], "compatibility": ["tufa68", "fan68", "fan3d"]},
+    {"task": "restoration", "reference": "swinir-psnr", "referenceProject": "H3CE_v2", "candidates": ["realesrgan-x4plus", "gfpgan-v1.4"], "historicalReferences": ["swinir-gan", "nafnet-gopro32", "restormer-defocus"]},
+    {"task": "identity", "reference": "sface", "referenceProject": "DFL-PT-WEBUI (H3CE has no identity model)", "candidates": ["adaface-ir100-webface12m", "magface-iresnet100"]},
+    {"task": "face-mask", "reference": "xseg-wf", "referenceProject": "DFL-PT-WEBUI (H3CE contours are not segmentation)", "candidates": ["bisenet-celebamaskhq", "sam2.1-hiera-large"], "differentOutputSemanticsRequireTargetContract": true},
+    {"task": "perceptual-metric", "reference": "lpips-alex-v0.1", "referenceProject": "H3CE_v2", "candidates": ["lpips-vgg-v0.1", "dists"], "comparisonRequiresHumanQualityReference": true}
+  ],
+  "detectorAssets": [
+    {
+      "id": "yolo11m-face", "architecture": "yolo11m", "family": "yolo11", "scale": "m", "task": "detect",
+      "filename": "yolov11m-face.pt", "runtime": "ultralytics==8.4.142",
+      "source": "https://github.com/akanametov/yolo-face/releases/download/1.0.0/yolov11m-face.pt",
+      "sourceRepository": "https://github.com/akanametov/yolo-face", "sourceRevision": "release/1.0.0",
+      "sizeBytes": 40499429, "sha256": "6ccbe920c1fac95ed84de570519e89fbe24d326d466a7aae297960b3ecc6c661",
+      "hashSource": "H3CE source lock, locally reverified 2026-10-06",
+      "codeLicense": "AGPL-3.0", "weightLicenseStatus": "recorded-upstream-terms-not-admitted-for-bundling"
+    },
+    {
+      "id": "yolo12l-face", "architecture": "yolo12l", "family": "yolo12", "scale": "l", "task": "detect",
+      "filename": "yolov12l-face.pt", "runtime": "ultralytics==8.4.142",
+      "source": "https://github.com/akanametov/yolo-face/releases/download/1.0.0/yolov12l-face.pt",
+      "sourceRepository": "https://github.com/akanametov/yolo-face", "sourceRevision": "release/1.0.0",
+      "sizeBytes": 53507770, "sha256": "e6c2424dbeb78be0a03af61e3d53cc103786aa24f040e727084e4e027b7918fa",
+      "hashSource": "GitHub release asset published SHA-256",
+      "codeLicense": "AGPL-3.0", "weightLicenseStatus": "recorded-upstream-terms-not-admitted-for-bundling"
+    },
+    {
+      "id": "yolo26s-face", "architecture": "yolo26s-pose-face", "family": "yolo26", "scale": "s", "task": "pose",
+      "filename": "yolo26s-face.pt", "runtime": "ultralytics==8.4.142",
+      "source": "https://github.com/akanametov/yolo-face/releases/download/1.0.0/yolo26s-face.pt",
+      "sourceRepository": "https://github.com/akanametov/yolo-face", "sourceRevision": "release/1.0.0",
+      "sizeBytes": 21615079, "sha256": "6f1485ac6397a94eecdb5d11575f72eb05130c6c6e6d896d0b4d4aaf02d7c69a",
+      "hashSource": "GitHub release asset published SHA-256",
+      "codeLicense": "AGPL-3.0", "weightLicenseStatus": "recorded-upstream-terms-not-admitted-for-bundling"
+    }
+  ]
+}

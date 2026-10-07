@@ -52,6 +52,7 @@ function PanelState({ icon, title, detail, loading = false }) {
 export function DatasetCleaningPanel(props) {
   const { t } = useI18n();
   const [mode, setMode] = useState("quality");
+  useEffect(() => { if (["quality", "similarity", "roles"].includes(props.initialMode)) setMode(props.initialMode); }, [props.initialMode, props.initialModeRequest]);
   return (
     <div className="advanced-audit-shell">
       <div className="advanced-mode-switch" role="tablist" aria-label={t("清洗分析模式") }>
@@ -342,7 +343,8 @@ export function SegmentTimelinePanel({ side, refreshVersion, onError, onNotice, 
   const [currentTime, setCurrentTime] = useState(0);
   const [markIn, setMarkIn] = useState(0);
   const [markOut, setMarkOut] = useState(null);
-  const [threshold, setThreshold] = useState(0.35);
+  const [threshold, setThreshold] = useState(0.32);
+  const [algorithm, setAlgorithm] = useState("ffmpeg");
   const [fps, setFps] = useState(0);
   const [busy, setBusy] = useState(null);
   const [retry, setRetry] = useState(0);
@@ -354,14 +356,15 @@ export function SegmentTimelinePanel({ side, refreshVersion, onError, onNotice, 
       if (cancelled) return;
       setTimeline(value);
       setSegments(value.segments ?? []);
-      setThreshold(value.sceneThreshold ?? 0.35);
+      setThreshold(value.sceneThreshold ?? 0.32);
+      setAlgorithm(value.sceneAlgorithm ?? "ffmpeg");
       setMarkOut(value.material?.durationSeconds ?? null);
     }).catch((error) => { if (!cancelled) onError(error); });
     return () => { cancelled = true; };
   }, [onError, refreshVersion, retry, side]);
   const duration = Number(timeline?.material?.durationSeconds) || 0;
   const activeScene = timeline?.scenes.find((scene) => currentTime >= scene.start && currentTime < scene.end) ?? null;
-  const addSegment = (start = markIn, end = markOut) => {
+  const addSegment = (start = markIn, end = markOut, sourceFrameRange) => {
     if (end == null || end <= start) return onError(new Error(t("出点必须晚于入点")));
     setSegments((current) => [...current, {
       id: `seg-${crypto.randomUUID().replaceAll("-", "").slice(0, 10)}`,
@@ -369,6 +372,7 @@ export function SegmentTimelinePanel({ side, refreshVersion, onError, onNotice, 
       start,
       end,
       selected: true,
+      ...(sourceFrameRange ? { sourceFrameRange } : {}),
     }].sort((left, right) => left.start - right.start));
   };
   const seek = (time) => {
@@ -386,9 +390,9 @@ export function SegmentTimelinePanel({ side, refreshVersion, onError, onNotice, 
   const detect = async () => {
     setBusy("detect");
     try {
-      const result = await runtimeApi.detectVideoScenes(side, threshold);
-      setTimeline((current) => ({ ...current, scenes: result.scenes, sceneThreshold: result.threshold }));
-      onNotice(t("已检测 {count} 个场景", { count: result.scenes.length }));
+      const result = await runtimeApi.detectVideoScenes(side, { algorithm, threshold });
+      setTimeline((current) => ({ ...current, scenes: result.scenes, sceneThreshold: result.threshold, sceneAlgorithm: result.algorithm, sceneSummary: result.sceneSummary }));
+      onNotice(t("已检测 {count} 个场景", { count: result.sceneSummary.total }));
     } catch (error) { onError(error); } finally { setBusy(null); }
   };
   const extract = async () => {
@@ -439,7 +443,11 @@ export function SegmentTimelinePanel({ side, refreshVersion, onError, onNotice, 
           <button type="button" onClick={() => setMarkIn(currentTime)}>{t("设为入点")}<strong>{formatTime(markIn)}</strong></button>
           <button type="button" onClick={() => setMarkOut(currentTime)}>{t("设为出点")}<strong>{formatTime(markOut)}</strong></button>
           <button className="button primary" type="button" onClick={() => addSegment()}><IconScissors size={15} />{t("添加分段")}</button>
-          <button type="button" disabled={!activeScene} onClick={() => activeScene && addSegment(activeScene.start, activeScene.end)}>{t("添加当前场景")}</button>
+          <button type="button" disabled={!activeScene} onClick={() => activeScene && addSegment(activeScene.start, activeScene.end, {
+            sourceSha256: timeline.sceneSummary.sourceSha256, startIndex: activeScene.startFrameIndex,
+            endIndexExclusive: activeScene.endFrameIndexExclusive, startPts: activeScene.startPts,
+            endPts: activeScene.endPts, timeBase: activeScene.timeBase,
+          })}>{t("添加当前场景")}</button>
         </div>
         <div className="segment-list">
           {segments.map((segment, index) => (
@@ -457,9 +465,14 @@ export function SegmentTimelinePanel({ side, refreshVersion, onError, onNotice, 
         <header><div><span>{side.toUpperCase()}</span><strong>{timeline.material.name}</strong></div><small>{formatTime(duration)}</small></header>
         <section>
           <strong>{t("场景检测")}</strong>
-          <label><span>{t("敏感度阈值")}</span><input type="range" min="0.08" max="0.85" step="0.01" value={threshold} onChange={(event) => setThreshold(Number(event.target.value))} /><b>{threshold.toFixed(2)}</b></label>
-          <button className="button secondary" type="button" disabled={Boolean(busy)} onClick={() => void detect()}><IconSparkles size={15} />{busy === "detect" ? t("正在检测…") : t("检测场景边界")}</button>
-          <small>{t("只生成时间边界，不会修改视频。阈值越低，分段越密。")}</small>
+          <label><span>{t("场景算法")}</span><select value={algorithm} onChange={event => { const value = event.target.value; setAlgorithm(value); setThreshold({ ffmpeg: 0.32, adaptive: 3, transnetv2: 0.5 }[value]); }}>
+            {[{ id: "ffmpeg", label: "FFmpeg" }, { id: "adaptive", label: "Adaptive" }, { id: "transnetv2", label: "TransNetV2" }].map(item => <option key={item.id} value={item.id} disabled={timeline.sceneAlgorithms?.find(value => value.id === item.id)?.available === false}>{item.label}{timeline.sceneAlgorithms?.find(value => value.id === item.id)?.available === false ? t("（未准备）") : ""}</option>)}
+          </select></label>
+          <label><span>{t(algorithm === "adaptive" ? "变化比率阈值" : "敏感度阈值")}</span><input type="range" min={algorithm === "adaptive" ? "0.1" : "0.01"} max={algorithm === "adaptive" ? "20" : "0.99"} step={algorithm === "adaptive" ? "0.1" : "0.01"} value={threshold} onChange={(event) => setThreshold(Number(event.target.value))} /><b>{threshold.toFixed(2)}</b></label>
+          <button className="button secondary" type="button" disabled={Boolean(busy) || timeline.sceneAlgorithms?.find(value => value.id === algorithm)?.available === false} onClick={() => void detect()}><IconSparkles size={15} />{busy === "detect" ? t("正在检测…") : t("检测场景边界")}</button>
+          <small>{t("边界绑定原始帧索引与整数 PTS；视频保持原样。阈值越低，分段越密。")}</small>
+          {timeline.sceneSummary ? <small>{t("已显示 {displayed} / {total} 个场景，本轮最多 500 个；尾段保留。", timeline.sceneSummary)}</small> : null}
+          {timeline.sceneAlgorithms?.filter(item => !item.available).map(item => <small key={item.id}>{item.id}: {item.reason}</small>)}
         </section>
         <section>
           <strong>{t("批量提帧")}</strong>

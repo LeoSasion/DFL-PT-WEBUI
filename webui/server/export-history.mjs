@@ -4,7 +4,7 @@ import { releaseVersion } from "../../release/version.mjs";
 import { PATHS, writeJsonAtomic } from "./paths.mjs";
 
 const root = path.join(PATHS.runtimeRoot, "exports");
-const outputName = /^result(?:_mask)?\.(?:mp4|avi|mov)$/;
+const outputName = /^result(?:_mask)?\.(?:mp4|avi|mov|nut)(?:\.media\.json)?$/;
 
 async function safeRoot() {
   for (const directory of [PATHS.workspaceRoot,PATHS.runtimeRoot,root]) {
@@ -18,9 +18,11 @@ export async function recordExport(job) {
   if (!/^[a-z0-9-]+$/.test(job.id)) throw new Error("导出记录 ID 无效");
   await safeRoot();
   await mkdir(root, { recursive: true });
-  const extension = job.commandId.includes("avi") ? "avi" : job.commandId.includes("mov") ? "mov" : "mp4";
+  const extension = job.commandId === "encode.master" ? "nut" : job.commandId.includes("avi") ? "avi" : job.commandId.includes("mov") ? "mov" : "mp4";
   const outputs = [];
-  for (const name of [`result.${extension}`, `result_mask.${extension}`]) {
+  const extensions = job.commandId === "encode.quality" ? ["nut", "mp4"] : [extension];
+  for (const name of extensions.flatMap(ext => [`result.${ext}`, `result_mask.${ext}`,
+    `result.${ext}.media.json`, `result_mask.${ext}.media.json`])) {
     try {
       const info = await lstat(path.join(PATHS.workspaceRoot, name));
       if (info.isFile() && !info.isSymbolicLink()) outputs.push({ name, bytes: info.size, modifiedAt: info.mtime.toISOString() });

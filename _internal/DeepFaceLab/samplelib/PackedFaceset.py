@@ -9,6 +9,7 @@ from pathlib import Path, PurePosixPath
 
 from core import pathex
 from core.interact import interact as io
+from core.safe_pickle import loads as load_data_pickle, validate_faceset_configs
 from samplelib import Sample
 
 packed_faceset_filename = "faceset.pak"
@@ -171,9 +172,7 @@ class PackedFaceset:
                 info = archive.getinfo(packed_faceset_filename_config)
                 if info.file_size > MAX_CONFIG_BYTES:
                     raise ValueError("Faceset metadata is too large")
-                configs = pickle.loads(archive.read(packed_faceset_filename_config))
-                if not isinstance(configs, list):
-                    raise ValueError("Faceset metadata must contain a sample list")
+                configs = validate_faceset_configs(load_data_pickle(archive.read(packed_faceset_filename_config), profile='faceset'))
                 samples = [Sample(**config) for config in configs]
                 members = set()
                 for sample in samples:
@@ -193,9 +192,7 @@ class PackedFaceset:
             metadata = stream.read(metadata_size)
             if len(metadata) != metadata_size:
                 raise ValueError("Truncated faceset metadata")
-            configs = pickle.loads(metadata)
-            if not isinstance(configs, list):
-                raise ValueError("Faceset metadata must contain a sample list")
+            configs = validate_faceset_configs(load_data_pickle(metadata, profile='faceset'))
             samples = [Sample(**config) for config in configs]
             table = stream.read(8 * (len(samples) + 1))
             if len(table) != 8 * (len(samples) + 1):

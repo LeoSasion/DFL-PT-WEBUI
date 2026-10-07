@@ -8,6 +8,12 @@ $categories = @('视频处理 / Video','SRC 数据 / Source','DST 数据 / Desti
 function Show-Menu {
     Write-Host ''
     Write-Host 'DFL-PT-WEBUI | PyTorch ME 与配套工具' -ForegroundColor Green
+    $selectionPython = Join-Path $root '.venv\Scripts\python.exe'
+    $active = & $selectionPython -I (Join-Path $root 'launcher\resolve-active-project.py') --root $root
+    if ($LASTEXITCODE -ne 0) { throw '无法解析当前项目，请在 WebUI 中重新选择。' }
+    $active = $active | ConvertFrom-Json
+    Write-Host ('当前项目：{0} | 工作区：{1}' -f $active.id,$active.workspace)
+    Write-Host '传统兼容工具；质量方案、批次预览与可恢复操作优先使用 WebUI。'
     for ($index=0; $index -lt $categories.Count; $index++) { Write-Host ("[{0}] {1}" -f ($index+1), $categories[$index]) }
     Write-Host '[W] WebUI 管理器    [Q] 退出'
 }

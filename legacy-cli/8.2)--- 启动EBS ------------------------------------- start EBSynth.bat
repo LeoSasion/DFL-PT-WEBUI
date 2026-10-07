@@ -2,6 +2,7 @@
 setlocal EnableExtensions
 chcp 65001 >nul
 call "%~dp0..\_internal\setenv.bat"
+if errorlevel 1 exit /b %errorlevel%
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0external-tools.ps1" -Tool EbSynth
 set "TOOL_EXIT=%errorlevel%"
 pause

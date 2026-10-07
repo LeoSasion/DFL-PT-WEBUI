@@ -32,6 +32,7 @@ import { ProjectManagerPanel } from "./ProjectManagerPanel.jsx";
 import { ReleaseFeedbackPanel } from "./ReleaseFeedbackPanel.jsx";
 import { getNextWorkflowStep } from "../domain/workflow-readiness.js";
 import { jobPresentation, isFailedJob } from "../domain/job-presentation.js";
+import "./WorkflowGuidance.css";
 
 const categoryLabels = {
   dataset: "数据集工具",
@@ -66,7 +67,7 @@ function profileLabel(profile) {
   return profile === "pytorch" ? "ME PyTorch" : "PyTorch 素材工具";
 }
 
-export function CommandRows({ commands, onOpenCommand }) {
+export function CommandRows({ commands, onOpenCommand, disabled = false, disabledReason = "" }) {
   const { t } = useI18n();
   const groups = useMemo(() => {
     const result = new Map();
@@ -87,7 +88,8 @@ export function CommandRows({ commands, onOpenCommand }) {
       {groups.map(([category, items]) => (
         <section className="command-group" key={category}>
           <header>
-            <h3>{t(categoryLabels[category] ?? category)}</h3>
+            <h3>{t(category === "model" && items.every(command => command.id.startsWith("model.import_"))
+              ? "模型导入" : categoryLabels[category] ?? category)}</h3>
             <span>{t("{count} 项", { count: items.length })}</span>
           </header>
           <div className="command-rows">
@@ -96,6 +98,8 @@ export function CommandRows({ commands, onOpenCommand }) {
                 className="command-row"
                 key={command.id}
                 type="button"
+                disabled={disabled}
+                title={disabled ? disabledReason : undefined}
                 onClick={() => onOpenCommand(command.id)}
               >
                 <span className="command-row-state"><IconPlayerPlay size={15} /></span>
@@ -140,6 +144,7 @@ export function CommandCenterView({
         </div>
         <span className="operation-count">{t("{count} 个已接入功能", { count: visibleCommands.length })}</span>
       </header>
+
       {actions}
       <div className={`operation-layout ${aside ? "has-aside" : ""}`}>
         <CommandRows commands={visibleCommands} onOpenCommand={onOpenCommand} />
@@ -573,15 +578,6 @@ function AnnotationCanvas({
         </svg>
       </div>
       <div className="annotation-actions" role="toolbar" aria-label={t("遮罩编辑操作")}>
-        <button className="button secondary" type="button" onClick={() => void inheritPrevious()} disabled={editorBusy} title={t("继承上一张")}>
-          <IconRestore size={15} />{t("继承")}
-        </button>
-        <button className="button secondary" type="button" onClick={copyPolygons} disabled={!polygons.length} title="Ctrl+C">
-          <IconCopy size={15} />{t("复制")}
-        </button>
-        <button className="button secondary" type="button" onClick={pastePolygons} disabled={editorBusy || !clipboard?.length} title="Ctrl+V">
-          <IconClipboard size={15} />{t("粘贴")}
-        </button>
         <button
           className={`button secondary annotation-mask-toggle ${appliedMaskVisible ? "is-active" : ""}`}
           type="button"
@@ -603,9 +599,14 @@ function AnnotationCanvas({
         <button className="button secondary" type="button" onClick={finishPolygon} disabled={editorBusy || draft.length < 3} title={t("闭合当前多边形")}>
           <IconCheck size={15} />{t("闭合")}
         </button>
-        <button className="button secondary" type="button" onClick={() => setPolygons((value) => value.slice(0, -1))} disabled={editorBusy || !polygons.length} title={t("移除最后一个多边形")}>
-          <IconTrash size={15} />{t("移除")}
-        </button>
+        <details className="annotation-more-actions" onKeyDown={event => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); event.stopPropagation(); } }}>
+          <summary>{t("更多")}</summary><div>
+            <button className="button secondary" type="button" onClick={() => void inheritPrevious()} disabled={editorBusy}><IconRestore size={15}/>{t("继承上一张")}</button>
+            <button className="button secondary" type="button" onClick={copyPolygons} disabled={!polygons.length} title="Ctrl+C"><IconCopy size={15}/>{t("复制多边形")}</button>
+            <button className="button secondary" type="button" onClick={pastePolygons} disabled={editorBusy || !clipboard?.length} title="Ctrl+V"><IconClipboard size={15}/>{t("粘贴多边形")}</button>
+            <button className="button secondary" type="button" onClick={() => setPolygons(value => value.slice(0, -1))} disabled={editorBusy || !polygons.length}><IconTrash size={15}/>{t("移除最后一个多边形")}</button>
+          </div>
+        </details>
       </div>
     </div>
   );
@@ -653,6 +654,7 @@ function AssetInspector({
   const maskId = `asset-mask-${useId().replaceAll(":", "")}`;
   const [visibleLayers, setVisibleLayers] = useState({
     dfl: false,
+    native: false,
     mask: false,
     points: false,
     polygons: false,
@@ -662,6 +664,7 @@ function AssetInspector({
   }, []);
 
   const landmarks = annotation?.landmarks ?? [];
+  const nativeLandmarks = annotation?.nativeLandmarks?.available ? annotation.nativeLandmarks.landmarks : [];
   const polygons = annotation?.polygons ?? [];
   const sourceRect = annotation?.sourceRectAligned ?? [];
   const polygonPointCount = polygons.reduce((total, polygon) => total + polygon.points.length, 0);
@@ -700,6 +703,15 @@ function AssetInspector({
             loading={annotationLoading}
             onToggle={() => toggleLayer("dfl")}
             tone="dfl"
+          />
+          <InspectorLayerButton
+            active={visibleLayers.native}
+            available={nativeLandmarks.length === 98}
+            detail={annotation?.nativeLandmarks?.reason ?? "WFLW98 · 98"}
+            label="TUFA98"
+            loading={annotationLoading}
+            onToggle={() => toggleLayer("native")}
+            tone="native"
           />
           <InspectorLayerButton
             active={visibleLayers.polygons}
@@ -832,6 +844,10 @@ function AssetInspector({
               vectorEffect="non-scaling-stroke"
             />
           )) : null}
+          {visibleLayers.native ? nativeLandmarks.map(([x, y], pointIndex) => (
+            <circle className="asset-native-landmark-point" key={`native-${pointIndex}`}
+              cx={x} cy={y} r={pointRadius * 0.65} vectorEffect="non-scaling-stroke" />
+          )) : null}
         </svg>
       </div>
       <div className="asset-preview-actions" role="toolbar" aria-label={t("素材操作")}>
@@ -907,6 +923,10 @@ export function DatasetView({
   const [maskClipboard, setMaskClipboard] = useState([]);
   const [maskDirty, setMaskDirty] = useState(false);
   const [thumbnailSizeIndex, setThumbnailSizeIndex] = useState(1);
+  const [detailWidth, setDetailWidth] = useState(() => {
+    try { const value = Number(localStorage.getItem("dfl.dataset-detail-width")); return Number.isFinite(value) && value >= 280 && value <= 680 ? value : 440; }
+    catch { return 440; }
+  });
   const sideRef = useRef(side);
   const collectionOffsetsRef = useRef({ workspace: 0, recovery: 0 });
   const refreshRequestRef = useRef(0);
@@ -1232,6 +1252,16 @@ export function DatasetView({
           </button>
         </div>
       </header>
+      {editMasks ? <section className="mask-workflow-guidance" aria-label={t("遮罩处理方式")}>
+        <header><strong>{t("手工修正")}</strong><details><summary>{t("查看遮罩用途")}</summary><div className="workflow-guidance">
+          <div><strong>{t("手工修正")}</strong><p>{t("逐张修正 include / exclude 多边形。已有人工标注与已应用遮罩分别显示，保存后再检查边缘。")}</p></div>
+          <div><strong>{t("自动应用遮罩")}</strong><p>{t("将内置或所选 XSeg 写入本侧 aligned；需要批量更新遮罩时使用。")}</p></div>
+          <div><strong>{t("辅助 XSeg 训练")}</strong><p>{t("用手工标注训练场景专用遮罩，适合内置遮罩无法覆盖的遮挡或轮廓。")}</p></div>
+        </div></details><div className="mask-workflow-actions">
+          <button type="button" className="button secondary" disabled={maskDirty} title={maskDirty ? t("先保存或放弃当前手工修改") : undefined} onClick={() => onOpenCommand(`xseg.apply_${side}`)}>{t("配置自动应用")}</button>
+          <button type="button" className="button secondary" disabled={maskDirty} title={maskDirty ? t("先保存或放弃当前手工修改") : undefined} onClick={() => onOpenCommand("xseg.train")}>{t("配置 XSeg 训练")}</button>
+        </div></header>
+      </section> : null}
       {datasetAction ? (
         <LoadingProgress
           compact
@@ -1298,7 +1328,8 @@ export function DatasetView({
         </div>
       )}
 
-      <div id="dataset-browser-panel" className={`dataset-layout ${editMasks ? "is-mask-editor" : "is-browser"}`}>
+      <details className="dataset-layout-controls"><summary>{t("调整查看面板")}</summary><label>{t("查看面板宽度")}<input type="range" min="280" max="680" step="20" value={detailWidth} aria-label={t("查看面板宽度")} onChange={event => { const value = Number(event.target.value); setDetailWidth(value); try { localStorage.setItem("dfl.dataset-detail-width", String(value)); } catch { /* The layout still works without storage. */ } }}/><output>{detailWidth} px</output></label></details>
+      <div id="dataset-browser-panel" className={`dataset-layout ${editMasks ? "is-mask-editor" : "is-browser"}`} style={{ "--dataset-inspector-width": `${detailWidth}px` }}>
         <aside className="asset-browser">
           <div className="asset-browser-heading">
             <div>
@@ -1459,7 +1490,7 @@ export function ModelSummaryAside({ workspace }) {
           <span>{model.type}</span>
           <div>
             <strong>{model.name}</strong>
-            <small>{t("{count} 个文件", { count: model.fileCount })}</small>
+            <small>{t("{count} 个文件", { count: model.fileCount })} · {t(model.ready === false ? "缺少必要文件" : "已发现，使用前检查")}</small>
           </div>
         </div>
       )) : (

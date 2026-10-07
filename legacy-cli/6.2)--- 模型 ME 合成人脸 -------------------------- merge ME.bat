@@ -3,6 +3,7 @@ setlocal EnableExtensions
 chcp 65001 >nul
 title DFL-PT-WEBUI ME Merge
 call "%~dp0..\_internal\setenv.bat"
+if errorlevel 1 exit /b %errorlevel%
 "%PYTHON_EXECUTABLE%" "%DFL_ROOT%\main.py" merge ^
     --input-dir "%WORKSPACE%\data_dst" ^
     --output-dir "%WORKSPACE%\data_dst\merged" ^

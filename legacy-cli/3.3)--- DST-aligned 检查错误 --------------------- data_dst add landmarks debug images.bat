@@ -14,6 +14,7 @@ echo.
 echo 如果需要自动检查，请使用 8.1)--- Landmarks自动识错 ------------------------ Landmarks auto check
 
 call "%~dp0..\_internal\setenv.bat"
+if errorlevel 1 exit /b %errorlevel%
 
 "%PYTHON_EXECUTABLE%" "%DFL_ROOT%\main.py" util ^
     --input-dir "%WORKSPACE%\data_dst\aligned" ^

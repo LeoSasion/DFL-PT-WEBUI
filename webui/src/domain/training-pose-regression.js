@@ -48,7 +48,12 @@ function average(values) {
 }
 
 function finiteMetric(sample, channel, metricKey) {
-  const value = sample?.metrics?.[channel]?.[metricKey];
+  const metrics = sample?.metrics;
+  // ME snapshots store reconstruction metrics at the top level; swap stays nested.
+  const channelMetrics = channel === "reconstruction" && !Object.hasOwn(metrics ?? {}, channel)
+    ? metrics
+    : metrics?.[channel];
+  const value = channelMetrics?.[metricKey];
   return Number.isFinite(value) ? value : null;
 }
 

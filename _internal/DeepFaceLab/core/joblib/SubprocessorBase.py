@@ -3,12 +3,16 @@ import multiprocessing
 import time
 import sys
 import os
+import queue
 from core.interact import interact as io
 
 
 class Subprocessor(object):
 
     class SilenceException(Exception):
+        pass
+
+    class LifecycleError(RuntimeError):
         pass
 
     class Cli(object):
@@ -39,7 +43,21 @@ class Subprocessor(object):
             self.s2c = s2c
             self.c2s = c2s
             self.p.daemon = True
-            self.p.start()
+            try:
+                self.p.start()
+                # Parent never writes results or reads requests. Closing its
+                # duplicate endpoints lets a truncated child response report
+                # EOF instead of blocking forever after a silent child exit.
+                c2s._writer.close()
+                s2c._reader.close()
+            except BaseException:
+                for channel in (s2c, c2s):
+                    channel.cancel_join_thread(); channel.close()
+                raise
+            self.shutdown_timeout_sec = 2.0
+            self.pid = self.p.pid
+            self.exit_confirmed = False
+            self._queues_closed = False
 
             self.state = None
             self.sent_time = None
@@ -48,8 +66,17 @@ class Subprocessor(object):
             self.host_dict = None
 
         def kill(self):
-            self.p.terminate()
-            self.p.join()
+            if self.p.is_alive(): self.p.terminate()
+            self.p.join(timeout=self.shutdown_timeout_sec)
+            if self.p.is_alive():
+                self.p.kill(); self.p.join(timeout=self.shutdown_timeout_sec)
+            if self.p.is_alive():
+                raise Subprocessor.LifecycleError(f'Subprocess {self.pid} exit remains unconfirmed')
+            self.exit_confirmed = True
+            if not self._queues_closed:
+                for channel in (self.s2c, self.c2s):
+                    channel.cancel_join_thread(); channel.close()
+                self._queues_closed = True
 
         #overridable optional
         def on_initialize(self, client_dict):
@@ -100,14 +127,18 @@ class Subprocessor(object):
                 self.on_finalize()
                 c2s.put ( {'op': 'finalized'} )
             except Subprocessor.SilenceException as e:
+                is_error = True
                 c2s.put ( {'op': 'error', 'data' : data} )
             except Exception as e:
+                is_error = True
                 err_msg = traceback.format_exc()
                 c2s.put ( {'op': 'error', 'data' : data, 'err_msg' : err_msg} )
 
-            c2s.close()
-            s2c.close()
+            # Never wait without a bound for a Queue feeder during teardown.
+            c2s.cancel_join_thread(); c2s.close()
+            s2c.cancel_join_thread(); s2c.close()
             self.c2s = None
+            if is_error: raise SystemExit(1)
 
         # disable pickling
         def __getstate__(self):
@@ -116,7 +147,8 @@ class Subprocessor(object):
             self.__dict__.update(d)
 
     #overridable
-    def __init__(self, name, SubprocessorCli_class, no_response_time_sec = 0, io_loop_sleep_time=0.005, initialize_subprocesses_in_serial=False):
+    def __init__(self, name, SubprocessorCli_class, no_response_time_sec = 0, io_loop_sleep_time=0.005, initialize_subprocesses_in_serial=False,
+                 initialize_timeout_sec=120.0, finalize_timeout_sec=30.0, shutdown_timeout_sec=2.0):
         if not issubclass(SubprocessorCli_class, Subprocessor.Cli):
             raise ValueError("SubprocessorCli_class must be subclass of Subprocessor.Cli")
 
@@ -125,6 +157,13 @@ class Subprocessor(object):
         self.no_response_time_sec = no_response_time_sec
         self.io_loop_sleep_time = io_loop_sleep_time
         self.initialize_subprocesses_in_serial = initialize_subprocesses_in_serial
+        for name, value in (('initialize', initialize_timeout_sec), ('finalize', finalize_timeout_sec), ('shutdown', shutdown_timeout_sec)):
+            if not isinstance(value, (int, float)) or not 0 < value <= 86400:
+                raise ValueError(f'{name} timeout must be a positive finite duration')
+        self.initialize_timeout_sec = float(initialize_timeout_sec)
+        self.finalize_timeout_sec = float(finalize_timeout_sec)
+        self.shutdown_timeout_sec = float(shutdown_timeout_sec)
+        self.lifecycle_errors = []
 
     #overridable
     def process_info_generator(self):
@@ -174,153 +213,126 @@ class Subprocessor(object):
     def run(self):
         if not self.on_check_run():
             return self.get_result()
+        self.clis, all_clis = [], []
+        host_initialized = False
+        host_finalized = False
 
-        self.clis = []
+        def messages(cli):
+            while True:
+                try:
+                    yield cli.c2s.get_nowait()
+                except queue.Empty:
+                    return
+                except (EOFError, OSError, ValueError):
+                    return
 
-        def cli_init_dispatcher(cli):
-            while not cli.c2s.empty():
-                obj = cli.c2s.get()
-                op = obj.get('op','')
-                if op == 'init_ok':
-                    cli.state = 0
-                elif op == 'log_info':
-                    io.log_info(obj['msg'])
-                elif op == 'log_err':
-                    io.log_err(obj['msg'])
-                elif op == 'error':
-                    err_msg = obj.get('err_msg', None)
-                    if err_msg is not None:
-                        io.log_info(f'Error while subprocess initialization: {err_msg}')
-                    cli.kill()
-                    self.clis.remove(cli)
-                    break
-
-        #getting info about name of subprocesses, host and client dicts, and spawning them
-        for name, host_dict, client_dict in self.process_info_generator():
+        def failed(cli, phase, message, return_data=False):
+            self.lifecycle_errors.append({'name': cli.name, 'pid': cli.pid, 'phase': phase, 'message': message})
+            io.log_err(f'{self.name}/{cli.name}: {message}')
+            data = cli.sent_data
+            cli.sent_data = None
             try:
-                cli = self.SubprocessorCli_class(client_dict)
-                cli.state = 1
-                cli.sent_time = 0
-                cli.sent_data = None
-                cli.name = name
-                cli.host_dict = host_dict
+                if return_data and data is not None:
+                    self.on_data_return(cli.host_dict, data)
+            finally:
+                cli.kill()
+                if cli in self.clis: self.clis.remove(cli)
 
-                self.clis.append (cli)
+        def initialize(cli):
+            for obj in messages(cli):
+                op = obj.get('op', '')
+                if op == 'init_ok': cli.state = 0
+                elif op == 'log_info': io.log_info(obj['msg'])
+                elif op == 'log_err': io.log_err(obj['msg'])
+                elif op == 'error':
+                    failed(cli, 'initialize', obj.get('err_msg', 'Worker initialization failed'))
+                    return
+            if cli not in self.clis: return
+            if not cli.p.is_alive():
+                failed(cli, 'initialize', f'Worker exited during initialization (exitcode={cli.p.exitcode})')
+            elif cli.state != 0 and time.monotonic() - cli.init_started >= self.initialize_timeout_sec:
+                failed(cli, 'initialize', f'Initialization deadline exceeded ({self.initialize_timeout_sec:g}s)')
 
+        try:
+            for name, host_dict, client_dict in self.process_info_generator():
+                try:
+                    cli = self.SubprocessorCli_class(client_dict)
+                except BaseException as error:
+                    raise self.LifecycleError(f'Unable to start subprocess {name}: {error}') from error
+                cli.state = 1; cli.sent_time = 0; cli.sent_data = None
+                cli.name = name; cli.host_dict = host_dict
+                cli.shutdown_timeout_sec = self.shutdown_timeout_sec
+                cli.init_started = time.monotonic()
+                self.clis.append(cli); all_clis.append(cli)
                 if self.initialize_subprocesses_in_serial:
-                    while True:
-                        cli_init_dispatcher(cli)
-                        if cli.state == 0:
+                    while cli in self.clis and cli.state != 0:
+                        initialize(cli)
+                        io.process_messages(.005)
+            while self.clis and any(cli.state != 0 for cli in self.clis):
+                for cli in self.clis[:]: initialize(cli)
+                io.process_messages(.005)
+            if not self.clis:
+                raise self.LifecycleError(f'Unable to initialize Subprocessor {self.name}; {self.lifecycle_errors}')
+            host_initialized = True
+            self.on_clients_initialized()
+            while True:
+                for cli in self.clis[:]:
+                    for obj in messages(cli):
+                        op = obj.get('op', '')
+                        if op == 'success':
+                            self.on_result(cli.host_dict, obj['data'], obj['result'])
+                            cli.sent_data = None; cli.state = 0; cli.sent_time = 0
+                        elif op == 'error':
+                            failed(cli, 'process', obj.get('err_msg', 'Worker processing failed'), return_data=True)
                             break
-                        io.process_messages(0.005)
-            except:
-                raise Exception (f"Unable to start subprocess {name}. Error: {traceback.format_exc()}")
-
-        if len(self.clis) == 0:
-            raise Exception ("Unable to start Subprocessor '%s' " % (self.name))
-
-        #waiting subprocesses their success(or not) initialization
-        while True:
-            for cli in self.clis[:]:
-                cli_init_dispatcher(cli)
-            if all ([cli.state == 0 for cli in self.clis]):
-                break
-            io.process_messages(0.005)
-
-        if len(self.clis) == 0:
-            raise Exception ( "Unable to start subprocesses." )
-
-        #ok some processes survived, initialize host logic
-
-        self.on_clients_initialized()
-
-        #main loop of data processing
-        while True:
-            for cli in self.clis[:]:
-                while not cli.c2s.empty():
-                    obj = cli.c2s.get()
-                    op = obj.get('op','')
-                    if op == 'success':
-                        #success processed data, return data and result to on_result
-                        self.on_result (cli.host_dict, obj['data'], obj['result'])
-                        self.sent_data = None
-                        cli.state = 0
-                    elif op == 'error':
-                        #some error occured while process data, returning chunk to on_data_return
-                        err_msg = obj.get('err_msg', None)
-                        if err_msg is not None:
-                            io.log_info(f'Error while processing data: {err_msg}')
-
-                        if 'data' in obj.keys():
-                            self.on_data_return (cli.host_dict, obj['data'] )
-                        #and killing process
-                        cli.kill()
-                        self.clis.remove(cli)
-                    elif op == 'log_info':
-                        io.log_info(obj['msg'])
-                    elif op == 'log_err':
-                        io.log_err(obj['msg'])
-                    elif op == 'progress_bar_inc':
-                        io.progress_bar_inc(obj['c'])
-
-            for cli in self.clis[:]:
-                if cli.state == 1:
-                    if cli.sent_time != 0 and self.no_response_time_sec != 0 and (time.time() - cli.sent_time) > self.no_response_time_sec:
-                        #subprocess busy too long
-                        print ( '%s doesnt response, terminating it.' % (cli.name) )
-                        self.on_data_return (cli.host_dict, cli.sent_data )
-                        cli.kill()
-                        self.clis.remove(cli)
-
-            for cli in self.clis[:]:
-                if cli.state == 0:
-                    #free state of subprocess, get some data from get_data
-                    data = self.get_data(cli.host_dict)
-                    if data is not None:
-                        #and send it to subprocess
-                        cli.s2c.put ( {'op': 'data', 'data' : data} )
-                        cli.sent_time = time.time()
-                        cli.sent_data = data
-                        cli.state = 1
-
-            if self.io_loop_sleep_time != 0:
-                io.process_messages(self.io_loop_sleep_time)
-
-            if self.on_tick() and all ([cli.state == 0 for cli in self.clis]):
-                #all subprocesses free and no more data available to process, ending loop
-                break
-
-
-
-        #gracefully terminating subprocesses
-        for cli in self.clis[:]:
-            cli.s2c.put ( {'op': 'close'} )
-            cli.sent_time = time.time()
-
-        while True:
-            for cli in self.clis[:]:
-                terminate_it = False
-                while not cli.c2s.empty():
-                    obj = cli.c2s.get()
-                    obj_op = obj['op']
-                    if obj_op == 'finalized':
-                        terminate_it = True
-                        break
-
-                if (time.time() - cli.sent_time) > 30:
-                    terminate_it = True
-
-                if terminate_it:
-                    cli.state = 2
-                    cli.kill()
-
-            if all ([cli.state == 2 for cli in self.clis]):
-                break
-
-            # Keep UI responsive (cv2.waitKeyEx) during shutdown.
-            io.process_messages(0.005)
-
-        #finalizing host logic and return result
-        self.on_clients_finalized()
-
-        return self.get_result()
+                        elif op == 'log_info': io.log_info(obj['msg'])
+                        elif op == 'log_err': io.log_err(obj['msg'])
+                        elif op == 'progress_bar_inc': io.progress_bar_inc(obj['c'])
+                    if cli not in self.clis: continue
+                    if not cli.p.is_alive():
+                        failed(cli, 'process', f'Worker exited without a result (exitcode={cli.p.exitcode})', return_data=True)
+                    elif (cli.state == 1 and cli.sent_time and self.no_response_time_sec
+                          and time.monotonic() - cli.sent_time > self.no_response_time_sec):
+                        failed(cli, 'process', f'Response deadline exceeded ({self.no_response_time_sec:g}s)', return_data=True)
+                if not self.clis:
+                    raise self.LifecycleError(f'All subprocesses stopped before completion: {self.lifecycle_errors}')
+                for cli in self.clis[:]:
+                    if cli.state == 0:
+                        data = self.get_data(cli.host_dict)
+                        if data is not None:
+                            cli.s2c.put({'op': 'data', 'data': data})
+                            cli.sent_time = time.monotonic(); cli.sent_data = data; cli.state = 1
+                if self.io_loop_sleep_time:
+                    io.process_messages(self.io_loop_sleep_time)
+                if self.on_tick() and all(cli.state == 0 for cli in self.clis): break
+            for cli in self.clis:
+                cli.s2c.put({'op': 'close'}); cli.sent_time = time.monotonic()
+            while any(cli.state != 2 for cli in self.clis):
+                for cli in self.clis:
+                    if cli.state == 2: continue
+                    responses = list(messages(cli))
+                    if any(obj.get('op') == 'error' for obj in responses):
+                        self.lifecycle_errors.append({'name': cli.name, 'pid': cli.pid, 'phase': 'finalize', 'message': 'Worker finalization raised an exception'})
+                        raise self.LifecycleError(f'Worker finalization failed: {cli.name}')
+                    finalized = any(obj.get('op') == 'finalized' for obj in responses)
+                    if not cli.p.is_alive() and cli.p.exitcode not in (0, None):
+                        self.lifecycle_errors.append({'name': cli.name, 'pid': cli.pid, 'phase': 'finalize', 'message': f'Worker exitcode {cli.p.exitcode}'})
+                        raise self.LifecycleError(f'Worker exited during finalization: {cli.name} ({cli.p.exitcode})')
+                    if time.monotonic() - cli.sent_time >= self.finalize_timeout_sec and not finalized and cli.p.is_alive():
+                        self.lifecycle_errors.append({'name': cli.name, 'pid': cli.pid, 'phase': 'finalize', 'message': 'Worker finalization deadline exceeded'})
+                        raise self.LifecycleError(f'Worker finalization deadline exceeded: {cli.name}')
+                    if finalized or not cli.p.is_alive():
+                        cli.kill(); cli.state = 2
+                io.process_messages(.005)
+            host_finalized = True; self.on_clients_finalized()
+            return self.get_result()
+        finally:
+            cleanup_errors = []
+            for cli in all_clis:
+                try: cli.kill()
+                except BaseException as error: cleanup_errors.append(str(error))
+            if host_initialized and not host_finalized:
+                try: self.on_clients_finalized()
+                except BaseException as error: cleanup_errors.append(str(error))
+            if cleanup_errors:
+                raise self.LifecycleError('Subprocessor cleanup failed: ' + '; '.join(cleanup_errors))

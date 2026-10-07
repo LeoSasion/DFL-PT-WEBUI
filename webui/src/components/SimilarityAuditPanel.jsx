@@ -210,7 +210,7 @@ export function SimilarityAuditPanel({ side, workspaceKey, refreshVersion, onErr
       </div>
       {mode === "paired" ? <label><span>{t("批次 B")}</span><input aria-label={t("批次 B")} type="number" min="1" max={pageCount ?? undefined} value={comparisonPage} disabled={busy || (pageCount !== null && pageCount < 2)} onChange={event => changePage(event.target.value, true)} /><span>{pageCount === null ? "…" : `/ ${pageCount}`}</span></label> : null}
       <p>{mode === "paired" ? t("每批最多 250 张，仅比较选定两批；不代表全库查重。") : t("每批最多 500 张，可切换批次查看后续素材。")}</p>
-      <small>{t("DCT、色彩与边缘描述子；相似分数不代表身份识别。")}</small>
+      <small>{t("描述子召回后用 SSIM 逐对复核；每组内所有配对都须达到阈值。相似分数不代表身份识别。")}</small>
     </section>
     <div className="similarity-summary">
       <div><span>{t("已分析")}</span><strong>{data?.analyzedCount ?? "—"}</strong></div>
@@ -221,10 +221,12 @@ export function SimilarityAuditPanel({ side, workspaceKey, refreshVersion, onErr
     {error ? <div className="tool-workbench-state" role="alert"><strong>{t("相似分析未完成")}</strong><span>{t(error.message)}</span><button type="button" className="button secondary" onClick={() => setRetry(value => value + 1)}>{t("重新分析")}</button></div>
       : !data ? <div className="tool-workbench-state is-loading"><LoadingProgress inline className="in-panel" label={t("正在建立视觉相似候选组…")} detail={t("仅处理选定范围；切换批次后旧选择会清空。")} /></div>
         : data.groups.length ? <div className="similarity-groups">{data.groups.map(group => <section key={group.id}>
-          <header><div><strong>{t("候选组 {id}", { id: group.id.replace("similar-", "") })}</strong><span>{t("{count} 张 · 最低 {score}", { count: group.memberCount, score: group.minimumScore.toFixed(3) })}</span></div><button type="button" disabled={!review || busy} onClick={() => selectGroupDuplicates(group)}><IconCheck size={14} />{t("选中非代表图")}</button></header>
+          <header><div><strong>{t("候选组 {id}", { id: group.id.replace("similar-", "") })}</strong><span>{t("{count} 张 · 最低 {score}", { count: group.memberCount, score: group.minimumScore.toFixed(3) })}{Number.isFinite(group.minimumSsim) ? ` · SSIM ${group.minimumSsim.toFixed(3)}` : ""}</span></div><button type="button" disabled={!review || busy} onClick={() => selectGroupDuplicates(group)}><IconCheck size={14} />{t("选中非代表图")}</button></header>
           <div className="similarity-members">{group.members.map(member => <article className={`${member.representative ? "is-representative" : ""} ${selectedSet.has(member.name) ? "is-selected" : ""}`} key={member.name}>
             <button type="button" disabled={member.representative || !review || busy} onClick={() => toggle(member.name)} aria-label={t("选择候选 {name}", { name: member.name })} aria-pressed={selectedSet.has(member.name)}><img src={member.imageUrl} alt="" loading="lazy" decoding="async" /><span>{member.representative ? t("代表图") : selectedSet.has(member.name) ? t("待隔离") : t("候选")}{mode === "paired" ? ` · ${member.batch === 0 ? "A" : "B"}` : ""}</span></button>
-            <div><strong title={member.name}>{member.name}</strong><small>{member.score.toFixed(3)}</small></div><button type="button" disabled={busy} onClick={() => onNavigateDataset(side, member)}>{t("查看")}</button>
+            <div><strong title={member.name}>{member.name}</strong><small>{member.score.toFixed(3)}{Number.isFinite(member.ssim) ? ` · SSIM ${member.ssim.toFixed(3)}` : ""}</small></div>
+            {member.qualityEvidence?.components ? <details><summary>{t("质量依据")}</summary><small>{t("仅作人工复核参考；缺失的分项不计入评分。")}</small><dl>{Object.entries(member.qualityEvidence.components).map(([key, part]) => <div key={key}><dt>{t({sharpness:"清晰度", exposure:"曝光", sourceResolution:"源人脸尺寸", alignmentConsistency:"对齐一致性"}[key] ?? key)}</dt><dd>{part.available && Number.isFinite(part.score) ? part.score.toFixed(3) : t("缺少可靠数据")}</dd></div>)}</dl></details> : null}
+            <button type="button" disabled={busy} onClick={() => onNavigateDataset(side, member)}>{t("查看")}</button>
           </article>)}</div>
         </section>)}</div>
           : <div className="tool-workbench-state" role="status"><IconCheck size={26} /><strong>{mode === "paired" ? t("选定两批中没有跨批相似组") : t("当前阈值下没有相似组")}</strong><span>{t("可适当降低阈值生成更宽松的候选，但仍需人工复核。")}</span></div>}

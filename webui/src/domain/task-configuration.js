@@ -2,7 +2,7 @@ import { initializeMEParameters, modelMEParameters } from "./me-training-configu
 
 export function commandModelFamily(command) {
   if (command?.id === "xseg.train") return "XSEG";
-  if (command?.id === "model.import_me_tf") return "ME";
+  if (["model.import_me_tf", "merge.preview_me"].includes(command?.id)) return "ME";
   return /^(?:train|merge|export\.dfm)[._](me)$/i.exec(command?.id ?? "")?.[1].toUpperCase() ?? null;
 }
 
@@ -117,23 +117,28 @@ export function searchTaskCommands(commands, query = "") {
 export function taskOutputLocations(command, workspace = {}, parameters = {}) {
   const id = command?.id ?? "";
   const side = ["src", "dst"].includes(command?.side) ? command.side : null;
+  if (side && id.endsWith("extract_restored")) return { paths: [`data_${side}/aligned_restored/${parameters.restorationTaskId || "<修复记录>"}`] };
   if (id === "runtime.prepare_vision") return { paths: [], note: "runtime" };
   if (id === "xseg.train") return { paths: ["xseg_model"] };
   if (["train.me", "export.dfm_me", "model.import_me_tf"].includes(id) && parameters.forceModelName) {
     return { paths: [`model/${parameters.forceModelName}`] };
   }
   if (["training", "model"].includes(command?.category)) return { paths: ["model"] };
+  if (id === "merge.preview_me") return { paths: [".webui/merge-previews/<本次小样>/merged", ".webui/merge-previews/<本次小样>/merged_mask"], note: "independent-merge-preview" };
   if (command?.category === "merge") return { paths: ["data_dst/merged", "data_dst/merged_mask"] };
   if (command?.category === "encode") {
-    const extension = id === "encode.avi" ? "avi" : id === "encode.mov_lossless" ? "mov" : "mp4";
-    return { paths: [`result.${extension}`, `result_mask.${extension}`], note: "overwrite-video" };
+    if (id === "encode.quality") return { paths: ["result.nut", "result_mask.nut", "result.mp4", "result_mask.mp4", "result.nut.media.json", "result_mask.nut.media.json", "result.mp4.media.json", "result_mask.mp4.media.json"], note: "overwrite-video" };
+    const extension = id === "encode.master" ? "nut" : id === "encode.avi" ? "avi" : id === "encode.mov_lossless" ? "mov" : "mp4";
+    const paths = [`result.${extension}`, `result_mask.${extension}`];
+    if (id === "encode.master") paths.push(...paths.map(name => `${name}.media.json`));
+    return { paths, note: "overwrite-video" };
   }
   if (side && id.startsWith("video.cut_")) {
     const extension = /\.[a-z0-9]+$/i.exec(workspace.materials?.[side]?.name ?? "")?.[0] ?? ".*";
     return { paths: [`data_${side}_cut${extension}`] };
   }
   if (side && (id.endsWith("extract_frames") || id.endsWith("denoise_frames"))) return { paths: [`data_${side}`] };
-  if (side && id.endsWith("faces_enhance")) return { paths: [`data_${side}/aligned_enhanced`], note: "merge-back" };
+  if (side && id.endsWith("faces_enhance")) return { paths: [`data_${side}/aligned_enhanced/<独立批次>`], note: "independent-enhancement" };
   if (side && id.endsWith("faces_resize")) return { paths: [`data_${side}/aligned_resized`], note: "merge-back" };
   if (side && id.endsWith("fetch_labels")) return { paths: [`data_${side}/aligned_xseg`] };
   if (side) return { paths: [`data_${side}/aligned`] };

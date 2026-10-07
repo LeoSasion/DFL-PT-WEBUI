@@ -5,10 +5,6 @@ DFL's lightweight NN layer/model helpers.
 NCHW is the default data format in PyTorch.
 """
 
-import warnings
-
-warnings.simplefilter(action='ignore', category=FutureWarning)
-
 import numpy as np
 
 from core.interact import interact as io

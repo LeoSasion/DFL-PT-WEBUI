@@ -53,6 +53,8 @@ test("command registry exposes the approved fixed workflows", () => {
   assert.deepEqual(
     commands.map((command) => command.id),
     [
+      "src.extract_restored",
+      "dst.extract_restored",
       "runtime.prepare_vision",
       "src.extract_frames",
       "src.extract_faces",
@@ -75,6 +77,7 @@ test("command registry exposes the approved fixed workflows", () => {
       "src.recover_names",
       "src.metadata_save",
       "src.metadata_restore",
+      "src.recover_batch",
       "dst.landmarks_debug",
       "dst.faces_resize",
       "dst.faces_enhance",
@@ -83,6 +86,7 @@ test("command registry exposes the approved fixed workflows", () => {
       "dst.recover_names",
       "dst.metadata_save",
       "dst.metadata_restore",
+      "dst.recover_batch",
       "xseg.src_apply_builtin",
       "xseg.src_remove_labels",
       "xseg.src_remove_mask",
@@ -96,7 +100,10 @@ test("command registry exposes the approved fixed workflows", () => {
       "dst.denoise_frames",
       "export.dfm_me",
       "merge.me",
+      "merge.preview_me",
       "encode.avi",
+      "encode.master",
+      "encode.quality",
       "encode.mov_lossless",
     ],
   );
@@ -202,7 +209,7 @@ test("fixed video runner rejects unregistered modes before spawning DFL", () => 
   const runnerPath = path.join(PATHS.serverDirectory, "encode-mp4.mjs");
   const result = spawnSync(process.execPath, [runnerPath, "arbitrary"], { encoding: "utf8" });
   assert.equal(result.status, 2);
-  assert.match(result.stderr, /只允许 standard、lossless、avi 或 mov-lossless/);
+  assert.match(result.stderr, /只允许 standard、lossless、avi、mov-lossless、master 或 quality/);
 });
 
 test("guided parameters are allowlisted, typed, and reflected in fixed arguments", () => {
@@ -320,7 +327,13 @@ test("DFL environments point to repository-owned runtimes", () => {
   assert.equal(legacy.DFL_ROOT, PATHS.legacyDflRoot);
   assert.equal(current.WORKSPACE, PATHS.workspaceRoot);
   assert.equal(current.PYTHON_EXECUTABLE, PATHS.python);
-  assert.ok(current.PATH.includes(path.join(PATHS.internalRoot, "CUDA")));
+  assert.ok(current.PATH.includes(path.join(PATHS.internalRoot, "node")));
+  assert.ok(current.PATH.includes(path.join(PATHS.internalRoot, "ffmpeg")));
+  assert.equal(current.DFL_ACTIVE_PROJECT_ID, PATHS.activeProject.id);
+  assert.equal(current.DFL_ACTIVE_PROJECT_WORKSPACE, PATHS.workspaceRoot);
+  assert.equal(current.USERPROFILE, process.env.USERPROFILE);
+  assert.equal(current.APPDATA, process.env.APPDATA);
+  assert.ok(current.QT_QPA_PLATFORM_PLUGIN_PATH.includes("PySide6"));
   assert.equal(
     Object.keys(current).filter((key) => key.toUpperCase() === "PATH").length,
     1,
@@ -439,7 +452,7 @@ test("visual similarity grouping is bounded, explainable, and read-only", async 
     limit: 40,
   });
   const after = await stat(target);
-  assert.equal(result.method, "dct-hsv-edge-v1");
+  assert.equal(result.method, "dct-hsv-edge-ssim-complete-link-v2");
   assert.ok(result.analyzedCount <= 40);
   assert.ok(result.groups.every((group) => group.members.length >= 2));
   assert.equal(after.size, before.size);

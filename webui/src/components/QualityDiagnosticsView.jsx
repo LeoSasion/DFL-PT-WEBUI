@@ -160,6 +160,8 @@ export function QualityDiagnosticsView({
   onError,
   onNotice,
   onSnapshotCount,
+  workspace,
+  onOpenMerge,
 }) {
   const { language, t } = useI18n();
   const modelKey = evaluationJob?.evaluation?.modelKey ?? null;
@@ -322,6 +324,14 @@ export function QualityDiagnosticsView({
     && ["starting", "running", "waiting_input"].includes(evaluationJob.state)
     && evaluationJob.controls?.includes("evaluate"),
   );
+  const hasSavedME = Boolean(workspace?.readiness?.me || workspace?.models?.some(model => model.type?.toUpperCase() === "ME" && model.ready !== false));
+  const recoveryActions = <div className="diagnostics-empty-actions">
+    <button className="button secondary" type="button" onClick={onOpenTraining}>
+      <IconBoxModel2 size={16}/>{t(hasSavedME ? "查看模型与训练配置" : "配置 ME 训练")}
+    </button>
+    {hasSavedME && onOpenMerge ? <button className="button primary" type="button" onClick={onOpenMerge}>{t("检查模型并配置合成")}</button> : null}
+    <small>{t(hasSavedME ? "质量诊断是可选的趋势检查。已有模型仍可经预检进入合成。" : "评估比较需要受控 ME 任务生成两个可比较快照。")}</small>
+  </div>;
 
   const handleEvaluate = async () => {
     if (!canEvaluate || evaluating) return;
@@ -359,15 +369,8 @@ export function QualityDiagnosticsView({
       <section className="quality-diagnostics-view">
         <DiagnosticsState
           title={t("尚未建立训练评估上下文")}
-          detail={t("从引导模式启动 ME 并明确模型名称后，训练器才能生成确定性姿势快照。")}
-          action={(
-            <div className="diagnostics-empty-actions">
-              <button className="button primary" type="button" onClick={onOpenTraining}>
-                <IconBoxModel2 size={16}/>{t("前往模型训练")}
-              </button>
-              <small>{t("先启动 ME，再从训练预览生成至少两次评估快照。")}</small>
-            </div>
-          )}
+          detail={t("当前没有绑定评估模型的受控任务，无法生成姿势比较。可查看模型与训练配置，或在已有模型通过预检后进入合成。")}
+          action={recoveryActions}
         />
       </section>
     );
@@ -400,13 +403,14 @@ export function QualityDiagnosticsView({
         <div className="quality-diagnostics-empty-shell">
           <header>
             <div><span>{t("新增流程 · 7")}</span><h2>{t("质量诊断")}</h2></div>
-            <button className="button primary" type="button" onClick={handleEvaluate} disabled={!canEvaluate || evaluating}><IconCamera size={15}/>{t(evaluating ? "正在生成…" : "生成评估快照")}</button>
+            {canEvaluate ? <button className="button primary" type="button" onClick={handleEvaluate} disabled={evaluating}><IconCamera size={15}/>{t(evaluating ? "正在生成…" : "生成评估快照")}</button> : null}
           </header>
           {evaluating ? <LoadingProgress compact label={t("正在生成只读评估快照…")} detail={t("Trainer 完成后会自动加入时间线")} operationKey="diagnostics-evaluate" /> : null}
           {invalidWarning}
           <DiagnosticsState
             title={t("至少需要两个可比较快照")}
-            detail={t("当前已有 {count} 个。训练中生成基线与当前快照后，才会计算姿势回归。", { count: snapshots.length })}
+            detail={canEvaluate ? t("当前已有 {count} 个。可用当前训练进程生成快照；相同评测样本的两次快照才能比较趋势。", { count: snapshots.length }) : t("当前已有 {count} 个，且没有可生成快照的运行任务。已有模型仍可检查后合成，无需为了进入合成补齐诊断。", { count: snapshots.length })}
+            action={!canEvaluate ? recoveryActions : null}
           />
         </div>
       </section>

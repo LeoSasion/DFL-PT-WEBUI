@@ -7,8 +7,10 @@ import { sourceFileHash } from "../release/source-integrity.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const listed = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], { cwd: root }).toString().split("\0").filter(Boolean);
-const selected = listed.filter(file => /^(?:webui\/(?:src|shared|server|scripts|public|worker)\/|webui\/(?:package.json|pnpm-lock.yaml|vite.config.mjs)$|release\/|launcher\/|tools\/|_internal\/DeepFaceLab\/|legacy-cli\/)/.test(file)
+const deleted = new Set(execFileSync("git", ["ls-files", "-z", "--deleted"], { cwd: root }).toString().split("\0").filter(Boolean));
+const selected = listed.filter(file => /^(?:webui\/(?:src|shared|server|scripts|public|worker|python)\/|webui\/(?:package.json|pnpm-lock.yaml|vite.config.mjs)$|release\/|launcher\/|tools\/|_internal\/DeepFaceLab\/|legacy-cli\/)/.test(file)
   && !["release/source-pin.json", "release/source-files.json", "release/installation.json", "tools/prepare-launcher-tests.ps1", "tools/run-launcher-tests.ps1"].includes(file)
+  && !deleted.has(file)
   && !/(?:^|\/)(?:tests?|design|\.openai)\//.test(file))
   .sort();
 const files = await Promise.all(selected.map(async file => ({ path: file, sha256: sourceFileHash(file, await readFile(path.join(root, file))) })));

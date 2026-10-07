@@ -8,6 +8,11 @@ param(
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
+# A PowerShell 7 parent may pass its module paths to Windows PowerShell 5.1.
+# Resolve the compiler shell's own bundled modules before using their cmdlets.
+foreach ($moduleName in @('Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Archive')) {
+    Import-Module (Join-Path $PSHOME ('Modules/' + $moduleName + '/' + $moduleName + '.psd1')) -Force
+}
 
 $WebView2Version = "1.0.4129.50"
 $WebView2Sha256 = "D3934F482D484B89FB4825DF720C710664E1143A1E90F7B3A60794EF33F473D2"
