@@ -88,10 +88,11 @@ def check_runtime():
         failed('TensorFlow is installed in the new runtime')
     else:
         passed('The new runtime has no TensorFlow package')
-    for line in (ROOT / 'requirements.txt').read_text(encoding='utf-8').splitlines():
-        line = line.strip()
-        if not line or line.startswith('#'):
-            continue
+    dependency_spec = importlib.util.spec_from_file_location(
+        'dfl_smoke_runtime_dependencies', ROOT / 'tools' / 'runtime-dependencies.py')
+    dependency_tool = importlib.util.module_from_spec(dependency_spec)
+    dependency_spec.loader.exec_module(dependency_tool)
+    for line in dependency_tool.direct(ROOT / 'requirements.txt'):
         match = re.fullmatch(r'([\w.-]+)==([^\s;]+)', line)
         if not match:
             failed('Unpinned runtime requirement: ' + line)
@@ -103,16 +104,29 @@ def check_runtime():
                 failed(f'{name}: expected {version}, installed {actual}')
         except importlib.metadata.PackageNotFoundError:
             failed('Missing runtime requirement: ' + name)
-    run_check('pip dependency health', [sys.executable, '-m', 'pip', 'check'])
+    if importlib.util.find_spec('pip') is not None:
+        pip_arguments = [sys.executable, '-I', '-m', 'pip', 'check']
+    else:
+        # The production portable venv deliberately contains no installer.
+        # Its project-local base ships ensurepip's official wheel. Import it
+        # only in an isolated child: this check neither installs nor downloads.
+        pip_arguments = [sys.executable, '-I', '-c',
+                         "import ensurepip, pathlib, runpy, sys; "
+                         "wheel = pathlib.Path(ensurepip.__file__).parent / '_bundled' / "
+                         "('pip-' + ensurepip.version() + '-py3-none-any.whl'); "
+                         "assert wheel.is_file(), 'Project-local bundled pip wheel is missing'; "
+                         "sys.path.insert(0, str(wheel)); sys.argv = ['pip', 'check']; "
+                         "runpy.run_module('pip', run_name='__main__')"]
+    run_check('pip dependency health (read-only)', pip_arguments)
 
 def check_assets():
     hashes = {
-        '_internal/DeepFaceLab/facelib/S3FD.npy': 'b4894ecfba8e6461eb1a69490f76184620c816605238ff0ba3216f1143a06c29',
-        '_internal/DeepFaceLab/facelib/2DFAN.npy': 'ca2dc7f0b2aa146842e6de2119fedff1142188b7cff5ab702564952d6cba4624',
-        '_internal/DeepFaceLab/facelib/3DFAN.npy': 'b50d2faf0fd4d6503aba9d19365e7aff06f2ea96bac37fc5f8f25a191a0a63a9',
-        '_internal/DeepFaceLab/facelib/FaceEnhancer.npy': '254958f67c9adfe97a0c9fc7b3c343ba490a1519c01862a50945fa228875476a',
         '_internal/vision_models/face_recognition_sface_2021dec.onnx': '0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79',
     }
+    generic = json.loads((ROOT / 'release' / 'generic-xseg.json').read_text(encoding='utf-8'))
+    for key in ('converted', 'metadata', 'license', 'summary'):
+        record = generic[key]
+        hashes[record['path']] = record['sha256']
     errors = []
     for relative, expected in hashes.items():
         path = ROOT / relative
@@ -125,7 +139,11 @@ def check_assets():
     if errors:
         failed('Missing or modified helper weights: ' + ', '.join(errors))
     else:
-        passed('Detector, landmark, face enhancer and SFace weights match pinned hashes')
+        passed('Original generic XSeg resources and SFace match pinned hashes')
+    run_check('Pinned production detector, landmark and mask resources',
+              [sys.executable, str(ROOT / 'tools' / 'prepare-production-vision.py'),
+               'verify', '--project-root', str(ROOT), '--profiles', 'production'],
+              expected=('"ok": true',))
 
 def check_tool_routes():
     commands = json.loads((LEGACY_DIR / 'commands.json').read_text(encoding='utf-8-sig'))
@@ -168,12 +186,17 @@ def check_web_cli_flags():
     registry = (ROOT / 'webui' / 'server' / 'command-registry.mjs').read_text(encoding='utf-8-sig')
     used = set(re.findall(r'''["'](--[a-z][a-z-]+)["']''', registry))
     accepted = set()
-    tree = ast.parse((DFL_ROOT / 'main.py').read_text(encoding='utf-8-sig'))
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == 'add_argument':
-            accepted.update(argument.value for argument in node.args
-                if isinstance(argument, ast.Constant) and isinstance(argument.value, str)
-                and argument.value.startswith('--'))
+    for entrypoint in (DFL_ROOT / 'main.py', DFL_ROOT / 'facelib' / 'LandmarkCandidates.py'):
+        tree = ast.parse(entrypoint.read_text(encoding='utf-8-sig'))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == 'add_argument':
+                accepted.update(argument.value for argument in node.args
+                    if isinstance(argument, ast.Constant) and isinstance(argument.value, str)
+                    and argument.value.startswith('--'))
+    run_check('TUFA helper CLI verifies its pinned assets',
+              [sys.executable, str(DFL_ROOT / 'facelib' / 'LandmarkCandidates.py'),
+               '--verify-assets', '--model', 'tufa', '--face-type', 'whole_face'],
+              expected=('"ok": true',))
     for command in ('web-train', 'import-tf', 'list-backups', 'restore-backup'):
         help_result = subprocess.run([sys.executable, str(DFL_ROOT / 'me.py'), command, '--help'],
             capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=120)
@@ -188,6 +211,8 @@ def check_web_cli_flags():
         passed(f'All {len(used)} Web command registry flags exist in the Python CLI')
 
 def main():
+    sys.stdout.reconfigure(errors='backslashreplace')
+    sys.stderr.reconfigure(errors='backslashreplace')
     print(f'DFL-PT-WEBUI smoke test\nRepository: {ROOT}\nPython: {sys.executable}\n')
     for check in (check_required_paths, check_python_sources, check_runtime, check_assets, check_tool_routes, check_web_cli_flags):
         try:

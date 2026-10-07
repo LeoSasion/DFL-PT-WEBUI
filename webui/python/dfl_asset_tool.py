@@ -33,6 +33,8 @@ from DFLIMG import DFLIMG
 from facelib import FaceType, LandmarksProcessor
 from pose_bins import PITCH_TICKS, YAW_TICKS, nearest_tick, pose_cell_id
 from pose_probe_contract import probe_dataset_inventory
+from similarity_review import SSIM_SIZE, consistent_groups, same_scale_ssim, ssim_features
+from face_quality_review import quality_review
 
 
 LOW_QUALITY_THRESHOLD = 0.24
@@ -451,6 +453,7 @@ def audit_sample(image_path):
         **metrics,
         "issues": [],
     }
+    dfl_image = None
     try:
         dfl_image = load_dfl_image(image_path)
         polygons = serialize_polygons(dfl_image)
@@ -485,6 +488,8 @@ def audit_sample(image_path):
         item["issues"].append("overexposed")
     if item["darkRatio"] + item["brightRatio"] > 0.35:
         item["issues"].append("clipped_tones")
+    item["qualityEvidence"] = quality_review(image, metrics, dfl_image,
+                                            LandmarksProcessor.estimate_pitch_yaw_roll)
     return item
 
 
@@ -1118,9 +1123,18 @@ def group_similar_images(directory, threshold=0.86, limit=MAX_SIMILARITY_ITEMS,
                 invalid_count += 1
                 windows[batch]["invalidCount"] += 1
                 continue
+            try:
+                dfl_image = load_dfl_image(image_path)
+            except Exception:
+                dfl_image = None
+            quality = quality_review(image, bounded_image_metrics(
+                cv2.resize(image, (256, 256), interpolation=cv2.INTER_AREA)), dfl_image,
+                LandmarksProcessor.estimate_pitch_yaw_roll)
             records.append({
                 "name": image_path.name,
                 "descriptor": similarity_descriptor(image),
+                "ssimFeatures": ssim_features(image),
+                "qualityEvidence": quality,
                 "batch": batch,
             })
             windows[batch]["analyzedCount"] += 1
@@ -1133,27 +1147,24 @@ def group_similar_images(directory, threshold=0.86, limit=MAX_SIMILARITY_ITEMS,
                 emit_progress("similarity-features", completed, total_work, image_path.name)
 
     count = len(records)
-    parents = list(range(count))
-
-    def find(index):
-        while parents[index] != index:
-            parents[index] = parents[parents[index]]
-            index = parents[index]
-        return index
-
-    def union(left, right):
-        left_root = find(left)
-        right_root = find(right)
-        if left_root != right_root:
-            parents[right_root] = left_root
-
     similarities = np.eye(count, dtype=np.float32)
+    descriptor_scores = np.eye(count, dtype=np.float32)
+    structural_scores = np.eye(count, dtype=np.float32)
+    accepted = np.eye(count, dtype=bool)
+    candidate_count = verified_count = 0
     for left in range(count):
         for right in range(left + 1, count):
-            score = float(np.dot(records[left]["descriptor"], records[right]["descriptor"]))
-            similarities[left, right] = similarities[right, left] = score
-            if score >= safe_threshold:
-                union(left, right)
+            descriptor_score = float(np.clip(np.dot(records[left]["descriptor"], records[right]["descriptor"]), -1.0, 1.0))
+            descriptor_scores[left, right] = descriptor_scores[right, left] = descriptor_score
+            structural_score = 0.0
+            if descriptor_score >= safe_threshold:
+                candidate_count += 1
+                structural_score = same_scale_ssim(records[left]["ssimFeatures"], records[right]["ssimFeatures"])
+                if structural_score >= safe_threshold:
+                    accepted[left, right] = accepted[right, left] = True
+                    verified_count += 1
+            structural_scores[left, right] = structural_scores[right, left] = structural_score
+            similarities[left, right] = similarities[right, left] = min(descriptor_score, structural_score)
             completed += 1
             if progress_due(completed, total_work):
                 emit_progress(
@@ -1167,24 +1178,24 @@ def group_similar_images(directory, threshold=0.86, limit=MAX_SIMILARITY_ITEMS,
     if completed < total_work:
         emit_progress("similarity-groups", total_work, total_work, "正在整理相似组")
 
-    grouped = {}
-    for index in range(count):
-        grouped.setdefault(find(index), []).append(index)
+    quality_order = sorted(range(count), key=lambda index: (
+        -records[index]["qualityEvidence"]["score"], records[index]["name"].casefold()))
+    grouped = consistent_groups(accepted, quality_order)
     groups = []
-    for indexes in grouped.values():
+    for indexes in grouped:
         if len(indexes) < 2:
             continue
         cross_batch = len({records[index]["batch"] for index in indexes}) > 1
         if paired and not cross_batch:
             continue
-        representative = max(
-            indexes,
-            key=lambda index: float(np.mean([similarities[index, other] for other in indexes])),
-        )
+        representative = indexes[0]  # Best explainable quality in this consistent group.
         members = sorted(
             ({
                 "name": records[index]["name"],
                 "score": round(float(similarities[representative, index]), 4),
+                "descriptorScore": round(float(descriptor_scores[representative, index]), 4),
+                "ssim": round(float(structural_scores[representative, index]), 4),
+                "qualityEvidence": records[index]["qualityEvidence"],
                 "representative": index == representative,
                 "batch": records[index]["batch"],
             } for index in indexes),
@@ -1201,6 +1212,10 @@ def group_similar_images(directory, threshold=0.86, limit=MAX_SIMILARITY_ITEMS,
             "memberCount": len(members),
             "minimumScore": round(min(pair_scores), 4) if pair_scores else 1.0,
             "meanScore": round(float(np.mean(pair_scores)), 4) if pair_scores else 1.0,
+            "minimumSsim": round(min(float(structural_scores[left, right])
+                                     for position, left in enumerate(indexes) for right in indexes[position + 1:]), 4),
+            "consistency": "all-pairs-verified",
+            "representativePolicy": "highest-explainable-quality",
             "members": members,
             "crossBatch": cross_batch,
         })
@@ -1228,7 +1243,10 @@ def group_similar_images(directory, threshold=0.86, limit=MAX_SIMILARITY_ITEMS,
         "groupCount": len(groups),
         "groupedCount": grouped_count,
         "ungroupedCount": max(count - grouped_count, 0),
-        "method": "dct-hsv-edge-v1",
+        "method": "dct-hsv-edge-ssim-complete-link-v2",
+        "verification": {"ssimSize": SSIM_SIZE, "ssimThreshold": safe_threshold,
+                         "candidatePairCount": candidate_count, "verifiedPairCount": verified_count,
+                         "groupPolicy": "disjoint-complete-link", "semanticIdentityVerified": False},
         "groups": groups,
     }
 
@@ -1260,6 +1278,35 @@ def mask_suggested_polygons(mask, width, height):
     return suggested
 
 
+def inspect_native_landmarks(dfl_image, width, height):
+    """Expose independent WFLW98 only while its stored alignment still matches."""
+    raw = dfl_image.get_dict().get("native_landmarks98")
+    if not isinstance(raw, dict):
+        return None
+    unavailable = {"available": False, "model": str(raw.get("model_id", "tufa98")),
+                   "reason": "98 点审核记录与当前对齐不一致，请重新提取"}
+    try:
+        points = serialize_finite_points(raw.get("points_aligned"), 98)
+        original = np.asarray(raw.get("points_original"), dtype=np.float32)
+        stored = np.asarray(raw.get("source_to_aligned_affine"), dtype=np.float32)
+        current_raw = dfl_image.get_image_to_face_mat()
+        current = np.eye(3, dtype=np.float32)[:2] if current_raw is None else np.asarray(current_raw, dtype=np.float32)
+        definition = raw.get("point_definition", {})
+        if (len(points) != 98 or original.shape != (98, 2) or not np.isfinite(original).all()
+                or stored.shape != (2, 3) or current.shape != (2, 3)
+                or not np.isfinite(stored).all() or not np.isfinite(current).all()
+                or not np.allclose(stored, current, rtol=0, atol=1e-5)
+                or raw.get("aligned_canvas_wh") != [width, height]
+                or definition.get("name") != "WFLW98" or definition.get("count") != 98
+                or not np.allclose(cv2.transform(original[None, ...], stored)[0], points, rtol=0, atol=1e-3)):
+            return unavailable
+        return {"available": True, "model": str(raw.get("model_id", "tufa98")),
+                "landmarks": points, "definition": "WFLW98", "count": 98,
+                "visibilityEstimated": False, "usage": "independent-audit"}
+    except (TypeError, ValueError, cv2.error):
+        return unavailable
+
+
 def inspect_image(image_path):
     image = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
     if image is None:
@@ -1273,6 +1320,7 @@ def inspect_image(image_path):
         "width": int(image.shape[1]),
         "height": int(image.shape[0]),
         **inspect_dfl_geometry(dfl_image),
+        "nativeLandmarks": inspect_native_landmarks(dfl_image, int(image.shape[1]), int(image.shape[0])),
         "polygons": serialize_polygons(dfl_image),
         "hasAppliedMask": bool(dfl_image.has_xseg_mask()),
         "appliedMaskDataUrl": encode_mask_data_url(mask) if mask is not None else None,

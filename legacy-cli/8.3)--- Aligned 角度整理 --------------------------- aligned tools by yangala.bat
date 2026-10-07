@@ -20,6 +20,7 @@ echo.
 
 cd /d "%~dp0.."
 call "%~dp0..\_internal\setenv.bat"
+if errorlevel 1 exit /b %errorlevel%
 
 set "ALIGNED_DIR=%~1"
 if not defined ALIGNED_DIR (

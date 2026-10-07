@@ -88,12 +88,29 @@ test("runtime exposes fixed operations, system snapshots, material recovery, and
     "pack",
     "coverage",
     "detect-scenes",
+    "mask-assist",
+    "mask-publish",
+    "best-faceset-init",
+    "best-faceset-analyze",
+    "best-faceset-select",
+    "best-faceset-publish",
+    "best-faceset-recover",
+    "best-faceset-review-create",
+    "best-faceset-review-decide",
+    "best-faceset-review-undo",
   ]);
   assert.throws(
     () => server.operationSpec({ kind: "arbitrary-command", side: "src" }),
     (error) => error.code === "OPERATION_KIND_NOT_ALLOWED",
   );
-  assert.equal(server.operationSpec({ kind: "detect-scenes", side: "dst" }).cancellable, false);
+  assert.notEqual(server.operationSpec({ kind: "detect-scenes", side: "dst" }).cancellable, false);
+  for (const kind of ["mask-assist", "mask-publish", "best-faceset-init", "best-faceset-analyze", "best-faceset-select", "best-faceset-publish", "best-faceset-recover"]) {
+    const spec = server.operationSpec({ kind, side: "src" });
+    assert.equal(spec.exclusive, true);
+    assert.equal(typeof spec.run, "function");
+    assert.throws(() => server.operationSpec({ kind, side: "outside" }),
+      error => error.code === "OPERATION_SIDE_INVALID");
+  }
 
   const address = await server.start({ host: "127.0.0.1", port: 0 });
   const baseUrl = `http://127.0.0.1:${address.port}`;

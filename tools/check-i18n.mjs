@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { UX_EN } from "../webui/src/ux-translations.mjs";
 
 const toolsRoot = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(toolsRoot, "..");
@@ -29,13 +30,16 @@ function placeholders(value) {
 }
 
 const catalogSource = await readFile(catalogPath, "utf8");
-const catalog = new Map();
+// Match the runtime's { ...UX_EN, ...localEntries } precedence.
+const catalog = new Map(Object.entries(UX_EN));
+const localKeys = new Set();
 for (const match of catalogSource.matchAll(/^\s*"((?:[^"\\]|\\.)*)"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,?\s*$/gm)) {
   const key = decodeDoubleQuoted(match[1]);
   const translation = decodeDoubleQuoted(match[2]);
-  if (catalog.has(key)) {
+  if (localKeys.has(key)) {
     throw new Error(`Duplicate English translation key: ${key}`);
   }
+  localKeys.add(key);
   catalog.set(key, translation);
 }
 

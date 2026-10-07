@@ -10,6 +10,7 @@ from core.cv2ex import *
 from core.imagelib import SegIEPolys
 from core.interact import interact as io
 from core.structex import *
+from core.safe_pickle import loads as load_data_pickle, validate_dfl_metadata
 from facelib import FaceType
 
 
@@ -147,7 +148,7 @@ class DFLJPG(object):
 
                 elif chunk['name'] == 'APP15':
                     if type(chunk['data']) == bytes:
-                        inst.dfl_dict = pickle.loads(chunk['data'])
+                        inst.dfl_dict = validate_dfl_metadata(load_data_pickle(chunk['data'], profile='metadata'))
 
             return inst
         except Exception as e:

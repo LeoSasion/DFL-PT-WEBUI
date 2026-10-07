@@ -1,48 +1,128 @@
 {
   "schemaVersion": 1,
   "genericXSegManifest": "release/generic-xseg.json",
-  "sourceExclude": ["webui/.openai/hosting.json", "launcher/ui/.openai/hosting.json", "webui/.runtime/**"],
+  "pythonSbomManifest": "release/python-sbom.json",
+  "pythonRuntimeProfile": "production",
+  "pythonRuntimeInclude": [
+    "numpy/_core/tests/_natype.py"
+  ],
+  "visionAssetManifest": "release/vision-assets.json",
+  "visionResourcePolicy": "separate-reviewed-resource-pack",
+  "sourceExclude": [
+    "webui/.openai/hosting.json",
+    "launcher/ui/.openai/hosting.json",
+    "webui/.runtime/**"
+  ],
   "portableExclude": [
-    "**/tests/**", "**/test/**", "**/.openai/**", "requirements-test.txt",
-    "webui/design/**", "webui/design-qa.md", "launcher/design/**",
+    "**/tests/**",
+    "**/test/**",
+    "**/.openai/**",
+    "requirements-test.txt",
+    "webui/design/**",
+    "webui/design-qa.md",
+    "launcher/design/**",
     "docs/images/qa-*",
-    "tools/prepare-launcher-tests.ps1", "tools/run-launcher-tests.ps1",
+    "tools/prepare-launcher-tests.ps1",
+    "tools/run-launcher-tests.ps1",
     "webui/dist/.openai/**"
   ],
-  "runtimeTrees": ["_internal/python_base", ".venv/Lib/site-packages", "_internal/node", "_internal/ffmpeg", "webui/dist"],
+  "runtimeTrees": [
+    "_internal/python_base",
+    ".venv/Lib/site-packages",
+    "_internal/node",
+    "_internal/ffmpeg",
+    "webui/dist"
+  ],
   "runtimeFiles": [
-    ".venv/Scripts/python.exe", ".venv/Scripts/pythonw.exe",
-    "_internal/vision_models/face_recognition_sface_2021dec.onnx", "_internal/vision_models/SFace-LICENSE.txt",
-    "launcher/bin/DFL-PT-WEBUI.Launcher.exe", "DFL-PT-WEBUI.exe", "tools/licenses/NotoFonts-OFL-1.1.txt"
+    ".venv/Scripts/python.exe",
+    ".venv/Scripts/pythonw.exe",
+    "_internal/vision_models/face_recognition_sface_2021dec.onnx",
+    "_internal/vision_models/SFace-LICENSE.txt",
+    "launcher/bin/DFL-PT-WEBUI.Launcher.exe",
+    "launcher/bin/launcher-build.json",
+    "DFL-PT-WEBUI.exe",
+    "tools/licenses/NotoFonts-OFL-1.1.txt"
   ],
   "licenseCopies": [
-    {"source": "launcher/vendor/webview2/1.0.4129.50/LICENSE.txt", "target": "THIRD-PARTY-LICENSES/WebView2/LICENSE.txt"},
-    {"source": "launcher/vendor/webview2/1.0.4129.50/NOTICE.txt", "target": "THIRD-PARTY-LICENSES/WebView2/NOTICE.txt"}
+    {
+      "source": "launcher/vendor/webview2/1.0.4129.50/LICENSE.txt",
+      "target": "THIRD-PARTY-LICENSES/WebView2/LICENSE.txt"
+    },
+    {
+      "source": "launcher/vendor/webview2/1.0.4129.50/NOTICE.txt",
+      "target": "THIRD-PARTY-LICENSES/WebView2/NOTICE.txt"
+    }
   ],
   "runtimeExclude": [
     "webui/.runtime/**",
-    "**/__pycache__/**", "**/.pytest_cache/**", "**/.cache/**", "**/.npm/**", "**/.pnpm-store/**",
-    "**/tests/**", "**/test/**", "**/examples/**", "**/.github/**",
-    "**/*.pyc", "**/*.pyo", "**/*.log", "**/*.tmp", ".venv/Lib/site-packages/*.whl", "**/*.test.js", "**/*.test.js.map",
-    "**/*.test.d.ts", "**/desktop.ini", "**/Thumbs.db", "**/.DS_Store",
-    "_internal/python_base/Lib/idlelib/**", "_internal/python_base/Lib/turtledemo/**",
-    "_internal/python_base/include/**", "_internal/python_base/libs/**",
-    "_internal/ffmpeg/ffplay.exe", ".venv/Lib/site-packages/pip-25.0.1.dist-info/**",
-    ".venv/Lib/site-packages/pytest/**", ".venv/Lib/site-packages/_pytest/**", ".venv/Lib/site-packages/pytest-*.dist-info/**",
-    ".venv/Lib/site-packages/iniconfig/**", ".venv/Lib/site-packages/iniconfig-*.dist-info/**",
-    ".venv/Lib/site-packages/pluggy/**", ".venv/Lib/site-packages/pluggy-*.dist-info/**",
-    ".venv/Lib/site-packages/pygments/**", ".venv/Lib/site-packages/pygments-*.dist-info/**", ".venv/Lib/site-packages/py.py",
-    "**/node-pty/prebuilds/darwin-*/**", "**/node-pty/prebuilds/linux-*/**", "**/node-pty/prebuilds/win32-arm64/**",
+    "**/__pycache__/**",
+    "**/.pytest_cache/**",
+    "**/.cache/**",
+    "**/.npm/**",
+    "**/.pnpm-store/**",
+    "**/tests/**",
+    "**/test/**",
+    "**/examples/**",
+    "**/.github/**",
+    "**/*.pyc",
+    "**/*.pyo",
+    "**/*.log",
+    "**/*.tmp",
+    ".venv/Lib/site-packages/*.whl",
+    "**/*.test.js",
+    "**/*.test.js.map",
+    "**/*.test.d.ts",
+    "**/desktop.ini",
+    "**/Thumbs.db",
+    "**/.DS_Store",
+    "_internal/python_base/Lib/idlelib/**",
+    "_internal/python_base/Lib/turtledemo/**",
+    "_internal/python_base/include/**",
+    "_internal/python_base/libs/**",
+    "_internal/ffmpeg/ffplay.exe",
+    ".venv/Lib/site-packages/pip-25.0.1.dist-info/**",
+    ".venv/Lib/site-packages/pytest/**",
+    ".venv/Lib/site-packages/_pytest/**",
+    ".venv/Lib/site-packages/pytest-*.dist-info/**",
+    ".venv/Lib/site-packages/iniconfig/**",
+    ".venv/Lib/site-packages/iniconfig-*.dist-info/**",
+    ".venv/Lib/site-packages/pluggy/**",
+    ".venv/Lib/site-packages/pluggy-*.dist-info/**",
+    ".venv/Lib/site-packages/pygments/**",
+    ".venv/Lib/site-packages/pygments-*.dist-info/**",
+    ".venv/Lib/site-packages/py.py",
+    "**/node-pty/prebuilds/darwin-*/**",
+    "**/node-pty/prebuilds/linux-*/**",
+    "**/node-pty/prebuilds/win32-arm64/**",
     "**/node-pty/third_party/conpty/*/win10-arm64/**",
-    "**/node-pty/build/Debug/**", "**/node-pty/build/Release/obj/**", "**/node-pty/build/Release/*.pdb",
-    "**/node-pty/build/Release/*.iobj", "**/node-pty/build/Release/*.ipdb", "**/node-pty/build/Release/*.lib",
-    "**/node-pty/build/Release/*.exp", "**/node_modules/.cache/**"
+    "**/node-pty/build/Debug/**",
+    "**/node-pty/build/Release/obj/**",
+    "**/node-pty/build/Release/*.pdb",
+    "**/node-pty/build/Release/*.iobj",
+    "**/node-pty/build/Release/*.ipdb",
+    "**/node-pty/build/Release/*.lib",
+    "**/node-pty/build/Release/*.exp",
+    "**/node_modules/.cache/**"
   ],
   "auxiliaryWeights": [
-    {"path": "_internal/DeepFaceLab/facelib/S3FD.npy", "sha256": "b4894ecfba8e6461eb1a69490f76184620c816605238ff0ba3216f1143a06c29", "licenseStatus": "verified", "licenseBasis": "Present in iperov/DeepFaceLab e4b7543ffa1d73b26fce1e31852727f658ba490c under the repository GPL-3.0; no separate weight license found."},
-    {"path": "_internal/DeepFaceLab/facelib/2DFAN.npy", "sha256": "ca2dc7f0b2aa146842e6de2119fedff1142188b7cff5ab702564952d6cba4624", "licenseStatus": "verified", "licenseBasis": "Present in iperov/DeepFaceLab e4b7543ffa1d73b26fce1e31852727f658ba490c under the repository GPL-3.0; no separate weight license found."},
-    {"path": "_internal/DeepFaceLab/facelib/3DFAN.npy", "sha256": "b50d2faf0fd4d6503aba9d19365e7aff06f2ea96bac37fc5f8f25a191a0a63a9", "licenseStatus": "verified", "licenseBasis": "Present in iperov/DeepFaceLab e4b7543ffa1d73b26fce1e31852727f658ba490c under the repository GPL-3.0; no separate weight license found."},
-    {"path": "_internal/DeepFaceLab/facelib/FaceEnhancer.npy", "sha256": "254958f67c9adfe97a0c9fc7b3c343ba490a1519c01862a50945fa228875476a", "licenseStatus": "verified", "licenseBasis": "Present in iperov/DeepFaceLab e4b7543ffa1d73b26fce1e31852727f658ba490c under the repository GPL-3.0; no separate weight license found."}
+    {
+      "path": "_internal/DeepFaceLab/facelib/S3FD.npy",
+      "sha256": "b4894ecfba8e6461eb1a69490f76184620c816605238ff0ba3216f1143a06c29",
+      "licenseStatus": "verified",
+      "licenseBasis": "Present in iperov/DeepFaceLab e4b7543ffa1d73b26fce1e31852727f658ba490c under the repository GPL-3.0; no separate weight license found."
+    },
+    {
+      "path": "_internal/DeepFaceLab/facelib/2DFAN.npy",
+      "sha256": "ca2dc7f0b2aa146842e6de2119fedff1142188b7cff5ab702564952d6cba4624",
+      "licenseStatus": "verified",
+      "licenseBasis": "Present in iperov/DeepFaceLab e4b7543ffa1d73b26fce1e31852727f658ba490c under the repository GPL-3.0; no separate weight license found."
+    },
+    {
+      "path": "_internal/DeepFaceLab/facelib/3DFAN.npy",
+      "sha256": "b50d2faf0fd4d6503aba9d19365e7aff06f2ea96bac37fc5f8f25a191a0a63a9",
+      "licenseStatus": "verified",
+      "licenseBasis": "Present in iperov/DeepFaceLab e4b7543ffa1d73b26fce1e31852727f658ba490c under the repository GPL-3.0; no separate weight license found."
+    }
   ],
   "sfaceSha256": "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79"
 }

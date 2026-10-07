@@ -1,6 +1,7 @@
 import multiprocessing
 import os
 import pickle
+from core.safe_pickle import load_file as load_safe_pickle
 import sys
 import traceback
 from pathlib import Path
@@ -14,6 +15,7 @@ from core.joblib import Subprocessor
 from merger import MergeFaceAvatar, MergeMasked, MergerConfig
 
 from .MergerScreen import Screen, ScreenManager
+from .session_data import normalize_session, restore_frames, encode_session, save_session
 
 MERGER_DEBUG = False
 class InteractiveMergerSubprocessor(Subprocessor):
@@ -164,15 +166,18 @@ class InteractiveMergerSubprocessor(Subprocessor):
         self.prefetch_frame_count = self.process_count = subprocess_count
 
         session_data = None
+        self.session_was_legacy = False
+        self.session_conversion_source = None
         if self.is_interactive and self.merger_session_filepath.exists():
             io.input_skip_pending()
             if io.input_bool ("是否使用已保存的会话？", True):
                 try:
-                    with open( str(self.merger_session_filepath), "rb") as f:
-                        session_data = pickle.loads(f.read())
+                    session_data, self.session_was_legacy = normalize_session(load_safe_pickle(self.merger_session_filepath, profile='session'))
+                    self.session_conversion_source = session_data.get('conversionSource')
 
                 except Exception as e:
-                    pass
+                    self.session_was_legacy = True  # Preserve even a rejected unknown-class original.
+                    io.log_err("会话格式未通过受限读取；原文件保留：" + str(e))
 
         rewind_to_frame_idx = None
         self.frames = frames
@@ -186,36 +191,15 @@ class InteractiveMergerSubprocessor(Subprocessor):
             s_frames_done_idxs = session_data.get('frames_done_idxs', None)
             s_model_iter = session_data.get('model_iter', None)
 
-            frames_equal = (s_frames is not None) and \
-                           (s_frames_idxs is not None) and \
-                           (s_frames_done_idxs is not None) and \
-                           (s_model_iter is not None) and \
-                           (len(frames) == len(s_frames)) # frames count must match
-
+            s_frames, provenance_changed = restore_frames(session_data, frames, self.merger_config)
+            frames_equal = s_frames is not None
             if frames_equal:
-                for i in range(len(frames)):
-                    frame = frames[i]
-                    s_frame = s_frames[i]
-                    # frames filenames must match
-                    if frame.frame_info.filepath.name != s_frame.frame_info.filepath.name:
-                        frames_equal = False
-                    if not frames_equal:
-                        break
-
-            if frames_equal:
-                io.log_info ('Using saved session from ' + '/'.join (self.merger_session_filepath.parts[-2:]) )
-
-                for frame in s_frames:
-                    if frame.cfg is not None:
-                        # recreate MergerConfig class using constructor with get_config() as dict params
-                        # so if any new param will be added, old merger session will work properly
-                        frame.cfg = frame.cfg.__class__( **frame.cfg.get_config() )
-
+                io.log_info('Using verified data session from ' + '/'.join(self.merger_session_filepath.parts[-2:]))
                 self.frames = s_frames
                 self.frames_idxs = s_frames_idxs
                 self.frames_done_idxs = s_frames_done_idxs
 
-                if self.model_iter != s_model_iter:
+                if self.model_iter != s_model_iter or provenance_changed:
                     # model was more trained, recompute all frames
                     rewind_to_frame_idx = -1
                     for frame in self.frames:
@@ -346,13 +330,9 @@ class InteractiveMergerSubprocessor(Subprocessor):
                 frame.output_mask_filepath = None
                 frame.image = None
 
-            session_data = {
-                'frames': self.frames,
-                'frames_idxs': self.frames_idxs,
-                'frames_done_idxs': self.frames_done_idxs,
-                'model_iter' : self.model_iter,
-            }
-            self.merger_session_filepath.write_bytes( pickle.dumps(session_data) )
+            session_data = encode_session(self.frames, self.frames_idxs, self.frames_done_idxs,
+                                          self.model_iter, self.session_conversion_source)
+            save_session(self.merger_session_filepath, session_data, preserve_legacy=self.session_was_legacy)
 
             io.log_info ("会话已保存到：" + '/'.join (self.merger_session_filepath.parts[-2:]) )
 

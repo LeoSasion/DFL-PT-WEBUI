@@ -19,7 +19,7 @@ import {
   IconUsers,
   IconX,
 } from "@tabler/icons-react";
-import { workflowStages } from "../data/dashboard.js";
+import { getNavigationWorkflowGroup, getWorkflowNavigation, workflowGroups } from "../data/dashboard.js";
 import { useI18n } from "../i18n.jsx";
 
 const DESKTOP_BREAKPOINT = 1020;
@@ -59,8 +59,8 @@ function useDesktopUiScale() {
 }
 
 const navItems = [
-  { id: "overview", label: "总览", icon: IconLayoutDashboard },
-  { id: "video", label: "工作区", icon: IconFolder },
+  { id: "overview", label: "训练总览", icon: IconLayoutDashboard },
+  { id: "video", label: "素材管理", icon: IconFolder },
   { id: "src", label: "SRC 数据", icon: IconUsers },
   { id: "dst", label: "DST 数据", icon: IconUsers },
   { id: "xseg", label: "XSeg 遮罩", icon: IconMasksTheater, tone: "violet" },
@@ -90,25 +90,28 @@ export function BrandBar() {
 
 export function Sidebar({ activeNav, onNavigate }) {
   const { t } = useI18n();
+  const currentGroup = getNavigationWorkflowGroup(activeNav);
+  const renderItem = ({ id, label, icon: Icon, tone }) => (
+    <button className={`nav-item ${activeNav === id ? "is-active" : ""} ${tone === "violet" ? "is-violet" : ""}`}
+      key={id} type="button" aria-label={t(label)} data-label={t(label)} title={t(label)}
+      aria-current={activeNav === id ? "page" : undefined} onClick={() => onNavigate(id, t(label))}>
+      <Icon size={20} stroke={1.8} /><span>{t(label)}</span>
+    </button>
+  );
   return (
-    <aside className="sidebar" aria-label={t("主导航")}>
+    <aside className={`sidebar ${currentGroup ? "is-workflow" : "is-utility"}`} aria-label={t("主导航")}>
       <nav className="sidebar-nav">
-        {navItems.map(({ id, label, icon: Icon, tone }) => (
-          <button
-            className={`nav-item ${activeNav === id ? "is-active" : ""} ${tone === "violet" ? "is-violet" : ""}`}
-            key={id}
-            type="button"
-            aria-label={t(label)}
-            data-label={t(label)}
-            title={t(label)}
-            aria-current={activeNav === id ? "page" : undefined}
-            onClick={() => onNavigate(id, t(label))}
-          >
-            <Icon size={20} stroke={1.8} />
-            <span>{t(label)}</span>
-          </button>
+        {workflowGroups.map(group => (
+          <section className={`sidebar-group ${currentGroup === group.id ? "is-current-group" : ""}`} key={group.id} aria-label={t(group.label)}>
+            <button className={`sidebar-group-title ${currentGroup === group.id ? "is-current" : ""}`}
+              type="button" aria-current={currentGroup === group.id ? "true" : undefined}
+              onClick={() => onNavigate(group.nav, t(group.label))}>{t(group.label)}</button>
+            <div className="sidebar-group-items">{navItems.filter(item => group.pages.includes(item.id)).map(renderItem)}</div>
+          </section>
         ))}
       </nav>
+      <div className="sidebar-utilities">
+      {navItems.filter(item => item.id === "tools").map(renderItem)}
       <button
         className={`nav-item sidebar-settings ${activeNav === "settings" ? "is-active" : ""}`}
         type="button"
@@ -121,11 +124,12 @@ export function Sidebar({ activeNav, onNavigate }) {
         <IconSettings size={20} stroke={1.8} />
         <span>{t("设置")}</span>
       </button>
+      </div>
     </aside>
   );
 }
 
-export function ProjectHeader({ projectName, workspacePath, serviceState, telemetry, onNewTask, onMenu }) {
+export function ProjectHeader({ projectName, workspacePath, serviceState, telemetry, onNewTask, onMenu, onProjectMenu }) {
   const { language, setLanguage, t } = useI18n();
   const serviceOnline = serviceState === "online";
   const gpu = telemetry?.gpus?.[0];
@@ -133,10 +137,10 @@ export function ProjectHeader({ projectName, workspacePath, serviceState, teleme
     <header className="project-header">
       <div className="project-copy">
         <div className="project-title-row">
-          <h1 title={`DFL-PT-WEBUI${projectName ? ` · ${projectName}` : ""}`}>{projectName || "DFL-PT-WEBUI"}</h1>
+          <h1 title={`DFL-PT-WEBUI${projectName ? ` · ${projectName}` : ""}`}><button className="project-switch-button" type="button" aria-label={t("打开项目菜单")} aria-haspopup="dialog" onClick={onProjectMenu}>{projectName || "DFL-PT-WEBUI"}<IconChevronRight size={17}/></button></h1>
         </div>
         <div className="workspace-path">
-          <span>{t("工作区路径")}</span>
+          <span>{t("项目目录")}</span>
           <code>{workspacePath}</code>
           <IconFolder size={15} stroke={1.7} />
         </div>
@@ -184,20 +188,38 @@ export function ProjectHeader({ projectName, workspacePath, serviceState, teleme
   );
 }
 
-export function WorkflowBar({ selectedStage, stageStates = {}, onSelectStage }) {
+export function WorkflowBar({ activeNav = "overview", selectedStage, stageStates = {}, onSelectStage }) {
   const { t } = useI18n();
+  const navigation = getWorkflowNavigation(activeNav);
+  if (navigation.kind === "groups") return (
+    <nav className="workflow-bar workflow-groups" aria-label={t("项目流程")}>
+      {navigation.stages.map((group, index) => (
+        <div className="workflow-segment" key={group.id}>
+          <button className={`workflow-step ${navigation.group === group.id ? "is-current" : ""}`} type="button"
+            aria-current={navigation.group === group.id ? "step" : undefined}
+            onClick={() => onSelectStage({ id: group.stage, label: t(group.label) })}>
+            <span className="stage-number">{index + 1}</span>
+            <span className="stage-copy"><strong>{t(group.label)}</strong><small>{t(group.description)}</small></span>
+          </button>
+          {index < navigation.stages.length - 1 ? <IconChevronRight className="workflow-arrow" size={17} stroke={1.3} aria-hidden="true" /> : null}
+        </div>
+      ))}
+    </nav>
+  );
   return (
     <nav className="workflow-bar" aria-label={t("项目流程")}>
-      {workflowStages.map((stage, index) => {
+      {navigation.stages.map((stage, index) => {
         const actualState = stageStates[stage.id] ?? stage.state;
         const selected = selectedStage === stage.id;
         const stateLabel = actualState === "done"
           ? t(["train","merge","encode"].includes(stage.id) ? "成果可用" : "完成")
           : actualState === "active"
             ? t("进行中")
+            : actualState === "available" ? t("检测到已有产物")
+            : actualState === "unconfirmed" ? t("本次保存未确认")
             : actualState === "failed"
               ? t("失败")
-              : t(stage.id === "mask" ? "可选" : stage.id === "clean" ? "待复核" : "未运行");
+              : actualState === "review" ? t("待复核") : t(stage.id === "mask" ? "可选" : "未运行");
         return (
           <div className="workflow-segment" key={stage.id}>
             <button
@@ -217,7 +239,7 @@ export function WorkflowBar({ selectedStage, stageStates = {}, onSelectStage }) 
                 </small>
               </span>
             </button>
-            {index < workflowStages.length - 1 ? (
+            {index < navigation.stages.length - 1 ? (
               <IconChevronRight className="workflow-arrow" size={17} stroke={1.3} aria-hidden="true" />
             ) : null}
           </div>

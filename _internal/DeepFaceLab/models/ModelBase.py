@@ -14,6 +14,7 @@ import cv2
 import numpy as np
 
 from core import imagelib, pathex
+from core.safe_pickle import load_file as load_data_pickle_file, validate_session_mapping, preserve_rejected_file
 from core.cv2ex import *
 from core.interact import interact as io
 from core.leras import nn
@@ -160,7 +161,7 @@ class ModelBase(object):
         self.model_data_path = Path( self.get_strpath_storage_for_file('data.dat') )
         if self.model_data_path.exists():
             io.log_info (f"正在加载模型：{self.model_name} ...")
-            model_data = pickle.loads ( self.model_data_path.read_bytes() )
+            model_data = validate_session_mapping(load_data_pickle_file(self.model_data_path, profile='session'))
             self.iter = model_data.get('iter',0)
             if self.iter != 0:
                 self.options = model_data['options']
@@ -185,9 +186,10 @@ class ModelBase(object):
         self.default_options = {}
         if self.default_options_path.exists():
             try:
-                self.default_options = pickle.loads ( self.default_options_path.read_bytes() )
-            except:
-                pass
+                self.default_options = validate_session_mapping(load_data_pickle_file(self.default_options_path, profile='session'))
+            except (OSError, ValueError) as error:
+                archive = preserve_rejected_file(self.default_options_path)
+                io.log_err(f'默认配置读取失败，原件已归档到 {archive}；使用当前模型配置：{error}')
 
         self.choose_preview_history = False
         self.batch_size = self.load_or_def_option('batch_size', 1)

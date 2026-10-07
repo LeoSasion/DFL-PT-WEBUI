@@ -24,6 +24,9 @@ import { inspectRoleLabels } from "./role-assignment-manager.mjs";
 
 const execFileAsync = promisify(execFile);
 const VIDEO_EXTENSIONS = new Set([".avi", ".mkv", ".mov", ".mp4", ".m4v", ".webm"]);
+// Match core.pathex.get_image_paths so audit/metadata sidecars are not frames.
+const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".tif", ".tiff"]);
+const isImageFile = name => IMAGE_EXTENSIONS.has(path.extname(name).toLowerCase());
 const REVIEW_IMAGE_NAME = /^[^<>:"/\\|?*\u0000-\u001f]{1,220}\.(?:jpe?g|png)$/i;
 const REVIEW_SLOTS = Object.freeze({
   "src-frame": path.join(PATHS.workspaceRoot, "data_src"),
@@ -40,7 +43,11 @@ const ARTIFACTS = Object.freeze({
   "result_mask.avi": path.join(PATHS.workspaceRoot, "result_mask.avi"),
   "result.mov": path.join(PATHS.workspaceRoot, "result.mov"),
   "result_mask.mov": path.join(PATHS.workspaceRoot, "result_mask.mov"),
+  "result.nut": path.join(PATHS.workspaceRoot, "result.nut"),
+  "result_mask.nut": path.join(PATHS.workspaceRoot, "result_mask.nut"),
 });
+const MEDIA_RECORDS = Object.freeze(Object.fromEntries(Object.keys(ARTIFACTS)
+  .map(name => [`${name}.media.json`, `${ARTIFACTS[name]}.media.json`])));
 
 export class WorkspaceError extends Error {
   constructor(message, code = "WORKSPACE_ERROR", status = 400, details) {
@@ -473,14 +480,18 @@ export async function inspectWorkspace() {
   ] = await Promise.all([
     findMaterial("src"),
     findMaterial("dst"),
-    directFileStats(path.join(PATHS.workspaceRoot, "data_src")),
-    directFileStats(path.join(PATHS.workspaceRoot, "data_dst")),
-    directFileStats(path.join(PATHS.workspaceRoot, "data_src", "aligned")),
-    directFileStats(path.join(PATHS.workspaceRoot, "data_dst", "aligned")),
-    directFileStats(path.join(PATHS.workspaceRoot, "data_dst", "merged")),
-    directFileStats(path.join(PATHS.workspaceRoot, "data_dst", "merged_mask")),
+    directFileStats(path.join(PATHS.workspaceRoot, "data_src"), isImageFile),
+    directFileStats(path.join(PATHS.workspaceRoot, "data_dst"), isImageFile),
+    directFileStats(path.join(PATHS.workspaceRoot, "data_src", "aligned"), isImageFile),
+    directFileStats(path.join(PATHS.workspaceRoot, "data_dst", "aligned"), isImageFile),
+    directFileStats(path.join(PATHS.workspaceRoot, "data_dst", "merged"), isImageFile),
+    directFileStats(path.join(PATHS.workspaceRoot, "data_dst", "merged_mask"), isImageFile),
     discoverModels(),
-    Promise.all(Object.values(ARTIFACTS).map(describeVideo)),
+    Promise.all(Object.values(ARTIFACTS).map(async target => {
+      const video = await describeVideo(target);
+      if (video && await pathExists(`${target}.media.json`)) video.mediaRecordUrl = `/api/workspace/artifacts/${encodeURIComponent(`${video.name}.media.json`)}`;
+      return video;
+    })),
     inspectStorage(PATHS.workspaceRoot).catch((error) => ({
       ready: null,
       error: error?.code ?? "STORAGE_UNAVAILABLE",
@@ -514,7 +525,8 @@ export async function inspectWorkspace() {
       model: modelInfo.modelStats.count > 0,
       me: modelInfo.meStats.count > 0,
       merged: merged.count > 0 && mergedMask.count > 0,
-      encoded: outputFiles.filter(Boolean).length >= 2,
+      encoded: ["mp4", "avi", "mov", "nut"].some(extension =>
+        [`result.${extension}`, `result_mask.${extension}`].every(name => outputFiles.some(file => file?.name === name))),
     },
   };
 }
@@ -613,7 +625,7 @@ export async function importWorkspaceVideo(side, request, {
 }
 
 export function resolveWorkspaceArtifact(name) {
-  const target = ARTIFACTS[name];
+  const target = ARTIFACTS[name] ?? MEDIA_RECORDS[name];
   if (!target) {
     throw new WorkspaceError("输出文件不在允许列表中", "ARTIFACT_NOT_ALLOWED", 404);
   }

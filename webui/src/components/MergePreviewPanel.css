@@ -1,0 +1,21 @@
+.merge-preview-panel { min-width: 0; border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 16px; margin-block: 16px; }
+.merge-preview-panel > header { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: space-between; align-items: flex-start; }
+.merge-preview-panel h3 { display: flex; align-items: center; gap: 8px; font-size: 15px; margin: 0; }
+.merge-preview-panel p { color: var(--text-soft); font-size: 13px; line-height: 1.65; overflow-wrap: anywhere; }
+.merge-preview-panel > header > div { min-width: 0; flex: 1 1 320px; }
+.merge-preview-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin-block: 14px; }
+.merge-preview-controls label { display: grid; gap: 6px; flex: 1 1 300px; min-width: 0; font-size: 13px; }
+.merge-preview-controls select { width: 100%; min-width: 0; padding: 8px; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; }
+.merge-preview-summary { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 13px; }
+.merge-preview-summary > span { color: var(--text-soft); }
+.merge-preview-triptych { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.merge-preview-triptych figure { min-width: 0; margin: 0; }
+.merge-preview-triptych figcaption { font-size: 13px; padding-block: 8px; }
+.merge-preview-triptych img, .merge-preview-triptych figure > div { width: 100%; aspect-ratio: 1; object-fit: contain; background: var(--surface-2); }
+.merge-preview-triptych figure > div { display: grid; place-items: center; font-size: 13px; color: var(--text-soft); }
+.merge-preview-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+.merge-preview-stepper { display: flex; min-width: 0; align-items: center; gap: 8px; font-size: 13px; }
+.merge-preview-stepper > span { overflow-wrap: anywhere; }
+.merge-preview-stepper button { flex: 0 0 32px; width: 32px; height: 32px; border: 1px solid var(--border); border-radius: 4px; color: var(--text); background: var(--surface-2); }
+.merge-preview-stepper button:disabled { opacity: .45; }
+@media (max-width: 850px) { .merge-preview-triptych { grid-template-columns: minmax(0, 1fr); } }

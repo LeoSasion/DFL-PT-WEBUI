@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getNextWorkflowStep, getUsageReadiness } from "../src/domain/workflow-readiness.js";
+import { getNextWorkflowStep, getUsageReadiness, getWorkflowArtifactState, getTrainingSaveStatus } from "../src/domain/workflow-readiness.js";
 
 const datasets = (srcFrames = 0, dstFrames = 0, srcFaces = 0, dstFaces = 0) => ({ srcFrames: { count: srcFrames }, dstFrames: { count: dstFrames }, srcFaces: { count: srcFaces }, dstFaces: { count: dstFaces } });
 const roles = { src: { current: true }, dst: { current: true } };
@@ -51,4 +51,30 @@ test("service, entry points and GPU telemetry remain separate evidence", () => {
 test("an active evaluation session and existing exports retain their workflow", () => {
   assert.equal(getNextWorkflowStep({ readiness: { faces: true, me: true } }, 0, true).target, "diagnostics");
   assert.equal(getNextWorkflowStep({ readiness: { faces: true, me: true, merged: true, encoded: true } }, 2).target, "export");
+});
+
+test("existing merged and encoded outputs take precedence over missing snapshots and old inputs", () => {
+  assert.equal(getNextWorkflowStep({ readiness: { encoded: true } }, 0, false).target, "export");
+  assert.equal(getNextWorkflowStep({ readiness: { me: true, merged: true } }, 0, true).commandId, "encode.quality");
+  assert.equal(getNextWorkflowStep({ readiness: { me: true } }, 0, false).commandId, "merge.me");
+  assert.equal(getNextWorkflowStep({ outputs: [{ name: "result.mp4" }] }).target, "export");
+});
+
+test("unequal discovered merge and mask counts lead to repair rather than encode", () => {
+  const partial = { datasets: { merged: { count: 5 }, mergedMask: { count: 3 } }, readiness: { merged: true } };
+  assert.equal(getWorkflowArtifactState(partial).exportConfiguredReady, false);
+  assert.equal(getNextWorkflowStep(partial).commandId, "merge.me");
+  assert.equal(getWorkflowArtifactState({ datasets: { merged: { count: 5 }, mergedMask: { count: 5 } } }).exportConfiguredReady, true);
+  assert.equal(getWorkflowArtifactState({ outputs: [{ name: "result_mask.mp4" }] }).encodedAvailable, false);
+});
+
+test("historical checkpoint presence does not confirm a latest timed out or failed save", () => {
+  const model = { name: "old", ready: true };
+  const unconfirmed = getTrainingSaveStatus({ commandId: "train.me", state: "cancelled", stopReason: "safe-stop-timeout" }, model);
+  assert.equal(unconfirmed.historyAvailable, true);
+  assert.equal(unconfirmed.saveState, "unconfirmed");
+  assert.equal(getTrainingSaveStatus({ commandId: "train.me", state: "succeeded" }, model).saveState, "unknown");
+  assert.equal(getTrainingSaveStatus({ commandId: "train.me", state: "cancelled", stopReason: "safe-stop" }, model).saveState, "confirmed");
+  assert.equal(getTrainingSaveStatus({ commandId: "xseg.train", state: "cancelled", stopReason: "safe-stop" }, model).saveState, "unknown");
+  assert.equal(getTrainingSaveStatus({ state: "stopping" }, model).saveState, "pending");
 });

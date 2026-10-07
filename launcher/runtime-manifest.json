@@ -1,7 +1,7 @@
 {
   "$schema": "./runtime-manifest.schema.json",
   "schemaVersion": 3,
-  "manifestVersion": "2026.10.05.1",
+  "manifestVersion": "2026.10.07.1",
   "description": "DFL-PT-WEBUI official source installation and local runtimes: Python 3.12, PyTorch 2.9.1 CUDA 12.8.",
   "components": [
     {
@@ -61,7 +61,7 @@
           "arguments": [
             "-I",
             "-c",
-            "import sys,torch,cv2,numpy,scipy,pathlib; root=pathlib.Path(sys.executable).resolve().parents[2]; assert pathlib.Path(sys.base_prefix).resolve() == root/'_internal'/'python_base'; assert pathlib.Path(torch.__file__).resolve().is_relative_to(root/'.venv'); assert sys.version_info[:2] == (3,12); assert torch.__version__ == '2.9.1+cu128'; assert torch.version.cuda == '12.8'; print(sys.version.split()[0]+'|'+torch.__version__+'|'+torch.version.cuda)"
+            "import sys,torch,torchvision,cv2,numpy,scipy,pathlib,importlib.metadata as m; root=pathlib.Path(sys.executable).resolve().parents[2]; assert pathlib.Path(sys.base_prefix).resolve() == root/'_internal'/'python_base'; assert pathlib.Path(torch.__file__).resolve().is_relative_to(root/'.venv'); assert sys.version_info[:2] == (3,12); assert torch.__version__ == '2.9.1+cu128'; assert torchvision.__version__ == '0.24.1+cu128'; assert torch.version.cuda == '12.8'; assert m.version('ultralytics') == '8.4.142'; assert m.version('timm') == '0.4.12'; print(sys.version.split()[0]+'|'+torch.__version__+'|'+torch.version.cuda)"
           ],
           "outputRegex": "^3\\.12\\.[0-9]+\\|2\\.9\\.1\\+cu128\\|12\\.8$"
         }

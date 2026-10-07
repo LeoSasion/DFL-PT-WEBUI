@@ -8,7 +8,7 @@ import { LoadingProgress } from "./ProgressFeedback.jsx";
 
 const readProjects = () => runtimeApi.projects({ signal: AbortSignal.timeout(15_000) });
 
-export function ProjectManagerPanel({ health, activeJobCount, onSwitchProject, onNotice }) {
+export function ProjectManagerPanel({ health, activeJobCount, blockedReason, onSwitchProject, onNotice }) {
   const { t } = useI18n();
   const { data, loading, error, refresh } = useWorkspaceRead(readProjects);
   const [name, setName] = useState("");
@@ -38,7 +38,7 @@ export function ProjectManagerPanel({ health, activeJobCount, onSwitchProject, o
     try {
       const project = await runtimeApi.createProject({ name: normalizedName, id: normalizedId }, { signal: AbortSignal.timeout(15_000) });
       setName(""); setId("");
-      setCreation({ phase: "created", error: null, name: project.name });
+      setCreation({ phase: "created", error: null, name: project.name, project });
       onNotice?.(t("项目“{name}”已创建，当前工作区保持不变。", { name: project.name }));
       await refresh();
     } catch (failure) {
@@ -64,6 +64,7 @@ export function ProjectManagerPanel({ health, activeJobCount, onSwitchProject, o
     {loading ? <LoadingProgress compact label={t("正在读取受管项目…")} detail={t("正在确认当前工作区与切换安全性")} operationKey="settings-projects-load"/> : null}
     {busy ? <LoadingProgress compact label={t("正在创建项目…")} detail={normalizedName} operationKey="settings-project-create"/> : null}
     {error ? <div className="workspace-read-error project-read-error" role="alert"><strong>{t("项目清单读取失败")}</strong><p>{t(error.message)}</p><button type="button" className="button secondary" disabled={loading} onClick={() => void refresh()}>{t("重新读取")}</button></div> : null}
+    {blockedReason ? <p className="project-field-error" role="status">{blockedReason}</p> : null}
     <div className="project-manager-grid">
       <div className="project-list">
         {data?.projects.map(project => {
@@ -71,7 +72,7 @@ export function ProjectManagerPanel({ health, activeJobCount, onSwitchProject, o
           return <article className={active ? "is-active" : ""} key={project.id}>
             <span>{active ? <IconCheck size={15}/> : <IconBoxModel2 size={15}/>}</span>
             <div><strong>{project.name}</strong><small>{project.id} · {project.managed ? t("受管目录") : t("兼容默认工作区")}</small></div>
-            <button type="button" className="button secondary" disabled={active || activeJobCount > 0 || busy || pending || !runningId || Boolean(error)} onClick={() => onSwitchProject(project)}>{active ? t("当前") : t("切换")}</button>
+            <button type="button" className="button secondary" disabled={active || activeJobCount > 0 || busy || pending || !runningId || Boolean(error) || Boolean(blockedReason)} onClick={() => onSwitchProject(project)}>{active ? t("当前") : t("切换")}</button>
           </article>;
         })}
         {!data && !error ? <div className="operation-empty">{t("项目清单准备中")}</div> : null}
@@ -86,7 +87,7 @@ export function ProjectManagerPanel({ health, activeJobCount, onSwitchProject, o
         </div>
         <small>{t("仅在仓库的 workspaces 目录中创建，不接受任意磁盘路径。创建不会自动切换。")}</small>
         {creation.error ? <div className="workspace-read-error" role="alert"><p>{t(creation.error.message)}</p>{uncertain ? <><p>{t("创建结果尚未确认，请先刷新项目清单核对。")}</p><button type="button" className="button secondary" disabled={loading} onClick={() => void recheckCreation()}>{t("刷新并核对结果")}</button></> : null}</div> : null}
-        {creation.phase === "created" ? <p role="status">{t("项目“{name}”已创建，当前工作区保持不变。", { name: creation.name })}</p> : null}
+        {creation.phase === "created" ? <div role="status"><p>{t("项目“{name}”已创建，当前工作区保持不变。", { name: creation.name })}</p><button type="button" className="button secondary" disabled={activeJobCount > 0 || pending || !runningId || Boolean(blockedReason)} onClick={() => onSwitchProject(creation.project)}>{t("切换到新项目")}</button></div> : null}
         <button className="button primary" type="submit" disabled={formBlocked || Boolean(issues.name || issues.id)}>{busy ? t("正在创建项目…") : t("创建受管项目")}</button>
       </form>
     </div>

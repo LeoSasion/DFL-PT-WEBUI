@@ -91,36 +91,27 @@ test("training preview preserves real Trainer output after a safe stop and label
   );
 });
 
-test("pipeline status derives failures from each command's latest run", async () => {
+test("workflow uses current job evidence before historical artifacts and protects an open wizard", async () => {
   const source = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
   const pipelineSource = source.slice(
     source.indexOf("const commandIds = pipelineCommandMap"),
     source.indexOf("const workflowStates = useMemo"),
   );
 
-  assert.match(pipelineSource, /const latestJobs = commandIds/);
+  assert.match(pipelineSource, /task\.id === "export" \? \[latestWorkflowJob\(jobs, commandIds\)\]/);
   assert.match(pipelineSource, /const failedJob = latestJobs\.find/);
   assert.doesNotMatch(pipelineSource, /const failedJob = matchingJobs\.find/);
-  assert.ok(
-    pipelineSource.indexOf('state: isActive ? "active" : isComplete ? "done"')
-      < pipelineSource.indexOf('failedJob ? "failed"'),
-    "real workspace artifacts must outrank a historical failed job",
-  );
+  assert.match(pipelineSource, /saveUnconfirmed \? "unconfirmed" : failedJob \? "failed" : currentComplete \? "done" : artifactReady \? "available"/);
 
   const workflowSource = source.slice(
     source.indexOf("const workflowStates = useMemo"),
     source.indexOf("const nextWorkflowStep = useMemo"),
   );
-  assert.ok(
-    workflowSource.indexOf('job.state === "succeeded" || artifactReady')
-      < workflowSource.indexOf('isFailedJob(job)'),
-    "workflow state must prefer artifact truth over historical failure",
-  );
-  assert.ok(
-    workflowSource.indexOf('if (artifactReady || states.every')
-      < workflowSource.indexOf('if (states.includes("failed"))'),
-    "combined workflow state must prefer artifact truth over historical failure",
-  );
+  assert.match(workflowSource, /if \(isFailedJob\(job\)\) return "failed"/);
+  assert.match(workflowSource, /if \(artifactReady\) return "available"/);
+  assert.ok(workflowSource.indexOf('if (isFailedJob(job))') < workflowSource.indexOf('if (artifactReady) return "available"'));
+  assert.ok(workflowSource.indexOf('if (states.includes("failed"))') < workflowSource.indexOf('if (artifactReady) return requiresReview'));
+  assert.match(source, /if \(!workspaceSnapshot \|\| navigationTouchedRef\.current \|\| newTaskOpen\) return;/);
 });
 
 test("tool lab primary navigation has English labels", async () => {

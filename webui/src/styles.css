@@ -2048,6 +2048,12 @@ code {
   text-align: center;
 }
 
+.runtime-console > .terminal-empty {
+  place-content: start center;
+  overflow-y: auto;
+  padding: 12px;
+}
+
 .terminal-empty > strong {
   color: #b7c5bc;
   font-size: 11px;
@@ -4456,7 +4462,7 @@ input {
 .asset-layer-buttons {
   min-width: 0;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 5px;
 }
 
@@ -4479,6 +4485,7 @@ input {
 .asset-layer-button.is-polygon { --asset-layer-accent: #c990ef; }
 .asset-layer-button.is-points { --asset-layer-accent: #e7bd61; }
 .asset-layer-button.is-mask { --asset-layer-accent: #61d8c1; }
+.asset-layer-button.is-native { --asset-layer-accent: #ffb866; }
 
 .asset-layer-button:hover:not(:disabled),
 .asset-layer-button.is-active {
@@ -4640,6 +4647,12 @@ input {
   fill: #ddfff1;
   stroke: #08724e;
   stroke-width: 0.9px;
+}
+
+.asset-native-landmark-point {
+  fill: #ffba69;
+  stroke: #774215;
+  stroke-width: 0.7px;
 }
 
 .asset-detail-empty,
@@ -9493,6 +9506,14 @@ input {
 .similarity-members article > div { min-width: 0; display: flex; gap: 5px; padding: 5px 6px 1px; }
 .similarity-members article > div strong { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 .similarity-members article > div small { color: var(--green); font-size: 11px; }
+.similarity-members article > div:has(+ details) { flex-wrap: wrap; }
+.similarity-members article > div:has(+ details) strong { flex-basis: 100%; }
+.similarity-members article > details { margin: 3px 6px 6px; font-size: 11px; line-height: 1.5; }
+.similarity-members details > small { display: block; margin: 5px 0; color: var(--text-soft); }
+.similarity-members details dl { display: grid; gap: 3px; margin: 6px 0; }
+.similarity-members details dl > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 6px; }
+.similarity-members details dt, .similarity-members details dd { margin: 0; }
+.similarity-members details dd { color: var(--green); }
 .similarity-members article > button:last-child { padding: 3px 6px 6px; }
 .similarity-action-dock { display: flex; align-items: center; justify-content: space-between; padding: 7px 12px; border-top: 1px solid var(--border-strong); background: #07130e; }
 .similarity-action-dock > div { display: flex; align-items: center; gap: 9px; color: var(--green); }
@@ -10504,11 +10525,11 @@ summary { cursor: pointer; color: var(--text-soft); padding: 9px 0; }
 .app-frame .main-surface:has(.release-strip) {
   grid-template-areas: "header" "release" "notice" "progress" "workflow" "guide" "content" "console";
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: 72px auto auto auto auto auto minmax(0, 3fr) minmax(226px, 2fr);
+  grid-template-rows: 72px auto auto auto auto auto minmax(0, 3fr) minmax(var(--console-dock-min-height, 226px), 2fr);
   gap: 0;
 }
 .app-frame .main-surface:has(.release-strip):has(.runtime-console.is-collapsed) {
-  grid-template-rows: 72px auto auto auto auto auto minmax(0, 1fr) 58px;
+  grid-template-rows: 72px auto auto auto auto auto minmax(0, 1fr) var(--console-dock-height, 58px);
 }
 .main-surface > .project-header { grid-area: header; }
 .main-surface > .release-strip { grid-area: release; min-height: 24px; padding: 4px 2px; }
@@ -10523,5 +10544,139 @@ summary { cursor: pointer; color: var(--text-soft); padding: 9px 0; }
   .app-frame .main-surface:has(.release-strip),
   .app-frame .main-surface:has(.release-strip):has(.runtime-console.is-collapsed) {
     grid-template-rows: auto auto auto auto auto auto minmax(380px, auto) auto;
+  }
+}
+
+/* Compact navigation keeps every workflow group in view, with touch-sized controls. */
+@media (max-width: 780px) {
+  .project-switch-button {
+    min-height: 44px;
+  }
+
+  .release-strip {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2px 8px;
+    font-size: 11px;
+  }
+
+  .release-strip > span {
+    grid-column: 1;
+  }
+
+  .release-strip > button {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+    min-height: 44px;
+    padding-inline: 8px;
+    margin: 0;
+    font-size: 12px;
+  }
+
+  .workflow-bar:not(.workflow-groups) {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    padding: 6px;
+    overflow: visible;
+  }
+
+  .workflow-bar:not(.workflow-groups) .workflow-segment {
+    min-width: 0;
+    width: auto;
+  }
+
+  .workflow-bar:not(.workflow-groups) .workflow-step {
+    width: 100%;
+    min-width: 0;
+    gap: 4px;
+    padding: 4px;
+  }
+
+  .workflow-bar:not(.workflow-groups) .workflow-arrow {
+    display: none;
+  }
+
+  .workflow-bar:not(.workflow-groups) .stage-number {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    font-size: 10px;
+  }
+
+  .workflow-bar:not(.workflow-groups) .stage-copy {
+    min-width: 0;
+  }
+
+  .workflow-bar:not(.workflow-groups) .stage-copy small {
+    font-size: 10px;
+    line-height: 1.3;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .preview-refresh-popover {
+    left: 0;
+    right: auto;
+    width: min(260px, calc(100vw - 48px));
+  }
+
+  .workbench-grid .training-panel {
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+  }
+
+  .training-heading {
+    padding-block: 8px;
+  }
+
+  .dataset-view .asset-browser {
+    grid-template-rows: minmax(48px, auto) minmax(0, 1fr) minmax(44px, auto);
+  }
+
+  .button.compact,
+  .text-button,
+  .console-title-button,
+  .preview-refresh-menu > summary,
+  .dataset-command-strip button,
+  .side-switch button,
+  .tool-lab-tabs button,
+  .mask-workflow-actions .button,
+  .terminal-tabs-action,
+  .terminal-tab,
+  .terminal-tab-close,
+  .terminal-control-row .button {
+    min-height: 44px;
+  }
+
+  .app-frame .route-content button:not(:disabled),
+  .app-frame .route-content summary,
+  .app-frame .console-dock-slot button:not(:disabled) {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .asset-thumbnail-density button,
+  .progress-hud-toggle,
+  .progress-hud-cancel {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .terminal-control-row {
+    flex-wrap: wrap;
+  }
+
+  .console-dock-slot:has(.background-results-inline) {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .background-results-inline {
+    min-height: 52px;
+  }
+
+  .app-frame input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  .app-frame select {
+    min-height: 44px;
+    font-size: 16px;
   }
 }

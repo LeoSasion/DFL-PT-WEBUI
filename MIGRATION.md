@@ -27,8 +27,8 @@ ME 向导已接入完整后端选项，按网络结构、优化与训练、显�
 | 能力 | 新仓库实现 |
 | --- | --- |
 | SRC/DST 视频提帧和成片封装 | `mainscripts/VideoEd.py`、本地 FFmpeg、Web 视频工具 |
-| 自动/手动切脸、2D/3D landmarks、调试预览 | `mainscripts/Extractor.py`、PyTorch S3FD/FAN |
-| 人脸增强、重设尺寸 | `FacesetEnhancer.py`、`FacesetResizer.py` |
+| 自动/手动切脸、2D/3D landmarks、调试预览 | `mainscripts/Extractor.py`、YOLO26s/TUFA 默认、独立 TUFA98 审阅，S3FD/FAN/HEAD 兼容 |
+| 人脸增强、重设尺寸 | `FacesetEnhancer.py`、`FaceEnhancement.py`（MambaIRv2/Real-ESRGAN，显式准备可选依赖与固定资源）、`FacesetResizer.py` |
 | 排序、姿态筛选、错脸识别 | `Sorter.py`、`yaw_image_filter.py`、`ErrFaceFilter.py` |
 | PAK/ZIP、人物子目录、元数据导入导出 | `samplelib/PackedFaceset.py`、`mainscripts/Util.py` |
 | XSeg 标注、训练、应用、删除和导出 | Web 编辑器、`XSegEditor`、`Model_XSeg`、`XSegUtil.py` |

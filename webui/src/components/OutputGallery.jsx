@@ -31,13 +31,14 @@ export function OutputGallery({ workspace, jobs = [], onError, onNotice, onOpenJ
     <header><h3><IconMovie size={18} />{t("项目成果")}</h3><span>{t("{count} 个文件", {count:outputs.length})}</span></header>
     {selected ? <>
       <div className="output-gallery-layout">
-        <video key={`${workspace.root}:${selected.name}:${selected.modifiedAt}`} controls playsInline preload="metadata"
-          src={`${selected.url}?v=${encodeURIComponent(selected.modifiedAt)}`} aria-label={`${label(selected)} · ${selected.name}`} />
+        {selected.extension === ".nut" ? <div className="output-empty"><IconMovie size={28}/><p>{t("浏览器无法播放 NUT，请下载或用本地播放器查看；回读校验结果见媒体记录。")}</p><a className="button secondary" href={selected.url} download={selected.name}>{t("下载 RGB 母版")}</a></div>
+          : <video key={`${workspace.root}:${selected.name}:${selected.modifiedAt}`} controls playsInline preload="metadata"
+            src={`${selected.url}?v=${encodeURIComponent(selected.modifiedAt)}`} aria-label={`${label(selected)} · ${selected.name}`} />}
         <div className="output-gallery-detail">
           <label className="wizard-field"><span>{t("查看成果")}</span><select value={selected.name} onChange={event => setSelectedName(event.target.value)}>
             {outputs.map(output => <option key={output.name} value={output.name}>{label(output)} · {output.name}</option>)}
           </select></label>
-          <p>{selected.name.includes("_mask") ? t("黑白遮罩，用于检查替换范围。") : t("合成后的视频，可直接播放检查。")}</p>
+          <p>{selected.extension === ".nut" ? t("FFV1 RGB 母版，可下载并查看校验记录。") : selected.name.includes("_mask") ? t("黑白遮罩，用于检查替换范围。") : t("合成后的视频，可直接播放检查。")}</p>
           <dl>
             <div><dt>{t("时长")}</dt><dd>{selected.durationSeconds ? `${selected.durationSeconds.toFixed(1)} s` : "—"}</dd></div>
             <div><dt>{t("分辨率")}</dt><dd>{selected.width ? `${selected.width} × ${selected.height}` : "—"}</dd></div>
@@ -47,6 +48,7 @@ export function OutputGallery({ workspace, jobs = [], onError, onNotice, onOpenJ
           <div className="output-actions">
             <button type="button" className="button secondary" disabled={revealing} onClick={() => void reveal()}><IconFolderOpen size={16}/>{t("打开文件夹")}</button>
             <button type="button" className="button secondary" onClick={() => void copyPath()}><IconCopy size={16}/>{t("复制路径")}</button>
+            {selected.mediaRecordUrl ? <a className="button secondary" href={selected.mediaRecordUrl} target="_blank" rel="noreferrer">{t("查看媒体校验记录")}</a> : null}
           </div>
         </div>
       </div>

@@ -1,9 +1,12 @@
 ﻿[CmdletBinding()]
 param(
-    [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot),
+    [string]$ProjectRoot = '',
     [switch]$NoNetwork,
     [string]$ArchiveDirectory = '',
     [string]$WheelhousePath = '',
+    [ValidateSet('production','restoration','validation','evaluation','scene')][string]$RuntimeProfile = 'production',
+    [string]$ResourcePackPath = '',
+    [string]$VisionCacheRoot = '',
     [switch]$SkipVisionAssets,
     [switch]$SkipWebuiBuild,
     [switch]$SkipWebuiPreparation
@@ -13,6 +16,7 @@ param(
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+if ([string]::IsNullOrWhiteSpace($ProjectRoot)) { $ProjectRoot = Split-Path -Parent $PSScriptRoot }
 $root = [IO.Path]::GetFullPath($ProjectRoot).TrimEnd('\', '/')
 $rootPrefix = $root + [IO.Path]::DirectorySeparatorChar
 $cache = Join-Path $root '.launcher-install\source'
@@ -34,7 +38,7 @@ $ffmpegRoot = Join-Path $root '_internal\ffmpeg'
 $webui = Join-Path $root 'webui'
 $modules = Join-Path $webui 'node_modules'
 $dist = Join-Path $webui 'dist'
-$requirements = Join-Path $root 'requirements.txt'
+$requirements = Join-Path $root ('release\python-locks\' + $RuntimeProfile + '-win-cp312.txt')
 
 # Digests are pinned from upstream release metadata / Node SHASUMS256.txt.
 $pythonArchive = 'cpython-3.12.14+20260814-x86_64-pc-windows-msvc-install_only_stripped.tar.gz'
@@ -140,7 +144,7 @@ assert pathlib.Path(torch.__file__).resolve().is_relative_to(root/'.venv'),torch
 assert torch.__version__ == '2.9.1+cu128',torch.__version__
 assert torch.version.cuda == '12.8',torch.version.cuda
 for line in pathlib.Path(sys.argv[2]).read_text(encoding='utf-8').splitlines():
-    match=re.fullmatch(r'([A-Za-z0-9_.-]+)==([^ #]+)',line.strip())
+    match=re.match(r'^([A-Za-z0-9_.-]+)==([^ #]+)',line.strip())
     if match:
         actual=metadata.version(match[1])
         assert actual == match[2],f'{match[1]}: expected {match[2]}, got {actual}'
@@ -259,25 +263,31 @@ try {
         Assert-Exit 'Project .venv creation'
         $pipOptions = @('--disable-pip-version-check', '--only-binary=:all:', '--cache-dir', (Join-Path $cache 'pip-cache'))
         if ($WheelhousePath) { $pipOptions += @('--no-index', '--find-links', $WheelhousePath) }
-        $torchOptions = $pipOptions + @('torch==2.9.1+cu128')
-        $requirementsOptions = $pipOptions + @('-r', $requirements)
+        $requirementsOptions = $pipOptions + @('--require-hashes', '-r', $requirements)
         if (-not $WheelhousePath) {
-            $torchOptions += @('--index-url', 'https://download.pytorch.org/whl/cu128')
             $requirementsOptions += @('--index-url', 'https://pypi.org/simple')
+            $requirementsOptions += @('--extra-index-url', 'https://download.pytorch.org/whl/cu128')
         }
-        & $python -I -m pip --isolated install @torchOptions
-        Assert-Exit 'Pinned PyTorch CUDA 12.8 wheel installation'
         & $python -I -m pip --isolated install @requirementsOptions
         Assert-Exit 'Pinned Python requirements installation'
     }
     & $python -I -c $pythonValidation $root $requirements
     Assert-Exit 'Independent Python / pinned requirements validation (existing environments are preserved)'
-    & $python -I -m pip --isolated check
+    # A production portable venv has inference packages but no installed pip.
+    # Check its graph using the local base's official bundled wheel without
+    # altering the existing environment or initiating a download.
+    $pipHealthCode = "import importlib.util, ensurepip, pathlib, runpy, sys; " +
+        "present = importlib.util.find_spec('pip') is not None; " +
+        "wheel = pathlib.Path(ensurepip.__file__).parent / '_bundled' / ('pip-' + ensurepip.version() + '-py3-none-any.whl'); " +
+        "assert present or wheel.is_file(), 'Project-local bundled pip wheel is missing'; " +
+        "sys.path.insert(0, str(wheel)) if not present else None; " +
+        "sys.argv = ['pip', '--isolated', 'check']; runpy.run_module('pip', run_name='__main__')"
+    & $python -I -c $pipHealthCode
     Assert-Exit 'Python dependency consistency check'
     # Keep a fully installed venv if a later, independent asset step fails.
     $createdVenv = $false
     if (-not $SkipVisionAssets) {
-        & (Join-Path $root 'tools\prepare-vision-runtime.ps1') -ProjectRoot $root -NoNetwork:$NoNetwork -SkipFFmpeg -PreserveExisting
+        & (Join-Path $root 'tools\prepare-vision-runtime.ps1') -ProjectRoot $root -NoNetwork:$NoNetwork -SkipFFmpeg -PreserveExisting -ResourcePackPath $ResourcePackPath -VisionCacheRoot $VisionCacheRoot -IncludeRestoration:($RuntimeProfile -in @('restoration','evaluation')) -IncludeScene:($RuntimeProfile -eq 'scene')
         if (-not $?) { throw 'Preparing verified helper weights failed.' }
     } else { Write-Host '[source-install] Helper weights explicitly skipped; extraction / enhancement / grouping may be unavailable.' }
     if (-not $SkipWebuiPreparation) {

@@ -16,6 +16,9 @@ from core.cv2ex import *
 from core.imagelib import estimate_sharpness
 from core.interact import interact as io
 from core.joblib import Subprocessor
+from core.faceset_transaction import execute_plan
+from core.faceset_transaction import sha256 as file_sha256
+from core.imagelib.face_quality import DEFAULT_METRIC, METRICS, face_detail_signals, metadata_coverage, select_quality_coverage
 from core.leras import nn
 from DFLIMG import *
 from facelib import LandmarksProcessor
@@ -470,7 +473,15 @@ class FinalLoaderSubprocessor(Subprocessor):
                 gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
                 if self.faster:
                     source_rect = dflimg.get_source_rect()
-                    sharpness = mathlib.polygon_area(np.array(source_rect[[0,2,2,0]]).astype(np.float32), np.array(source_rect[[1,1,3,3]]).astype(np.float32))
+                    if source_rect is None:
+                        # Missing source boxes do not mean a defective face.
+                        # Keep the image as a zero/unknown metric candidate.
+                        sharpness = 0.0
+                    else:
+                        source_rect = np.asarray(source_rect, dtype=np.float32)
+                        if source_rect.shape != (4,) or not np.isfinite(source_rect).all():
+                            raise ValueError('源图人脸框必须是四个有限坐标')
+                        sharpness = max(0.0, float(source_rect[2] - source_rect[0])) * max(0.0, float(source_rect[3] - source_rect[1]))
                 else:
                     face_mask = LandmarksProcessor.get_image_hull_mask (gray.shape, dflimg.get_landmarks())
                     sharpness = estimate_sharpness( (gray[...,None]*face_mask).astype(np.uint8) )
@@ -482,7 +493,9 @@ class FinalLoaderSubprocessor(Subprocessor):
                 self.log_err (e)
                 return [ 1, [str(filepath)] ]
 
-            return [ 0, [str(filepath), sharpness, hist, yaw, pitch ] ]
+            return [0, [str(filepath), sharpness, hist, yaw, pitch,
+                        {'metric': 'source_box_area' if self.faster else 'foreground_cpbd',
+                         'source_box_available': dflimg.get_source_rect() is not None}]]
 
         #override
         def get_data_name (self, data):
@@ -610,126 +623,135 @@ class FinalHistDissimSubprocessor(Subprocessor):
     def get_result(self):
         return self.result
 
-def sort_best_faster(input_path):
-    return sort_best(input_path, faster=True)
-
-def sort_best(input_path, faster=False):
-    target_count = io.input_int ("目标人脸数量？", 2000)
-
-    io.log_info ("正在执行“最佳人脸”排序。")
-    if faster:
-        io.log_info("使用更快的算法：将按源图人脸框面积排序，而不是按清晰度（blur）。")
-
-    img_list, trash_img_list = FinalLoaderSubprocessor( pathex.get_image_paths(input_path), faster ).run()
-    final_img_list = []
-
-    grads = 128
-    imgs_per_grad = round (target_count / grads)
-
-    #instead of math.pi / 2, using -1.2,+1.2 because actually maximum yaw for 2DFAN landmarks are -1.2+1.2
-    grads_space = np.linspace (-1.2, 1.2,grads)
-
-    yaws_sample_list = [None]*grads
-    for g in io.progress_bar_generator ( range(grads), "按偏航（yaw）排序"):
-        yaw = grads_space[g]
-        next_yaw = grads_space[g+1] if g < grads-1 else yaw
-
-        yaw_samples = []
-        for img in img_list:
-            s_yaw = -img[3]
-            if (g == 0          and s_yaw < next_yaw) or \
-               (g < grads-1     and s_yaw >= yaw and s_yaw < next_yaw) or \
-               (g == grads-1    and s_yaw >= yaw):
-                yaw_samples += [ img ]
-        if len(yaw_samples) > 0:
-            yaws_sample_list[g] = yaw_samples
-
-    total_lack = 0
-    for g in io.progress_bar_generator ( range(grads), ""):
-        img_list = yaws_sample_list[g]
-        img_list_len = len(img_list) if img_list is not None else 0
-
-        lack = imgs_per_grad - img_list_len
-        total_lack += max(lack, 0)
-
-    imgs_per_grad += total_lack // grads
+def sort_best_faster(input_path, target_count=None):
+    return sort_best(input_path, faster=True, target_count=target_count)
 
 
-    sharpned_imgs_per_grad = imgs_per_grad*10
-    for g in io.progress_bar_generator ( range (grads), "按清晰度（blur）排序"):
-        img_list = yaws_sample_list[g]
-        if img_list is None:
-            continue
+def select_best_samples(samples, target_count):
+    """Exact-count legacy quality/pose coverage selection, without file writes.
 
-        img_list = sorted(img_list, key=operator.itemgetter(1), reverse=True)
+    Metric index 1 is explicitly either CPBD sharpness or source-box area.
+    It is not an identity score or a perceptual-model accuracy claim. Occupied
+    yaw/pitch bins share the budget; unavailable bins never discard that budget.
+    """
+    if type(target_count) is not int or target_count < 1:
+        raise ValueError('目标人脸数量必须是正整数')
+    target_count = min(target_count, len(samples))
+    if target_count == 0:
+        return [], []
+    buckets = {}
+    for sample in samples:
+        if len(sample) < 5 or not np.isfinite([sample[1], sample[3], sample[4]]).all():
+            raise ValueError('人脸筛选需要有限的评分、yaw 和 pitch')
+        yaw_bin = int(np.clip((float(sample[3]) + 1.2) / 2.4 * 128, 0, 127))
+        pitch_bin = int(np.clip((float(sample[4]) + math.pi / 2) / math.pi * 8, 0, 7))
+        buckets.setdefault((yaw_bin, pitch_bin), []).append(sample)
+    for items in buckets.values():
+        items.sort(key=lambda item: (-float(item[1]), str(item[0]).casefold()))
+    # When target_count is smaller than the occupied bin count, start from
+    # the strongest candidate, then choose the most distant occupied pose.
+    # This retains profile/pitch coverage instead of preferentially keeping
+    # only frontal faces or accidentally assigning every bin a zero quota.
+    remaining = set(buckets)
+    first = min(remaining, key=lambda key: (-float(buckets[key][0][1]), key))
+    ordered_bins = [first]; remaining.remove(first)
+    distances = {key: float('inf') for key in remaining}
+    while remaining:
+        chosen = ordered_bins[-1]
+        for candidate in remaining:
+            distances[candidate] = min(distances[candidate],
+                                       ((candidate[0] - chosen[0]) / 127) ** 2 + ((candidate[1] - chosen[1]) / 7) ** 2)
+        key = min(remaining, key=lambda candidate: (
+            -distances[candidate],
+            -float(buckets[candidate][0][1]), candidate))
+        ordered_bins.append(key); remaining.remove(key)
+    selected = []
+    while len(selected) < target_count:
+        for key in ordered_bins:
+            if buckets[key]:
+                selected.append(buckets[key].pop(0))
+                if len(selected) == target_count: break
+    rejected = [item for key in ordered_bins for item in buckets[key]]
+    return selected, rejected
 
-        if len(img_list) > sharpned_imgs_per_grad:
-            trash_img_list += img_list[sharpned_imgs_per_grad:]
-            img_list = img_list[0:sharpned_imgs_per_grad]
 
-        yaws_sample_list[g] = img_list
+def sort_best(input_path, faster=False, target_count=None):
+    if target_count is None:
+        target_count = io.input_int('目标人脸数量？', 2000)
+    if type(target_count) is not int or target_count < 1:
+        raise ValueError('目标人脸数量必须是正整数')
+    io.log_info('正在筛选姿态覆盖样本。')
+    io.log_info('筛选指标：源图人脸框面积（缺失记为未知/0）' if faster else '筛选指标：前景 CPBD 清晰度')
+    samples, unreadable = FinalLoaderSubprocessor(pathex.get_image_paths(input_path), faster).run()
+    selected, rejected = select_best_samples(samples, target_count)
+    io.log_info(f'可读样本 {len(samples)}，选中 {len(selected)}，未选中 {len(rejected)}，不可读 {len(unreadable)}；未选中原件保存在独立批次。')
+    return selected, rejected + unreadable
 
 
-    yaw_pitch_sample_list = [None]*grads
-    pitch_grads = imgs_per_grad
-
-    for g in io.progress_bar_generator ( range (grads), "按俯仰（pitch）排序"):
-        img_list = yaws_sample_list[g]
-        if img_list is None:
-            continue
-
-        pitch_sample_list = [None]*pitch_grads
-
-        grads_space = np.linspace (-math.pi / 2,math.pi / 2, pitch_grads )
-
-        for pg in range (pitch_grads):
-
-            pitch = grads_space[pg]
-            next_pitch = grads_space[pg+1] if pg < pitch_grads-1 else pitch
-
-            pitch_samples = []
-            for img in img_list:
-                s_pitch = img[4]
-                if (pg == 0                and s_pitch < next_pitch) or \
-                   (pg < pitch_grads-1     and s_pitch >= pitch and s_pitch < next_pitch) or \
-                   (pg == pitch_grads-1    and s_pitch >= pitch):
-                    pitch_samples += [ img ]
-
-            if len(pitch_samples) > 0:
-                pitch_sample_list[pg] = pitch_samples
-        yaw_pitch_sample_list[g] = pitch_sample_list
-
-    yaw_pitch_sample_list = FinalHistDissimSubprocessor(yaw_pitch_sample_list).run()
-
-    for g in io.progress_bar_generator (range (grads), "获取最佳样本"):
-        pitch_sample_list = yaw_pitch_sample_list[g]
-        if pitch_sample_list is None:
-            continue
-
-        n = imgs_per_grad
-
-        while n > 0:
-            n_prev = n
-            for pg in range(pitch_grads):
-                img_list = pitch_sample_list[pg]
-                if img_list is None:
-                    continue
-                final_img_list += [ img_list.pop(0) ]
-                if len(img_list) == 0:
-                    pitch_sample_list[pg] = None
-                n -= 1
-                if n == 0:
-                    break
-            if n_prev == n:
-                break
-
-        for pg in range(pitch_grads):
-            img_list = pitch_sample_list[pg]
-            if img_list is None:
-                continue
-            trash_img_list += img_list
-
-    return final_img_list, trash_img_list
+def sort_quality_coverage(input_path, target_count=None, *, offset=0, limit=500, quality_metric=None):
+    """Score a visible <=500 window; preserve every item outside that window."""
+    if type(offset) is not int or offset < 0 or type(limit) is not int or not 1 <= limit <= 500:
+        raise ValueError('质量筛选需要 offset>=0 和 1..500 的 limit')
+    quality_metric = quality_metric or DEFAULT_METRIC
+    if quality_metric not in METRICS:
+        raise ValueError('未知质量代理指标')
+    paths = pathex.get_image_paths(input_path)
+    batch = paths[offset:offset + limit]
+    if not batch:
+        raise ValueError(f'指定批次为空：offset={offset}，数据集共 {len(paths)} 张')
+    if target_count is None:
+        target_count = min(2000, len(batch))
+    if type(target_count) is not int or target_count < 1:
+        raise ValueError('目标人脸数量必须是正整数')
+    io.log_info(f'质量代理筛选范围 {offset + 1}–{offset + len(batch)} / {len(paths)}，每轮最多 500；眼口状态仅是既有关键点几何分桶。')
+    samples, unreadable = [], []
+    for filename in io.progress_bar_generator(batch, '前景细节与覆盖分析'):
+        path = Path(filename)
+        digest = file_sha256(path)
+        evidence = {'sourceSha256': digest, 'metric': quality_metric,
+                    'annotationAccuracyAvailable': False, 'identityQualityAvailable': False}
+        try:
+            dfl = DFLIMG.load(path)
+            if dfl is None or not dfl.has_data():
+                raise ValueError('不是具有既有关键点的 DFL aligned')
+            image = cv2_imread(str(path))
+            if image is None or image.shape[0] != image.shape[1]:
+                raise ValueError('需要可读的正方形 aligned 图片')
+            points = dfl.get_landmarks()
+            face_mask = LandmarksProcessor.get_image_hull_mask(image.shape, points)[..., 0]
+            signals = face_detail_signals(image, points, foreground=face_mask)
+            pose = LandmarksProcessor.estimate_pitch_yaw_roll(points, size=image.shape[1])
+            coverage = metadata_coverage(points, pose, canvas_size=image.shape[1])
+            rect = dfl.get_source_rect()
+            area = None
+            if rect is not None:
+                rect = np.asarray(rect, dtype=np.float64)
+                if rect.shape == (4,) and np.isfinite(rect).all() and rect[2] > rect[0] and rect[3] > rect[1]:
+                    area = float((rect[2] - rect[0]) * (rect[3] - rect[1]))
+                    if not math.isfinite(area): area = None
+            cpbd = float(estimate_sharpness(np.uint8(image * face_mask[..., None])))
+            if not math.isfinite(cpbd): raise ValueError('CPBD 基线返回非有限值')
+            evidence.update({'source_box_available': area is not None,
+                'sourceBoxArea': area, 'legacyForegroundCpbd': cpbd,
+                'detail': signals, 'coverage': coverage, 'available': True})
+            score = signals['scores'][quality_metric]
+            samples.append([str(path), score, None, float(pose[1]), float(pose[0]), evidence])
+        except (ValueError, TypeError, AttributeError, cv2.error, IndexError) as error:
+            evidence.update({'available': False, 'reason': str(error),
+                             'selectionReason': 'unavailable-existing-metadata-or-image'})
+            unreadable.append([str(path), 0., None, 0., 0., evidence])
+        if file_sha256(path) != digest:
+            raise ValueError(f'分析期间源图发生变化：{path.name}')
+    selected, rejected = select_quality_coverage(samples, target_count)
+    scored = {str(Path(row[0]).absolute()) for row in selected + rejected + unreadable}
+    preserved = [path for path in paths if str(Path(path).absolute()) not in scored]
+    context = {'method': quality_metric, 'targetCount': target_count,
+               'selectedRange': {'start': offset + 1, 'end': offset + len(batch),
+                                 'total': len(paths), 'offset': offset, 'limit': limit, 'count': len(batch)},
+               'candidateCount': len(batch), 'preservedOutsideCount': len(preserved),
+               'policy': 'interpretable-proxies; preserve-pose-and-geometric-eye-mouth-coverage; originals-recoverable',
+               'targetPrefix': f'quality-{offset:06d}-'}
+    return selected, rejected + unreadable, preserved, context
 
 """
 def sort_by_vggface(input_path):
@@ -815,44 +837,58 @@ def sort_by_absdiff(input_path):
             images._mmap.close()
     return [(image_paths[index],) for index in ordered], []
 
-def final_process(input_path, img_list, trash_img_list):
-    if len(trash_img_list) != 0:
-        parent_input_path = input_path.parent
-        trash_path = parent_input_path / (input_path.stem + '_trash')
-        trash_path.mkdir (exist_ok=True)
-
-        io.log_info ("正在将 %d 个项目移动到 %s" % ( len(trash_img_list), str(trash_path) ) )
-
-        for filename in pathex.get_image_paths(trash_path):
-            Path(filename).unlink()
-
-        for i in io.progress_bar_generator( range(len(trash_img_list)), "正在移动到回收目录", leave=False):
-            src = Path (trash_img_list[i][0])
-            dst = trash_path / src.name
-            try:
-                src.rename (dst)
-            except:
-                io.log_info ('移动失败：%s' % (src.name) )
-
-        io.log_info ("")
-
-    if len(img_list) != 0:
-        for i in io.progress_bar_generator( [*range(len(img_list))], "Renaming", leave=False):
-            src = Path (img_list[i][0])
-            dst = input_path / ('%.5d_%s' % (i, src.name ))
-            try:
-                src.rename (dst)
-            except:
-                io.log_info ('fail to rename %s' % (src.name) )
-
-        for i in io.progress_bar_generator( [*range(len(img_list))], "Renaming"):
-            src = Path (img_list[i][0])
-            src = input_path / ('%.5d_%s' % (i, src.name))
-            dst = input_path / ('%.5d%s' % (i, src.suffix))
-            try:
-                src.rename (dst)
-            except:
-                io.log_info ('fail to rename %s' % (src.name) )
+def final_process(input_path, img_list, trash_img_list, *, dry_run=False, sort_method=None, preserved_files=(), quality_context=None):
+    input_path = Path(input_path).absolute()
+    changes = []
+    for index, row in enumerate(img_list):
+        source = Path(row[0]).absolute()
+        if source.parent != input_path:
+            raise ValueError('排序源文件必须直接位于当前 aligned 目录')
+        target = f'{quality_context["targetPrefix"]}{index:05d}{source.suffix}' if quality_context else f'{index:05d}{source.suffix}'
+        changes.append({'source': source.name, 'target': target, 'location': 'input'})
+        sidecar = source.with_suffix(source.suffix + '.landmarks.json')
+        if sidecar.exists():
+            changes.append({'source': sidecar.name, 'target': target + '.landmarks.json', 'location': 'input'})
+    for row in trash_img_list:
+        source = Path(row[0]).absolute()
+        if source.parent != input_path:
+            raise ValueError('排序源文件必须直接位于当前 aligned 目录')
+        changes.append({'source': source.name, 'target': source.name, 'location': 'discarded'})
+        sidecar = source.with_suffix(source.suffix + '.landmarks.json')
+        if sidecar.exists():
+            changes.append({'source': sidecar.name, 'target': sidecar.name, 'location': 'discarded'})
+    # Back up the complete faceset, preserving the exact original names and
+    # bytes outside the selected quality window. No hand-moving is needed.
+    for filename in preserved_files:
+        source = Path(filename).absolute()
+        if source.parent != input_path:
+            raise ValueError('保留源文件必须直接位于当前 aligned 目录')
+        changes.append({'source': source.name, 'target': source.name, 'location': 'input'})
+        sidecar = source.with_suffix(source.suffix + '.landmarks.json')
+        if sidecar.exists():
+            changes.append({'source': sidecar.name, 'target': sidecar.name, 'location': 'input'})
+    scores = []
+    for kept, rows in ((True, img_list), (False, trash_img_list)):
+        for row in rows:
+            if quality_context and len(row) >= 6 and isinstance(row[5], dict):
+                if file_sha256(row[0]) != row[5]['sourceSha256']:
+                    raise ValueError(f'评分后源图发生变化：{Path(row[0]).name}')
+                scores.append({'source': Path(row[0]).name, 'selected': kept, 'value': float(row[1]), **row[5]})
+            elif len(row) >= 6 and isinstance(row[5], dict):
+                scores.append({'source': Path(row[0]).name, 'selected': kept,
+                               'metric': row[5]['metric'], 'value': float(row[1]),
+                               'yaw': float(row[3]), 'pitch': float(row[4]),
+                               'source_box_available': row[5]['source_box_available']})
+    # Keep the receipt readable even for unusually large legacy CLI batches.
+    details = {'sort_method': sort_method, 'selected_count': len(img_list),
+               'archived_count': len(trash_img_list), 'scores': scores[:2000],
+               'scores_truncated': len(scores) > 2000}
+    if quality_context:
+        details.update({'qualityCoverage': quality_context, 'scores': scores,
+                        'scores_truncated': False, 'preserved_outside_count': len(preserved_files)})
+    receipt = execute_plan(input_path, changes, operation='sort', dry_run=dry_run, details=details)
+    io.log_info(f'排序预览：保留 {len(img_list)}，归档 {len(trash_img_list)}。' if dry_run else f'排序批次已提交；原件和恢复回执：{receipt["receipt_path"]}')
+    return receipt
 
 sort_func_methods = {
     'blur':        ("blur", sort_by_blur),
@@ -868,13 +904,14 @@ sort_func_methods = {
     'origname':    ("原始文件名", sort_by_origname),
     'oneface':     ("仅保留单人脸图片", sort_by_oneface_in_image),
     'absdiff':     ("绝对像素差", sort_by_absdiff),
-    'final':       ("最佳人脸", sort_best),
-    'final-fast':  ("最佳人脸（更快）", sort_best_faster),
-    'final-by-blur': ("最佳人脸（按清晰度）", sort_best),
-    'final-by-size': ("最佳人脸（按源框尺寸）", sort_best_faster),
+    'final':       ("姿态覆盖筛选（CPBD 清晰度）", sort_best),
+    'final-fast':  ("姿态覆盖筛选（源框面积）", sort_best_faster),
+    'final-by-blur': ("姿态覆盖筛选（CPBD 清晰度）", sort_best),
+    'final-by-size': ("姿态覆盖筛选（源框面积）", sort_best_faster),
+    'quality-coverage': ("前景细节代理 + 姿态/眼口几何覆盖（每轮 500）", sort_quality_coverage),
 }
 
-def main (input_path, sort_by_method=None):
+def main (input_path, sort_by_method=None, *, dry_run=False, target_count=None, offset=0, limit=500, quality_metric=None):
     io.log_info ("正在运行排序工具（Sorter）。\r\n")
 
     if sort_by_method is None:
@@ -893,6 +930,11 @@ def main (input_path, sort_by_method=None):
         sort_by_method = sort_by_method.lower()
 
     desc, func = sort_func_methods[sort_by_method]
-    img_list, trash_img_list = func(input_path)
+    if func is sort_quality_coverage:
+        img_list, trash_img_list, preserved, context = func(input_path, target_count=target_count,
+            offset=offset, limit=limit, quality_metric=quality_metric)
+        return final_process(input_path, img_list, trash_img_list, dry_run=dry_run,
+            sort_method=sort_by_method, preserved_files=preserved, quality_context=context)
+    img_list, trash_img_list = func(input_path, target_count=target_count) if func in (sort_best, sort_best_faster) else func(input_path)
 
-    final_process (input_path, img_list, trash_img_list)
+    return final_process(input_path, img_list, trash_img_list, dry_run=dry_run, sort_method=sort_by_method)

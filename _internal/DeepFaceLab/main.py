@@ -3,8 +3,6 @@ if __name__ == "__main__":
     import multiprocessing
     multiprocessing.set_start_method("spawn")
 
-    from core.leras import nn
-    nn.initialize_main_env()
     import os
     import sys
     import time
@@ -21,6 +19,10 @@ if __name__ == "__main__":
     class fixPathAction(argparse.Action):
         def __call__(self, parser, namespace, values, option_string=None):
             setattr(namespace, self.dest, os.path.abspath(os.path.expanduser(values)))
+
+    def initialize_neural_runtime():
+        from core.leras import nn
+        nn.initialize_main_env()
 
     exit_code = 0
 
@@ -39,6 +41,7 @@ if __name__ == "__main__":
     p.set_defaults(func=process_qt_selftest)
 
     def process_extract(arguments):
+        initialize_neural_runtime()
         osex.set_process_lowest_prio()
         from mainscripts import Extractor
         Extractor.main( detector                = arguments.detector,
@@ -54,10 +57,14 @@ if __name__ == "__main__":
                         jpeg_quality            = arguments.jpeg_quality,
                         cpu_only                = arguments.cpu_only,
                         force_gpu_idxs          = [ int(x) for x in arguments.force_gpu_idxs.split(',') ] if arguments.force_gpu_idxs is not None else None,
+                        landmark_model          = arguments.landmark_model,
+                        source_map              = arguments.source_map,
                       )
 
     p = subparsers.add_parser( "extract", help="从图片/帧中提取人脸")
-    p.add_argument('--detector', dest="detector", choices=['s3fd','manual'], default=None, help="检测器类型")
+    p.add_argument('--detector', dest="detector", choices=['s3fd', 'manual', 'yolo11m-face', 'yolo12l-face', 'yolo26s-face'], default=None, help="检测器类型；YOLO 候选需预先准备校验模型与可选依赖，不自动下载")
+    p.add_argument('--landmark-model', choices=['fan', 'tufa'], default='fan', help="原生关键点：tufa 使用原生68点对齐并另存原生98点审核；HEAD保持真实FAN3D；不自动下载")
+    p.add_argument('--source-map', action=fixPathAction, default=None, help="恢复副本来源JSON outputs[]；同尺寸PNG映射回原帧名并保存恢复来源")
     p.add_argument('--input-dir', required=True, action=fixPathAction, dest="input_dir", help="输入目录：包含待处理文件的目录")
     p.add_argument('--output-dir', required=True, action=fixPathAction, dest="output_dir", help="输出目录：提取结果会写入该目录")
     p.add_argument('--output-debug', action="store_true", dest="output_debug", default=None, help="将调试图片写入 <output-dir>_debug 目录")
@@ -77,28 +84,43 @@ if __name__ == "__main__":
     def process_sort(arguments):
         osex.set_process_lowest_prio()
         from mainscripts import Sorter
-        Sorter.main (input_path=Path(arguments.input_dir), sort_by_method=arguments.sort_by_method)
+        receipt = Sorter.main(input_path=Path(arguments.input_dir), sort_by_method=arguments.sort_by_method,
+                              dry_run=arguments.dry_run, target_count=arguments.target_count,
+                              offset=arguments.offset, limit=arguments.limit)
+        if receipt is not None:
+            import json
+            print(json.dumps(receipt, ensure_ascii=False))
 
     p = subparsers.add_parser( "sort", help="对目录中的人脸进行排序")
     p.add_argument('--input-dir', required=True, action=fixPathAction, dest="input_dir", help="输入目录：包含待排序人脸文件的目录")
-    p.add_argument('--by', dest="sort_by_method", default=None, choices=("blur", "motion-blur", "face-yaw", "face-pitch", "face-source-rect-size", "hist", "hist-dissim", "brightness", "hue", "black", "origname", "oneface", "final", "final-fast", "final-by-blur", "final-by-size", "absdiff"), help="排序方式。'origname' 表示按原始文件名排序以恢复原始序列" )
+    p.add_argument('--by', dest="sort_by_method", default=None, choices=("quality-coverage", "blur", "motion-blur", "face-yaw", "face-pitch", "face-source-rect-size", "hist", "hist-dissim", "brightness", "hue", "black", "origname", "oneface", "final", "final-fast", "final-by-blur", "final-by-size", "absdiff"), help="排序方式。'origname' 表示按原始文件名排序以恢复原始序列" )
+    p.add_argument("--dry-run", action="store_true", help="预览排序计划，不改素材")
+    p.add_argument("--target-count", type=int, default=None, help="最佳筛选保留数量；保留姿态覆盖并归档原件")
+    p.add_argument("--offset", type=int, default=0, help="质量覆盖筛选的零基批次起点")
+    p.add_argument("--limit", type=int, default=500, help="质量覆盖筛选本批最多500张；批次外保留原件")
     p.set_defaults (func=process_sort)
 
     def process_util(arguments):
         osex.set_process_lowest_prio()
         from mainscripts import Util
 
+        if arguments.recover_receipt:
+            from core.faceset_transaction import recover_transaction
+            import json
+            print(json.dumps(recover_transaction(arguments.recover_receipt, dry_run=arguments.dry_run), ensure_ascii=False))
+            return
+
         if arguments.add_landmarks_debug_images:
             Util.add_landmarks_debug_images (input_path=arguments.input_dir)
 
         if arguments.recover_original_aligned_filename:
-            Util.recover_original_aligned_filename (input_path=arguments.input_dir)
+            Util.recover_original_aligned_filename(input_path=arguments.input_dir, dry_run=arguments.dry_run)
 
         if arguments.save_faceset_metadata:
             Util.save_faceset_metadata_folder (input_path=arguments.input_dir)
 
         if arguments.restore_faceset_metadata:
-            Util.restore_faceset_metadata_folder (input_path=arguments.input_dir)
+            Util.restore_faceset_metadata_folder(input_path=arguments.input_dir, dry_run=arguments.dry_run)
 
         if arguments.pack_faceset:
             io.log_info ("正在打包 faceset...\r\n")
@@ -125,9 +147,12 @@ if __name__ == "__main__":
     p.add_argument('--unpack-faceset', action="store_true", dest="unpack_faceset", default=False, help="解包 faceset（PackedFaceset.unpack）")
     p.add_argument('--export-faceset-mask', action="store_true", dest="export_faceset_mask", default=False, help="导出 faceset mask")
 
+    p.add_argument("--dry-run", action="store_true", help="预览恢复计划，不改素材")
+    p.add_argument("--recover-receipt", action=fixPathAction, default=None, help="按已归档批次回执恢复原件；拒绝覆盖后来编辑")
     p.set_defaults (func=process_util)
 
     def process_train(arguments):
+        initialize_neural_runtime()
         osex.set_process_lowest_prio()
         if arguments.model_name == 'ME':
             from argparse import Namespace
@@ -187,13 +212,14 @@ if __name__ == "__main__":
     p.add_argument('--force-gpu-idxs', dest="force_gpu_idxs", default=None, help="强制选择 GPU idx（逗号分隔）")
     p.add_argument('--silent-start', action="store_true", dest="silent_start", default=False, help="静默启动：自动选择最佳 GPU 与最近使用的模型")
 
-    from me import training_options
+    from me_backend.cli_options import training_options
     training_options(p)
     p.add_argument('--steps', type=int, default=0)
     p.add_argument('--threads', type=int, default=4)
     p.set_defaults (func=process_train)
 
     def process_exportdfm(arguments):
+        initialize_neural_runtime()
         osex.set_process_lowest_prio()
         from me_backend.model_adapter import MEInferenceModel
         from me_backend.export import export_dfm
@@ -211,6 +237,7 @@ if __name__ == "__main__":
     p.set_defaults (func=process_exportdfm)
 
     def process_merge(arguments):
+        initialize_neural_runtime()
         osex.set_process_lowest_prio()
         from mainscripts import Merger
         Merger.main ( model_class_name       = arguments.model_name,
@@ -222,9 +249,13 @@ if __name__ == "__main__":
                       aligned_path           = Path(arguments.aligned_dir) if arguments.aligned_dir is not None else None,
                       force_gpu_idxs         = arguments.force_gpu_idxs,
                       cpu_only               = arguments.cpu_only,
-                      xseg_models_path       = Path(arguments.xseg_dir) if arguments.xseg_dir else None)
+                      xseg_models_path       = Path(arguments.xseg_dir) if arguments.xseg_dir else None,
+                      preview_frame_start    = arguments.preview_frame_start,
+                      preview_frame_count    = arguments.preview_frame_count)
 
     p = subparsers.add_parser( "merge", help="合成（Merger）")
+    p.add_argument('--preview-frame-start', type=int, default=1, help="独立小样的起始帧（从 1 开始）")
+    p.add_argument('--preview-frame-count', type=int, default=None, help="仅处理独立小样，数量 1–20；输出必须位于本项目 .webui/merge-previews")
     p.add_argument('--input-dir', required=True, action=fixPathAction, dest="input_dir", help="输入目录：包含待合成的帧/图片")
     p.add_argument('--output-dir', required=True, action=fixPathAction, dest="output_dir", help="输出目录：合成结果会写入该目录")
     p.add_argument('--output-mask-dir', required=True, action=fixPathAction, dest="output_mask_dir", help="输出 mask 目录：mask 文件会写入该目录")
@@ -293,23 +324,25 @@ if __name__ == "__main__":
     p = videoed_parser.add_parser( "video-from-sequence", help="由图片序列生成视频")
     p.add_argument('--input-dir', required=True, action=fixPathAction, dest="input_dir", help="输入目录：图片序列所在目录")
     p.add_argument('--output-file', required=True, action=fixPathAction, dest="output_file", help="输出视频文件路径")
-    p.add_argument('--reference-file', action=fixPathAction, dest="reference_file", help="参考文件：用于确定正确 FPS 并从中拷贝音频。可用 .*-扩展名表示匹配并选择第一个文件")
+    p.add_argument('--reference-file', action=fixPathAction, dest="reference_file", help="参考视频：恢复帧 PTS/时序，并可拷贝其音频。可用 .*-扩展名表示匹配并选择第一个文件")
     p.add_argument('--ext', dest="ext", default='png', help="输入图片格式（扩展名）")
-    p.add_argument('--fps', type=int, dest="fps", default=None, help="输出视频 FPS（若设置 reference-file 将以其为准）")
+    p.add_argument('--fps', type=int, dest="fps", default=None, help="无参考时的输出 FPS；有 reference-file 时保留其帧 PTS")
     p.add_argument('--bitrate', type=int, dest="bitrate", default=None, help="输出码率（单位：Mbps）")
-    p.add_argument('--include-audio', action="store_true", dest="include_audio", default=False, help="包含 reference-file 的音频")
-    p.add_argument('--lossless', action="store_true", dest="lossless", default=False, help="无损（PNG 编码）")
+    p.add_argument('--include-audio', action="store_true", dest="include_audio", default=False, help="按参考视频时间轴包含原音频")
+    p.add_argument('--lossless', action="store_true", dest="lossless", default=False, help=".nut 生成 RGB 无损母版；MP4 为 CRF 0，仅在 YUV 编码域无损")
 
     p.set_defaults(func=process_videoed_video_from_sequence)
 
     facesettool_parser = subparsers.add_parser( "facesettool", help="Faceset 工具").add_subparsers()
 
     def process_faceset_enhancer(arguments):
+        initialize_neural_runtime()
         osex.set_process_lowest_prio()
         from mainscripts import FacesetEnhancer
         FacesetEnhancer.process_folder ( Path(arguments.input_dir),
                                          cpu_only=arguments.cpu_only,
-                                         force_gpu_idxs=arguments.force_gpu_idxs
+                                         force_gpu_idxs=arguments.force_gpu_idxs,
+                                         model_id=arguments.enhancement_model, offset=arguments.offset, limit=arguments.limit
                                        )
 
     p = facesettool_parser.add_parser ("enhance", help="增强 DFL faceset 细节")
@@ -317,6 +350,9 @@ if __name__ == "__main__":
     p.add_argument('--cpu-only', action="store_true", dest="cpu_only", default=False, help="仅使用 CPU 处理")
     p.add_argument('--force-gpu-idxs', dest="force_gpu_idxs", default=None, help="强制选择 GPU idx（逗号分隔）")
 
+    p.add_argument("--enhancement-model", choices=("mambairv2", "realesrgan-x4plus"), default="mambairv2")
+    p.add_argument("--offset", type=int, default=0, help="选中批次的零基起点")
+    p.add_argument("--limit", type=int, default=500, help="本批最多500张；完整副本保留未选择人脸")
     p.set_defaults(func=process_faceset_enhancer)
 
 
@@ -350,8 +386,8 @@ if __name__ == "__main__":
             from XSegEditor import XSegEditor
         except Exception as e:
             io.log_err(
-                "XSeg 编辑器需要 Qt 绑定（PyQt5 或 PySide6），但当前环境未安装。\n"
-                "提示：可先运行 `python main.py qt selftest` 诊断，然后在受支持的 Python 版本上安装 Qt 绑定（推荐 3.10-3.12）。\n"
+                "XSeg 编辑器需要项目固定的 PySide6 Qt 绑定。\n"
+                "提示：可先运行 `python main.py qt selftest` 诊断，然后使用项目安装器修复 Python 3.12 的 PySide6 依赖。\n"
                 f"导入错误：{type(e).__name__}: {e}"
             )
             exit_code = 1
@@ -365,6 +401,7 @@ if __name__ == "__main__":
     p = xseg_parser.add_parser( "apply", help="将训练好的 XSeg 模型应用到已提取的人脸")
 
     def process_xsegapply(arguments):
+        initialize_neural_runtime()
         osex.set_process_lowest_prio()
         from mainscripts import XSegUtil
         XSegUtil.apply_xseg (Path(arguments.input_dir), Path(arguments.model_dir))
@@ -375,6 +412,7 @@ if __name__ == "__main__":
     p = xseg_parser.add_parser("train", help="训练 XSeg 模型（仅 PyTorch）")
 
     def process_xsegtrain(arguments):
+        initialize_neural_runtime()
         osex.set_process_lowest_prio()
         from mainscripts import Trainer
 

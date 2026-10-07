@@ -1,0 +1,63 @@
+.best-faceset-panel{display:grid;gap:18px;min-width:0}.best-faceset-panel>header{display:flex;align-items:center;justify-content:space-between;gap:16px}.best-faceset-panel h3{margin:0 0 8px}.best-faceset-panel p{color:var(--muted);line-height:1.65;margin:0}.best-faceset-badge{font-size:12px;color:var(--accent);white-space:nowrap}.best-faceset-steps{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.best-faceset-steps li{display:grid;gap:8px;border:1px solid var(--border);border-radius:8px;padding:16px}.best-faceset-steps span{font-size:12px;color:var(--muted);line-height:1.6}.best-faceset-controls{display:flex;align-items:center;flex-wrap:wrap;gap:12px}.best-faceset-controls>span{font-size:12px;color:var(--muted)}.best-faceset-panel label{display:flex;align-items:center;gap:8px;font-size:13px}.best-faceset-panel input[type=number]{max-width:115px;padding:8px;background:var(--surface-2);color:inherit;border:1px solid var(--border);border-radius:6px}.best-faceset-identity{display:grid;gap:10px;padding:16px;border:1px solid var(--border);border-radius:8px}.best-faceset-identity small{color:var(--muted)}.best-faceset-reference-list{display:flex;flex-wrap:wrap;gap:6px}.best-faceset-reference-list button{max-width:220px;overflow:hidden;text-overflow:ellipsis;border:1px solid var(--border);background:var(--surface-2);color:inherit;padding:6px;border-radius:4px;font-size:11px}.best-faceset-progress{display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:13px}.best-faceset-progress span{color:var(--muted)}.best-faceset-progress progress{width:100%;height:8px;accent-color:var(--accent)}.best-faceset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(138px,1fr));gap:12px;max-height:590px;overflow:auto;padding:2px}.best-faceset-card{min-width:0;padding:8px;border:1px solid var(--border);border-radius:8px;display:grid;align-content:start;gap:8px;background:var(--surface-2)}.best-faceset-card.is-selected{border-color:var(--success,#40af86)}.best-faceset-card.is-review{border-color:var(--warning,#c49d52)}.best-faceset-card>strong{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.best-faceset-card>span{font-size:11px}.best-faceset-card>p{font-size:11px;min-height:36px}.best-faceset-card label{font-size:11px}.best-faceset-image{display:block;background:var(--bg-raised);padding:0;border:0;border-radius:4px;overflow:hidden;aspect-ratio:1}.best-faceset-image img{width:100%;height:100%;object-fit:contain}.best-faceset-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.best-faceset-summary>div{display:grid;gap:8px;padding:15px;border:1px solid var(--border);border-radius:8px}.best-faceset-summary span{font-size:12px;color:var(--muted)}.best-faceset-summary strong{font-size:25px}.best-faceset-publish{display:grid;gap:12px;padding:18px;border:1px solid var(--border);border-radius:8px}.best-faceset-publish code{font-size:12px;overflow-wrap:anywhere}.best-faceset-error{color:var(--danger,#e47777)!important}.best-faceset-modal{position:fixed;inset:0;z-index:1000;padding:28px;background:#000b;display:grid;place-items:center}.best-faceset-modal>div{display:grid;gap:12px;max-width:620px;width:100%;padding:18px;background:var(--surface);border:1px solid var(--border);border-radius:10px;max-height:90vh;overflow:auto}.best-faceset-modal img{max-width:100%;max-height:60vh;object-fit:contain;justify-self:center}.best-faceset-modal .button{justify-self:end}.best-faceset-panel input[type=checkbox]{width:16px;height:16px;min-height:16px;flex:0 0 16px}.best-faceset-panel .button{width:fit-content}@media(max-width:900px){.best-faceset-panel>header{align-items:start;flex-direction:column}.best-faceset-steps{grid-template-columns:1fr}.best-faceset-steps li{padding:12px}.best-faceset-summary{gap:7px}.best-faceset-summary>div{padding:10px}.best-faceset-controls label{flex-wrap:wrap}}@media(max-width:580px){.best-faceset-summary{grid-template-columns:1fr}.best-faceset-modal{padding:12px}.best-faceset-controls>.button{width:100%}}
+
+/* Best Faceset workflow: primary actions, persistent draft and review context. */
+.best-faceset-panel { gap: 14px; --accent: var(--green); --accent-soft: var(--green-deep); }
+.best-faceset-panel label, .best-faceset-panel small { font-size: 13px; line-height: 1.55; }
+.best-faceset-panel .button { min-height: 36px; white-space: normal; }
+.best-faceset-draft-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; font-size: 13px; color: var(--muted); }
+.best-faceset-identity { gap: 8px; padding: 12px 14px; }
+.best-faceset-identity p { font-size: 13px; }
+.best-faceset-reference-list:empty { display: none; }
+.best-faceset-reference-list button { font-size: 13px; padding: 7px 9px; }
+.best-faceset-start { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.best-faceset-start p { flex: 1 1 230px; font-size: 13px; }
+.best-faceset-start label { flex: 0 1 auto; white-space: nowrap; }
+.best-faceset-details { min-width: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; }
+.best-faceset-details > summary { cursor: pointer; font-size: 13px; font-weight: 600; width: fit-content; }
+.best-faceset-details[open] { display: flex; flex-direction: column; gap: 12px; }
+.best-faceset-details select { min-width: 0; max-width: 100%; }
+.best-faceset-details .best-faceset-controls label { flex: 1 1 240px; min-width: 0; }
+.best-faceset-details .best-faceset-controls select { flex: 1; width: 0; }
+.best-faceset-details .best-faceset-steps { gap: 8px; }
+.best-faceset-details .best-faceset-steps li { padding: 12px; }
+.best-faceset-details .best-faceset-steps span { font-size: 13px; }
+.best-faceset-active { display: grid; gap: 10px; }
+.best-faceset-review { display: grid; gap: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; }
+.best-faceset-review small { color: var(--muted); }
+.best-faceset-summary > button { display: grid; text-align: left; gap: 6px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; color: inherit; background: var(--surface-2); cursor: pointer; min-width: 0; }
+.best-faceset-summary > button.is-current { border-color: var(--accent); background: var(--accent-soft, var(--surface-2)); }
+.best-faceset-summary > button.is-current span { color: var(--text-soft); }
+.best-faceset-summary span { font-size: 13px; }
+.best-faceset-summary > button:disabled { cursor: default; }
+.best-faceset-grid { grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); max-height: 620px; }
+.best-faceset-card > strong, .best-faceset-card > span, .best-faceset-card > p, .best-faceset-card label { font-size: 13px; }
+.best-faceset-card > p { min-height: 40px; }
+.best-faceset-card .best-faceset-reference-check { padding-top: 8px; border-top: 1px solid var(--border); }
+.best-faceset-manual { color: var(--text); font-weight: 600; }
+.best-faceset-panel :is(button, input, select, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.best-faceset-modal { padding: 18px; }
+.best-faceset-modal > div { max-width: 760px; max-height: calc(100dvh - 36px); gap: 10px; padding: 16px; }
+.best-faceset-preview-header, .best-faceset-preview-navigation { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.best-faceset-preview-header > span, .best-faceset-preview-navigation > span { font-size: 13px; color: var(--muted); }
+.best-faceset-preview-header .button { justify-self: initial; }
+.best-faceset-modal img { max-height: min(46dvh, 520px); width: 100%; min-height: 120px; }
+.best-faceset-preview-name { overflow-wrap: anywhere; font-size: 14px; }
+.best-faceset-preview-decisions { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; }
+.best-faceset-preview-decisions p { font-size: 13px; }
+.best-faceset-preview-reference { padding-top: 12px; border-top: 1px solid var(--border); }
+@media (max-width: 900px) {
+  .best-faceset-panel > header { gap: 8px; }
+  .best-faceset-start { gap: 10px; }
+  .best-faceset-details .best-faceset-steps { grid-template-columns: 1fr; }
+}
+@media (max-width: 580px) {
+  .best-faceset-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .best-faceset-summary > button { padding: 10px 8px; }
+  .best-faceset-summary span { font-size: 12px; }
+  .best-faceset-summary strong { font-size: 22px; }
+  .best-faceset-modal { padding: 8px; }
+  .best-faceset-modal > div { padding: 12px; max-height: calc(100dvh - 16px); }
+  .best-faceset-preview-navigation { flex-wrap: wrap; }
+  .best-faceset-preview-navigation > span { order: 3; width: 100%; text-align: center; }
+  .best-faceset-modal .best-faceset-controls .button { width: auto; flex: 1 1 110px; }
+}

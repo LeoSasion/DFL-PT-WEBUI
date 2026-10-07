@@ -1,0 +1,4 @@
+# Optional scene comparison/inference; GUI variant matches desktop OpenCV.
+-r requirements.txt
+scenedetect==0.7.1
+platformdirs==4.12.3

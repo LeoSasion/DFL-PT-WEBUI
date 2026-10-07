@@ -100,6 +100,30 @@ export function METrainingFields({ schemas = [], parameters, selectedModel, newM
     disabled={Boolean(schema.configKey && (locked || (schema.structural && structuralLocked)))}
     onChange={setField} t={t} prefix={prefix} models={sourceModels} />;
   const allowSchema = schemas.find(schema => schema.id === "allowConfigChange");
+  const savedParameters = checkpoint ? modelMEParameters(schemas, checkpoint) : null;
+  const formatValue = (schema, value) => value == null || value === "" ? t("未记录")
+    : schema.type === "boolean" ? t(value ? "是" : "否")
+      : schema.options?.find(option => String(option.value) === String(value))?.label ?? String(value);
+  const renderGroup = group => {
+    const grouped = fields.filter(schema => (schema.group ?? (schema.configKey ? "optimization" : "workflow")) === group.id && !basicIds.includes(schema.id));
+    if (!grouped.length) return null;
+    return <details key={group.id} className="me-config-group" open={group.id === "workflow" || importing}>
+      <summary><strong>{t(group.label)}</strong><span>{t("{count} 项", { count: grouped.length })}</span></summary>
+      {group.help ? <p>{t(group.help)}</p> : null}
+      <div className="wizard-form-grid">{grouped.map(renderField)}</div>
+    </details>;
+  };
+  const configurationControls = <>
+    {!importing ? <div className="me-presets"><span>{t("快速配置")}</span><div>
+      {PRESETS.map(preset => <button key={preset.id} type="button" className="button secondary" disabled={locked}
+        onClick={() => onChange(current => applyMEPreset(schemas, current, getMePreset(preset.id), { structuralLocked }))}>
+        {t(preset.label)}
+      </button>)}
+    </div><small>{t("预设仅调整所列训练参数，仍可逐项修改。")}</small></div> : null}
+    {checkpoint && allowSchema ? renderField(allowSchema) : null}
+    {basicFields.length ? <div className="wizard-form-grid me-basic-fields">{basicFields.map(renderField)}</div> : null}
+    {groups.filter(group => !checkpoint || group.id !== "workflow").map(renderGroup)}
+  </>;
   return (
     <section className="me-training-fields" aria-label={t(importing ? "ME 权重导入配置" : "ME 训练配置")}
       onInvalid={event => {
@@ -111,24 +135,22 @@ export function METrainingFields({ schemas = [], parameters, selectedModel, newM
           group = group.parentElement?.closest("details");
         }
       }}>
-      {!importing ? <div className="me-presets"><span>{t("快速配置")}</span><div>
-        {PRESETS.map(preset => <button key={preset.id} type="button" className="button secondary" disabled={locked}
-          onClick={() => onChange(current => applyMEPreset(schemas, current, getMePreset(preset.id), { structuralLocked }))}>
-          {t(preset.label)}
-        </button>)}
-      </div><small>{t("预设仅调整所列训练参数，仍可逐项修改。")}</small></div> : null}
-      {checkpoint && allowSchema ? renderField(allowSchema) : null}
+      {checkpoint ? <section className="me-resume-summary" aria-label={t("继承检查点配置摘要")}>
+        <strong>{t("继承检查点配置")}</strong>
+        <p>{t("默认沿用所选模型。下方先确认本次数据与运行计划，全部训练参数仍可展开查看。")}</p>
+        <dl>{["resolution", "archi", "face_type", "batchSize", "use_fp16", "pretrain"].map(id => {
+          const schema = schemas.find(candidate => candidate.id === id);
+          return schema ? <div key={id}><dt>{t(schema.label)}</dt><dd>{t(formatValue(schema, savedParameters[id]))}</dd></div> : null;
+        })}</dl>
+      </section> : null}
       <TrainingNotices parameters={parameters} selectedModel={checkpoint} locked={locked} importing={importing} t={t} />
-      {basicFields.length ? <div className="wizard-form-grid me-basic-fields">{basicFields.map(renderField)}</div> : null}
-      {groups.map(group => {
-        const grouped = fields.filter(schema => (schema.group ?? (schema.configKey ? "optimization" : "workflow")) === group.id && !basicIds.includes(schema.id));
-        if (!grouped.length) return null;
-        return <details key={group.id} className="me-config-group" open={group.id === "workflow" || importing}>
-          <summary><strong>{t(group.label)}</strong><span>{t("{count} 项", { count: grouped.length })}</span></summary>
-          {group.help ? <p>{t(group.help)}</p> : null}
-          <div className="wizard-form-grid">{grouped.map(renderField)}</div>
-        </details>;
-      })}
+      {checkpoint ? <>
+        {groups.filter(group => group.id === "workflow").map(renderGroup)}
+        <details className="me-config-group me-resume-configuration" open={Boolean(parameters.allowConfigChange)}>
+          <summary><strong>{t("查看全部参数 / 调整续训配置")}</strong><span>{t(locked ? "沿用检查点" : "允许变更")}</span></summary>
+          <div className="me-resume-configuration-fields">{configurationControls}</div>
+        </details>
+      </> : configurationControls}
       {checkpoint && changes.length ? <div className="me-change-summary" role="status">
         <strong>{t("与检查点的配置差异")} · {changes.length}</strong>
         <dl>{changes.map(change => <div key={change.schema.id}><dt>{t(change.schema.label)}</dt>

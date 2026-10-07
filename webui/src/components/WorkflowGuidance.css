@@ -1,0 +1,13 @@
+.workflow-guidance, .wizard-merge-guidance { min-width: 0; border: 1px solid var(--border); background: var(--surface-2); border-radius: 6px; padding: 14px; margin-block: 12px; }
+.workflow-guidance > strong, .wizard-merge-guidance > strong { display: block; font-size: 14px; }
+.workflow-guidance p, .wizard-merge-guidance p { color: var(--text-soft); font-size: 13px; line-height: 1.65; margin: 8px 0; overflow-wrap: anywhere; }
+.workflow-guidance small { display: block; margin-top: 10px; color: var(--text-soft); font-size: 12px; line-height: 1.6; }
+.mask-workflow-guidance { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.mask-workflow-guidance > div { min-width: 0; }
+.mask-workflow-guidance strong { font-size: 14px; }
+.workflow-save-status { margin: 12px 18px; padding: 10px 12px; border-left: 2px solid var(--border-strong); color: var(--text-soft); background: var(--surface-2); font-size: 13px; }
+.workflow-save-status strong { font-size: 13px; font-weight: 500; }
+.workflow-save-status p { margin: 6px 0 0; line-height: 1.65; }
+.workflow-save-status.is-unconfirmed { border-color: var(--amber); }
+.command-row:disabled { opacity: .65; cursor: not-allowed; }
+@media (max-width: 1000px) { .mask-workflow-guidance { grid-template-columns: minmax(0, 1fr); gap: 12px; } }

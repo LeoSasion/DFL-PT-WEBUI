@@ -8,6 +8,8 @@ from core import imagelib
 from core.cv2ex import *
 from core.interact import interact as io
 from facelib import FaceType, LandmarksProcessor
+from .quality_merge import merge_color, project_reviewed_mask, distance_feather, multiband_blend, sha256
+from .temporal_geometry import adjusted_affine
 
 is_windows = sys.platform[0:3] == 'win'
 xseg_input_size = 256
@@ -15,8 +17,12 @@ xseg_input_size = 256
 def MergeMaskedFace (predictor_func, predictor_input_shape,
                      face_enhancer_func,
                      xseg_256_extract_func,
-                     cfg, frame_info, img_bgr_uint8, img_bgr, img_face_landmarks):
+                     cfg, frame_info, img_bgr_uint8, img_bgr, img_face_landmarks, face_num=0):
 
+    geometry = getattr(frame_info, "geometry", [])
+    geometry = geometry[face_num] if face_num < len(geometry) else None
+    track_id = geometry.get("trackId") if geometry else None
+    seed = (int(getattr(cfg, "random_seed", 0)) + 104729 * (track_id if track_id is not None else face_num)) % 4294967296
     img_size = img_bgr.shape[1], img_bgr.shape[0]
     img_face_mask_a = LandmarksProcessor.get_image_hull_mask (img_bgr.shape, img_face_landmarks)
 
@@ -34,6 +40,11 @@ def MergeMaskedFace (predictor_func, predictor_input_shape,
     else:
         face_mask_output_mat = LandmarksProcessor.get_transform_mat (img_face_landmarks, mask_subres_size, face_type=cfg.face_type, scale= 1.0 + 0.01*cfg.output_face_scale)
 
+    if getattr(cfg, 'geometry_mode', 'off') == 'bounded-center-scale':
+        face_mat = adjusted_affine(face_mat, geometry)
+        face_output_mat = adjusted_affine(face_output_mat, geometry)
+        face_mask_output_mat = adjusted_affine(face_mask_output_mat, geometry)
+
     dst_face_bgr      = cv2.warpAffine( img_bgr        , face_mat, (output_size, output_size), flags=cv2.INTER_CUBIC )
     dst_face_bgr      = np.clip(dst_face_bgr, 0, 1)
 
@@ -48,7 +59,7 @@ def MergeMaskedFace (predictor_func, predictor_input_shape,
     prd_face_dst_mask_a_0 = np.clip (predicted[2], 0, 1.0)
 
     if cfg.super_resolution_power != 0:
-        prd_face_bgr_enhanced = face_enhancer_func(prd_face_bgr, is_tanh=True, preserve_size=False)
+        prd_face_bgr_enhanced = face_enhancer_func(prd_face_bgr, is_tanh=False, preserve_size=False)
         mod = cfg.super_resolution_power / 100.0
         prd_face_bgr = cv2.resize(prd_face_bgr, (output_size,output_size))*(1.0-mod) + prd_face_bgr_enhanced*mod
         prd_face_bgr = np.clip(prd_face_bgr, 0, 1)
@@ -92,6 +103,16 @@ def MergeMaskedFace (predictor_func, predictor_input_shape,
         elif cfg.mask_mode == 9: #learned-prd*learned-dst*XSeg-prd*XSeg-dst
             wrk_face_mask_a_0 = prd_face_mask_a_0 * prd_face_dst_mask_a_0 * X_prd_face_mask_a_0 * X_dst_face_mask_a_0
 
+    elif cfg.mask_mode in (10, 11):
+        records = getattr(frame_info, 'reviewed_masks', [])
+        if face_num >= len(records) or records[face_num] is None:
+            raise ValueError('Reviewed DST mask unavailable for this face; no silent XSeg fallback')
+        wrk_face_mask_a_0 = project_reviewed_mask(records[face_num], face_mat, output_size)
+        if cfg.mask_mode == 11:
+            wrk_face_mask_a_0 *= prd_face_mask_a_0
+    else:
+        raise ValueError('Unsupported mask mode')
+
     wrk_face_mask_a_0[ wrk_face_mask_a_0 < (1.0/255.0) ] = 0.0 # get rid of noise
 
     # resize to mask_subres_size
@@ -127,6 +148,8 @@ def MergeMaskedFace (predictor_func, predictor_input_shape,
         wrk_face_mask_a_0 = wrk_face_mask_a_0[input_size:-input_size,input_size:-input_size]
 
         wrk_face_mask_a_0 = np.clip(wrk_face_mask_a_0, 0, 1)
+        if getattr(cfg, "blend_mode", "legacy") == "distance":
+            wrk_face_mask_a_0 = distance_feather(wrk_face_mask_a_0, mask_subres_size * getattr(cfg, "blend_width", 3) / 100.)
 
     img_face_mask_a = cv2.warpAffine( wrk_face_mask_a_0, face_mask_output_mat, img_size, np.zeros(img_bgr.shape[0:2], dtype=np.float32), flags=cv2.WARP_INVERSE_MAP | cv2.INTER_CUBIC )[...,None]
     img_face_mask_a = np.clip (img_face_mask_a, 0.0, 1.0)
@@ -169,23 +192,7 @@ def MergeMaskedFace (predictor_func, predictor_input_shape,
                 wrk_face_mask_area_a[wrk_face_mask_area_a>0] = 1.0
 
                 if 'seamless' not in cfg.mode and cfg.color_transfer_mode != 0:
-                    if cfg.color_transfer_mode == 1: #rct
-                        prd_face_bgr = imagelib.reinhard_color_transfer (prd_face_bgr, dst_face_bgr, target_mask=wrk_face_mask_area_a, source_mask=wrk_face_mask_area_a)
-                    elif cfg.color_transfer_mode == 2: #lct
-                        prd_face_bgr = imagelib.linear_color_transfer (prd_face_bgr, dst_face_bgr)
-                    elif cfg.color_transfer_mode == 3: #mkl
-                        prd_face_bgr = imagelib.color_transfer_mkl (prd_face_bgr, dst_face_bgr)
-                    elif cfg.color_transfer_mode == 4: #mkl-m
-                        prd_face_bgr = imagelib.color_transfer_mkl (prd_face_bgr*wrk_face_mask_area_a, dst_face_bgr*wrk_face_mask_area_a)
-                    elif cfg.color_transfer_mode == 5: #idt
-                        prd_face_bgr = imagelib.color_transfer_idt (prd_face_bgr, dst_face_bgr)
-                    elif cfg.color_transfer_mode == 6: #idt-m
-                        prd_face_bgr = imagelib.color_transfer_idt (prd_face_bgr*wrk_face_mask_area_a, dst_face_bgr*wrk_face_mask_area_a)
-                    elif cfg.color_transfer_mode == 7: #sot-m
-                        prd_face_bgr = imagelib.color_transfer_sot (prd_face_bgr*wrk_face_mask_area_a, dst_face_bgr*wrk_face_mask_area_a, steps=10, batch_size=30)
-                        prd_face_bgr = np.clip (prd_face_bgr, 0.0, 1.0)
-                    elif cfg.color_transfer_mode == 8: #mix-m
-                        prd_face_bgr = imagelib.color_transfer_mix (prd_face_bgr*wrk_face_mask_area_a, dst_face_bgr*wrk_face_mask_area_a)
+                    prd_face_bgr = merge_color(cfg.color_transfer_mode, prd_face_bgr, dst_face_bgr, wrk_face_mask_area_a, seed)
 
                 if cfg.mode == 'hist-match':
                     hist_mask_a = np.ones ( prd_face_bgr.shape[:2] + (1,) , dtype=np.float32)
@@ -248,34 +255,18 @@ def MergeMaskedFace (predictor_func, predictor_input_shape,
                     out_face_bgr = cv2.warpAffine( out_img, face_mat, (output_size, output_size), flags=cv2.INTER_CUBIC )
 
                     if 'seamless' in cfg.mode and cfg.color_transfer_mode != 0:
-                        if cfg.color_transfer_mode == 1:
-                            out_face_bgr = imagelib.reinhard_color_transfer (out_face_bgr, dst_face_bgr, target_mask=wrk_face_mask_area_a, source_mask=wrk_face_mask_area_a)
-                        elif cfg.color_transfer_mode == 2: #lct
-                            out_face_bgr = imagelib.linear_color_transfer (out_face_bgr, dst_face_bgr)
-                        elif cfg.color_transfer_mode == 3: #mkl
-                            out_face_bgr = imagelib.color_transfer_mkl (out_face_bgr, dst_face_bgr)
-                        elif cfg.color_transfer_mode == 4: #mkl-m
-                            out_face_bgr = imagelib.color_transfer_mkl (out_face_bgr*wrk_face_mask_area_a, dst_face_bgr*wrk_face_mask_area_a)
-                        elif cfg.color_transfer_mode == 5: #idt
-                            out_face_bgr = imagelib.color_transfer_idt (out_face_bgr, dst_face_bgr)
-                        elif cfg.color_transfer_mode == 6: #idt-m
-                            out_face_bgr = imagelib.color_transfer_idt (out_face_bgr*wrk_face_mask_area_a, dst_face_bgr*wrk_face_mask_area_a)
-                        elif cfg.color_transfer_mode == 7: #sot-m
-                            out_face_bgr = imagelib.color_transfer_sot (out_face_bgr*wrk_face_mask_area_a, dst_face_bgr*wrk_face_mask_area_a, steps=10, batch_size=30)
-                            out_face_bgr = np.clip (out_face_bgr, 0.0, 1.0)
-                        elif cfg.color_transfer_mode == 8: #mix-m
-                            out_face_bgr = imagelib.color_transfer_mix (out_face_bgr*wrk_face_mask_area_a, dst_face_bgr*wrk_face_mask_area_a)
+                        out_face_bgr = merge_color(cfg.color_transfer_mode, out_face_bgr, dst_face_bgr, wrk_face_mask_area_a, seed)
 
                     if cfg.mode == 'seamless-hist-match':
                         out_face_bgr = imagelib.color_hist_match(out_face_bgr, dst_face_bgr, cfg.hist_match_threshold)
 
                     if cfg_mp != 0:
-                        k_size = int(frame_info.motion_power*cfg_mp)
+                        k_size = int((geometry.get("motionPower", 0) if geometry else frame_info.motion_power)*cfg_mp)
                         if k_size >= 1:
                             k_size = np.clip (k_size+1, 2, 50)
                             if cfg.super_resolution_power != 0:
                                 k_size *= 2
-                            out_face_bgr = imagelib.LinearMotionBlur (out_face_bgr, k_size , frame_info.motion_deg)
+                            out_face_bgr = imagelib.LinearMotionBlur (out_face_bgr, k_size , (geometry.get("motionDegrees", 0) if geometry else frame_info.motion_deg))
 
                     if cfg.blursharpen_amount != 0:
                         out_face_bgr = imagelib.blursharpen ( out_face_bgr, cfg.sharpen_mode, 3, cfg.blursharpen_amount)
@@ -307,6 +298,11 @@ def MergeMaskedFace (predictor_func, predictor_input_shape,
                     else:
                         alpha = cfg.color_degrade_power / 100.0
                         out_img = (out_img*(1.0-alpha) + out_img_reduced*alpha)
+        if out_img is not None and getattr(cfg, 'blend_mode', 'legacy') == 'multiband':
+            # Recover the replacement before alpha compositing, then blend once.
+            replacement = np.divide(out_img - img_bgr * (1 - img_face_mask_a), img_face_mask_a,
+                                    out=img_bgr.copy(), where=img_face_mask_a > 1e-5)
+            out_img = multiband_blend(img_bgr, np.clip(replacement, 0, 1), img_face_mask_a)
         out_merging_mask_a = img_face_mask_a
 
     if out_img is None:
@@ -321,13 +317,15 @@ def MergeMasked (predictor_func,
                  xseg_256_extract_func,
                  cfg,
                  frame_info):
+    if getattr(frame_info, "source_sha256", None) and sha256(frame_info.filepath) != frame_info.source_sha256:
+        raise ValueError("Source frame changed after merge preflight")
     img_bgr_uint8 = cv2_imread(frame_info.filepath)
     img_bgr_uint8 = imagelib.normalize_channels (img_bgr_uint8, 3)
     img_bgr = img_bgr_uint8.astype(np.float32) / 255.0
 
     outs = []
     for face_num, img_landmarks in enumerate( frame_info.landmarks_list ):
-        out_img, out_img_merging_mask = MergeMaskedFace (predictor_func, predictor_input_shape, face_enhancer_func, xseg_256_extract_func, cfg, frame_info, img_bgr_uint8, img_bgr, img_landmarks)
+        out_img, out_img_merging_mask = MergeMaskedFace (predictor_func, predictor_input_shape, face_enhancer_func, xseg_256_extract_func, cfg, frame_info, img_bgr_uint8, img_bgr, img_landmarks, face_num)
         outs += [ (out_img, out_img_merging_mask) ]
 
     #Combining multiple face outputs

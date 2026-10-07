@@ -1,14 +1,65 @@
 import assert from "node:assert/strict";
+import path from "node:path";
 import test from "node:test";
 import {
   commandModelFamily, createTaskConfiguration, displayWorkspacePath,
   modelNameIssue, restoreMEModelConfiguration, searchTaskCommands, selectTaskModel, taskModels, taskOutputLocations,
 } from "../src/domain/task-configuration.js";
-import { listCommands } from "../server/command-registry.mjs";
+import { buildCommand, getCommandDefinition, listCommands, validateCommandParameters } from "../server/command-registry.mjs";
+import { PATHS } from "../server/paths.mjs";
 import { ME_CONFIG_PARAMETERS, ME_DEFAULT_CONFIG } from "../shared/me-training-options.mjs";
 
 const commands = listCommands();
 const command = id => commands.find(item => item.id === id);
+
+test("new extraction uses verified quality defaults while retaining explicit compatibility choices", () => {
+  assert.deepEqual(taskOutputLocations(command("encode.master")).paths, ["result.nut", "result_mask.nut", "result.nut.media.json", "result_mask.nut.media.json"]);
+  const detector = command("src.extract_faces").parameters.find(item => item.id === "detector");
+  assert.equal(detector.default, "yolo26s-face");
+  assert.deepEqual(detector.options.map(item => item.value), ["s3fd", "yolo11m-face", "yolo12l-face", "yolo26s-face", "manual"]);
+  for (const id of ["src.extract_faces", "dst.extract_faces", "src.extract_restored", "dst.extract_restored"]) {
+    const defaults = createTaskConfiguration(command(id)).parameters;
+    assert.equal(defaults.detector, "yolo26s-face", id);
+    assert.equal(defaults.landmarkModel, "tufa", id);
+    assert.equal(defaults.jpegQuality, 100, id);
+    assert.deepEqual(command(id).parameters.find(item => item.id === "landmarkModel").options.map(item => item.value), ["tufa", "fan"]);
+  }
+  const compatibility = createTaskConfiguration(command("src.extract_faces"), { detector: "s3fd", landmarkModel: "fan", jpegQuality: 92 });
+  assert.equal(compatibility.parameters.detector, "s3fd");
+  assert.equal(compatibility.parameters.landmarkModel, "fan");
+  assert.equal(compatibility.parameters.jpegQuality, 92);
+});
+
+test("quality export declares all four video files and four verification records", () => {
+  const output = taskOutputLocations(command("encode.quality"));
+  assert.deepEqual(output.paths, ["result.nut", "result_mask.nut", "result.mp4", "result_mask.mp4",
+    "result.nut.media.json", "result_mask.nut.media.json", "result.mp4.media.json", "result_mask.mp4.media.json"]);
+  assert.equal(output.paths.filter(name => !name.endsWith(".media.json")).length, 4);
+  assert.equal(output.paths.filter(name => name.endsWith(".media.json")).length, 4);
+  assert.equal(output.note, "overwrite-video");
+  for (const side of ["src", "dst"]) {
+    assert.deepEqual(taskOutputLocations(command(`${side}.extract_restored`), {}, { restorationTaskId: "rst-verified" }).paths,
+      [`data_${side}/aligned_restored/rst-verified`]);
+  }
+});
+
+test("merge defaults to original DST aligned and contains explicitly selected reviewed copies", () => {
+  const defaults = createTaskConfiguration(command("merge.me")).parameters;
+  assert.equal(defaults.dstFaceset, "data_dst/aligned");
+  const launchFor = dstFaceset => buildCommand(getCommandDefinition("merge.me"), {
+    launchMode: "guided", parameters: validateCommandParameters("merge.me", { dstFaceset }, "guided"),
+  }).launch;
+  for (const selected of [defaults.dstFaceset, "data_dst/aligned_restored/rst-verified",
+    path.join(PATHS.workspaceRoot, "data_dst", "aligned_assisted", "reviewed-copy")]) {
+    const launch = launchFor(selected);
+    const aligned = launch.args[launch.args.indexOf("--aligned-dir") + 1];
+    assert.equal(aligned, path.resolve(PATHS.workspaceRoot, selected));
+    assert.equal(launch.args[launch.args.indexOf("--input-dir") + 1], path.join(PATHS.workspaceRoot, "data_dst"));
+  }
+  for (const outside of ["../outside", path.resolve(PATHS.workspaceRoot, "..", "outside")]) {
+    assert.throws(() => launchFor(outside), error => error.code === "PARAMETER_INVALID");
+  }
+});
 const saved = [
   { name: "interview", type: "ME", format: "me-pytorch", files: ["metadata.json", "me.pt"], config: { resolution: 128, batch_size: 4 } },
   { name: "other-family", type: "SAEHD", files: ["other-family_SAEHD_data.dat"] },
@@ -27,6 +78,9 @@ test("model choices match fixed command families and exclude incomplete or synth
     assert.ok(commandModelFamily(item), `${item.id} needs a model family`);
   }
   assert.equal(commandModelFamily(command("export.dfm_me")), "ME");
+  assert.equal(commandModelFamily(command("merge.preview_me")), "ME");
+  assert.deepEqual(taskModels(command("merge.preview_me"), saved), [saved[0]]);
+  assert.equal(createTaskConfiguration(command("merge.preview_me"), {}, saved).parameters.forceModelName, saved[0].name);
   assert.deepEqual(taskModels(command("train.me"), [...saved,
     { name: "weights-only", type: "ME", files: ["weights-only_ME_encoder.npy"] },
   ]), [saved[0]]);
@@ -78,6 +132,9 @@ test("output summaries follow the actual fixed workflow destinations", () => {
   assert.deepEqual(taskOutputLocations(command("merge.me")).paths, ["data_dst/merged", "data_dst/merged_mask"]);
   assert.deepEqual(taskOutputLocations(command("encode.mov_lossless")).paths, ["result.mov", "result_mask.mov"]);
   assert.deepEqual(taskOutputLocations(command("src.faces_resize")).paths, ["data_src/aligned_resized"]);
+  assert.deepEqual(taskOutputLocations(command("src.faces_enhance")), {
+    paths: ["data_src/aligned_enhanced/<独立批次>"], note: "independent-enhancement",
+  });
   assert.deepEqual(taskOutputLocations(command("xseg.dst_fetch_labels")).paths, ["data_dst/aligned_xseg"]);
   assert.deepEqual(taskOutputLocations(command("video.cut_src"), { materials: { src: { name: "data_src.MP4" } } }).paths, ["data_src_cut.MP4"]);
   assert.equal(taskOutputLocations(command("runtime.prepare_vision")).note, "runtime");

@@ -1,0 +1,790 @@
+{
+  "schemaVersion": 1,
+  "resourceRoot": "_internal/vision_models/production",
+  "inferenceDownloads": false,
+  "publicDistributionPolicy": "separate-admission-required; never infer weight grant from repository source license",
+  "groups": [
+    {
+      "id": "yolo11m-face",
+      "profile": "production",
+      "installRoot": "_internal/vision_models/production/yolo11m-face",
+      "sourceLicense": "AGPL-3.0",
+      "localInstallationAllowed": true,
+      "publicDistributionAllowed": false,
+      "weightLicenseStatus": "official-weight-origin-verified; no-separate-weight-redistribution-grant-confirmed",
+      "distributionAdmission": "local-review-resource-pack-only",
+      "source": {
+        "source": "https://github.com/akanametov/yolo-face/releases/download/1.0.0/yolov11m-face.pt",
+        "sourceRepository": "https://github.com/akanametov/yolo-face",
+        "sourceRevision": "release/1.0.0",
+        "sha256": "6ccbe920c1fac95ed84de570519e89fbe24d326d466a7aae297960b3ecc6c661",
+        "sizeBytes": 40499429,
+        "codeLicense": "AGPL-3.0",
+        "weightLicenseStatus": "recorded-upstream-terms-not-admitted-for-bundling",
+        "licenseRevision": "0037b0bce46e8fe3225963b07d2b9450b0f1e9e2"
+      },
+      "files": [
+        {
+          "path": "yolov11m-face.pt",
+          "sha256": "6ccbe920c1fac95ed84de570519e89fbe24d326d466a7aae297960b3ecc6c661",
+          "sizeBytes": 40499429,
+          "sourceCache": "detectors/yolov11m-face.pt",
+          "url": "https://github.com/akanametov/yolo-face/releases/download/1.0.0/yolov11m-face.pt"
+        },
+        {
+          "path": "LICENSE.txt",
+          "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+          "sizeBytes": 35149,
+          "repositoryFile": "tools/licenses/YoloFace-AGPL-3.0.txt",
+          "url": "https://raw.githubusercontent.com/akanametov/yolo-face/0037b0bce46e8fe3225963b07d2b9450b0f1e9e2/LICENSE"
+        },
+        {
+          "path": "assets.json",
+          "content": "{\n  \"schemaVersion\": 1,\n  \"models\": [\n    {\n      \"id\": \"yolo11m-face\",\n      \"architecture\": \"yolo11m\",\n      \"family\": \"yolo11\",\n      \"scale\": \"m\",\n      \"task\": \"detect\",\n      \"filename\": \"yolov11m-face.pt\",\n      \"runtime\": \"ultralytics==8.4.142\",\n      \"source\": \"https://github.com/akanametov/yolo-face/releases/download/1.0.0/yolov11m-face.pt\",\n      \"sourceRepository\": \"https://github.com/akanametov/yolo-face\",\n      \"sourceRevision\": \"release/1.0.0\",\n      \"sizeBytes\": 40499429,\n      \"sha256\": \"6ccbe920c1fac95ed84de570519e89fbe24d326d466a7aae297960b3ecc6c661\",\n      \"hashSource\": \"H3CE source lock, locally reverified 2026-10-06\",\n      \"codeLicense\": \"AGPL-3.0\",\n      \"weightLicenseStatus\": \"recorded-upstream-terms-not-admitted-for-bundling\",\n      \"path\": \"yolov11m-face.pt\",\n      \"acquired\": true,\n      \"admission\": \"evaluation-only\",\n      \"default\": false\n    }\n  ]\n}\n",
+          "sha256": "6c5cf5a964df943f74f4f9e4557857bac1a73b2ca932ee3aaf86cccfcb6000dc",
+          "sizeBytes": 894
+        },
+        {
+          "path": "SOURCE.json",
+          "content": "{\n  \"id\": \"yolo11m-face\",\n  \"profile\": \"production\",\n  \"installRoot\": \"_internal/vision_models/production/yolo11m-face\",\n  \"sourceLicense\": \"AGPL-3.0\",\n  \"localInstallationAllowed\": true,\n  \"publicDistributionAllowed\": false,\n  \"weightLicenseStatus\": \"official-weight-origin-verified; no-separate-weight-redistribution-grant-confirmed\",\n  \"distributionAdmission\": \"local-review-resource-pack-only\",\n  \"source\": {\n    \"source\": \"https://github.com/akanametov/yolo-face/releases/download/1.0.0/yolov11m-face.pt\",\n    \"sourceRepository\": \"https://github.com/akanametov/yolo-face\",\n    \"sourceRevision\": \"release/1.0.0\",\n    \"sha256\": \"6ccbe920c1fac95ed84de570519e89fbe24d326d466a7aae297960b3ecc6c661\",\n    \"sizeBytes\": 40499429,\n    \"codeLicense\": \"AGPL-3.0\",\n    \"weightLicenseStatus\": \"recorded-upstream-terms-not-admitted-for-bundling\",\n    \"licenseRevision\": \"0037b0bce46e8fe3225963b07d2b9450b0f1e9e2\"\n  }\n}\n",
+          "sha256": "7358b5d95ee986c354860ec34626f028eb8a0f3ebf596f5458af438dc0783b15",
+          "sizeBytes": 909
+        }
+      ]
+    },
+    {
+      "id": "yolo12l-face",
+      "profile": "production",
+      "installRoot": "_internal/vision_models/production/yolo12l-face",
+      "sourceLicense": "AGPL-3.0",
+      "localInstallationAllowed": true,
+      "publicDistributionAllowed": false,
+      "weightLicenseStatus": "official-weight-origin-verified; no-separate-weight-redistribution-grant-confirmed",
+      "distributionAdmission": "local-review-resource-pack-only",
+      "source": {
+        "source": "https://github.com/akanametov/yolo-face/releases/download/1.0.0/yolov12l-face.pt",
+        "sourceRepository": "https://github.com/akanametov/yolo-face",
+        "sourceRevision": "release/1.0.0",
+        "sha256": "e6c2424dbeb78be0a03af61e3d53cc103786aa24f040e727084e4e027b7918fa",
+        "sizeBytes": 53507770,
+        "codeLicense": "AGPL-3.0",
+        "weightLicenseStatus": "recorded-upstream-terms-not-admitted-for-bundling",
+        "licenseRevision": "0037b0bce46e8fe3225963b07d2b9450b0f1e9e2"
+      },
+      "files": [
+        {
+          "path": "yolov12l-face.pt",
+          "sha256": "e6c2424dbeb78be0a03af61e3d53cc103786aa24f040e727084e4e027b7918fa",
+          "sizeBytes": 53507770,
+          "sourceCache": "detectors/yolov12l-face.pt",
+          "url": "https://github.com/akanametov/yolo-face/releases/download/1.0.0/yolov12l-face.pt"
+        },
+        {
+          "path": "LICENSE.txt",
+          "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+          "sizeBytes": 35149,
+          "repositoryFile": "tools/licenses/YoloFace-AGPL-3.0.txt",
+          "url": "https://raw.githubusercontent.com/akanametov/yolo-face/0037b0bce46e8fe3225963b07d2b9450b0f1e9e2/LICENSE"
+        },
+        {
+          "path": "assets.json",
+          "content": "{\n  \"schemaVersion\": 1,\n  \"models\": [\n    {\n      \"id\": \"yolo12l-face\",\n      \"architecture\": \"yolo12l\",\n      \"family\": \"yolo12\",\n      \"scale\": \"l\",\n      \"task\": \"detect\",\n      \"filename\": \"yolov12l-face.pt\",\n      \"runtime\": \"ultralytics==8.4.142\",\n      \"source\": \"https://github.com/akanametov/yolo-face/releases/download/1.0.0/yolov12l-face.pt\",\n      \"sourceRepository\": \"https://github.com/akanametov/yolo-face\",\n      \"sourceRevision\": \"release/1.0.0\",\n      \"sizeBytes\": 53507770,\n      \"sha256\": \"e6c2424dbeb78be0a03af61e3d53cc103786aa24f040e727084e4e027b7918fa\",\n      \"hashSource\": \"GitHub release asset published SHA-256\",\n      \"codeLicense\": \"AGPL-3.0\",\n      \"weightLicenseStatus\": \"recorded-upstream-terms-not-admitted-for-bundling\",\n      \"path\": \"yolov12l-face.pt\",\n      \"acquired\": true,\n      \"admission\": \"evaluation-only\",\n      \"default\": false\n    }\n  ]\n}\n",
+          "sha256": "bf4d42583cc40bb3f81a52078cfcf03e946a58f1f33e398750060cc5284a57ba",
+          "sizeBytes": 885
+        },
+        {
+          "path": "SOURCE.json",
+          "content": "{\n  \"id\": \"yolo12l-face\",\n  \"profile\": \"production\",\n  \"installRoot\": \"_internal/vision_models/production/yolo12l-face\",\n  \"sourceLicense\": \"AGPL-3.0\",\n  \"localInstallationAllowed\": true,\n  \"publicDistributionAllowed\": false,\n  \"weightLicenseStatus\": \"official-weight-origin-verified; no-separate-weight-redistribution-grant-confirmed\",\n  \"distributionAdmission\": \"local-review-resource-pack-only\",\n  \"source\": {\n    \"source\": \"https://github.com/akanametov/yolo-face/releases/download/1.0.0/yolov12l-face.pt\",\n    \"sourceRepository\": \"https://github.com/akanametov/yolo-face\",\n    \"sourceRevision\": \"release/1.0.0\",\n    \"sha256\": \"e6c2424dbeb78be0a03af61e3d53cc103786aa24f040e727084e4e027b7918fa\",\n    \"sizeBytes\": 53507770,\n    \"codeLicense\": \"AGPL-3.0\",\n    \"weightLicenseStatus\": \"recorded-upstream-terms-not-admitted-for-bundling\",\n    \"licenseRevision\": \"0037b0bce46e8fe3225963b07d2b9450b0f1e9e2\"\n  }\n}\n",
+          "sha256": "b7fe2b72211901b5015725a3fbae772c848552bc8427fd944da10219deac2d25",
+          "sizeBytes": 909
+        }
+      ]
+    },
+    {
+      "id": "yolo26s-face",
+      "profile": "production",
+      "installRoot": "_internal/vision_models/production/yolo26s-face",
+      "sourceLicense": "AGPL-3.0",
+      "localInstallationAllowed": true,
+      "publicDistributionAllowed": false,
+      "weightLicenseStatus": "official-weight-origin-verified; no-separate-weight-redistribution-grant-confirmed",
+      "distributionAdmission": "local-review-resource-pack-only",
+      "source": {
+        "source": "https://github.com/akanametov/yolo-face/releases/download/1.0.0/yolo26s-face.pt",
+        "sourceRepository": "https://github.com/akanametov/yolo-face",
+        "sourceRevision": "release/1.0.0",
+        "sha256": "6f1485ac6397a94eecdb5d11575f72eb05130c6c6e6d896d0b4d4aaf02d7c69a",
+        "sizeBytes": 21615079,
+        "codeLicense": "AGPL-3.0",
+        "weightLicenseStatus": "recorded-upstream-terms-not-admitted-for-bundling",
+        "licenseRevision": "0037b0bce46e8fe3225963b07d2b9450b0f1e9e2"
+      },
+      "files": [
+        {
+          "path": "yolo26s-face.pt",
+          "sha256": "6f1485ac6397a94eecdb5d11575f72eb05130c6c6e6d896d0b4d4aaf02d7c69a",
+          "sizeBytes": 21615079,
+          "sourceCache": "detectors/yolo26s-face.pt",
+          "url": "https://github.com/akanametov/yolo-face/releases/download/1.0.0/yolo26s-face.pt"
+        },
+        {
+          "path": "LICENSE.txt",
+          "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+          "sizeBytes": 35149,
+          "repositoryFile": "tools/licenses/YoloFace-AGPL-3.0.txt",
+          "url": "https://raw.githubusercontent.com/akanametov/yolo-face/0037b0bce46e8fe3225963b07d2b9450b0f1e9e2/LICENSE"
+        },
+        {
+          "path": "assets.json",
+          "content": "{\n  \"schemaVersion\": 1,\n  \"models\": [\n    {\n      \"id\": \"yolo26s-face\",\n      \"architecture\": \"yolo26s-pose-face\",\n      \"family\": \"yolo26\",\n      \"scale\": \"s\",\n      \"task\": \"pose\",\n      \"filename\": \"yolo26s-face.pt\",\n      \"runtime\": \"ultralytics==8.4.142\",\n      \"source\": \"https://github.com/akanametov/yolo-face/releases/download/1.0.0/yolo26s-face.pt\",\n      \"sourceRepository\": \"https://github.com/akanametov/yolo-face\",\n      \"sourceRevision\": \"release/1.0.0\",\n      \"sizeBytes\": 21615079,\n      \"sha256\": \"6f1485ac6397a94eecdb5d11575f72eb05130c6c6e6d896d0b4d4aaf02d7c69a\",\n      \"hashSource\": \"GitHub release asset published SHA-256\",\n      \"codeLicense\": \"AGPL-3.0\",\n      \"weightLicenseStatus\": \"recorded-upstream-terms-not-admitted-for-bundling\",\n      \"path\": \"yolo26s-face.pt\",\n      \"acquired\": true,\n      \"admission\": \"evaluation-only\",\n      \"default\": false\n    }\n  ]\n}\n",
+          "sha256": "31a07ef8fb2b506206a59e2affa642186791cee73cf7e5f4a07a9231c379c16a",
+          "sizeBytes": 890
+        },
+        {
+          "path": "SOURCE.json",
+          "content": "{\n  \"id\": \"yolo26s-face\",\n  \"profile\": \"production\",\n  \"installRoot\": \"_internal/vision_models/production/yolo26s-face\",\n  \"sourceLicense\": \"AGPL-3.0\",\n  \"localInstallationAllowed\": true,\n  \"publicDistributionAllowed\": false,\n  \"weightLicenseStatus\": \"official-weight-origin-verified; no-separate-weight-redistribution-grant-confirmed\",\n  \"distributionAdmission\": \"local-review-resource-pack-only\",\n  \"source\": {\n    \"source\": \"https://github.com/akanametov/yolo-face/releases/download/1.0.0/yolo26s-face.pt\",\n    \"sourceRepository\": \"https://github.com/akanametov/yolo-face\",\n    \"sourceRevision\": \"release/1.0.0\",\n    \"sha256\": \"6f1485ac6397a94eecdb5d11575f72eb05130c6c6e6d896d0b4d4aaf02d7c69a\",\n    \"sizeBytes\": 21615079,\n    \"codeLicense\": \"AGPL-3.0\",\n    \"weightLicenseStatus\": \"recorded-upstream-terms-not-admitted-for-bundling\",\n    \"licenseRevision\": \"0037b0bce46e8fe3225963b07d2b9450b0f1e9e2\"\n  }\n}\n",
+          "sha256": "d3a89277c0f569c68a84d2a116d71d1438778071ce9fcd5d0461006849881aad",
+          "sizeBytes": 908
+        }
+      ]
+    },
+    {
+      "id": "tufa",
+      "profile": "production",
+      "installRoot": "_internal/vision_models/production/tufa",
+      "sourceLicense": "GPL-2.0; combined-project license compatibility unreviewed",
+      "localInstallationAllowed": true,
+      "publicDistributionAllowed": false,
+      "weightLicenseStatus": "official-weight-origin-verified; no-separate-weight-redistribution-grant-confirmed",
+      "distributionAdmission": "local-review-resource-pack-only",
+      "source": {
+        "repository": "https://github.com/Jiahao-UTS/TUFA",
+        "revision": "58b3833ebbd481aeaa72a8500d5cc781e4ab8112",
+        "license": "GPL-2.0",
+        "official_weight_url": "https://drive.google.com/file/d/1rRAB3W74QK-J6W_EnjC7HhS-zjT9BuED/view"
+      },
+      "files": [
+        {
+          "path": "identity.json",
+          "sha256": "5e0df59f586737551e9a067e53086bc8a38174323e987ecf204a3cbecd352545",
+          "sizeBytes": 2365,
+          "sourceCache": "landmarks/TUFA/identity.json"
+        },
+        {
+          "path": "source/Backbone/__init__.py",
+          "sha256": "7ed62ab54235003ef1559bdf8b7f6f29b9e83e912448bc9b17bb75c705780860",
+          "sizeBytes": 249,
+          "sourceCache": "landmarks/TUFA/source/Backbone/__init__.py",
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Backbone/__init__.py"
+        },
+        {
+          "path": "source/Backbone/Decoder.py",
+          "sha256": "24f877e4a6f93760f87acd716b8b07d7bfb635831db0ca3a52e170df1224f443",
+          "sizeBytes": 7888,
+          "sourceCache": "landmarks/TUFA/source/Backbone/Decoder.py",
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Backbone/Decoder.py"
+        },
+        {
+          "path": "source/Backbone/DINO.py",
+          "sha256": "dded0b4bee6066595faf45e35fbd09c3353557b5c6e71965ed5abd5a5b582491",
+          "sizeBytes": 13240,
+          "sourceCache": "landmarks/TUFA/source/Backbone/DINO.py",
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Backbone/DINO.py"
+        },
+        {
+          "path": "source/Backbone/Loss.py",
+          "sha256": "9dd5d435fd7b681091cf6f50a9d9a5d7e680ac44930aeae41f80f99cb44c49b0",
+          "sizeBytes": 1139,
+          "sourceCache": "landmarks/TUFA/source/Backbone/Loss.py",
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Backbone/Loss.py"
+        },
+        {
+          "path": "source/Backbone/pos_embedding.py",
+          "sha256": "d86b6ebdf2a0ee1583bfffff306fed0a8b241518bfb385a696ed17e2f420d111",
+          "sizeBytes": 6490,
+          "sourceCache": "landmarks/TUFA/source/Backbone/pos_embedding.py",
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Backbone/pos_embedding.py"
+        },
+        {
+          "path": "source/Camera.py",
+          "sha256": "bc4d3b1ca8f674283f815cada1b5c94c357040fd0e63991302ffe04f81321c89",
+          "sizeBytes": 6393,
+          "sourceCache": "landmarks/TUFA/source/Camera.py",
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Camera.py"
+        },
+        {
+          "path": "source/Config/__init__.py",
+          "sha256": "c5ce61cded62a60c747995965ba6df7eb676d662bab30c07625730c8c5fff467",
+          "sizeBytes": 32,
+          "sourceCache": "landmarks/TUFA/source/Config/__init__.py",
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Config/__init__.py"
+        },
+        {
+          "path": "source/Config/default.py",
+          "sha256": "e7a1adfda8715b592e4f0b5cde902a8c8969d12b34cc6774133be3197e3c031e",
+          "sizeBytes": 708,
+          "sourceCache": "landmarks/TUFA/source/Config/default.py",
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Config/default.py"
+        },
+        {
+          "path": "source/Dataloader/__init__.py",
+          "sha256": "b78641c996248cd0b4bdbd3e2621da5f5904a4d2613b658cc890a8445fa02a4b",
+          "sizeBytes": 30,
+          "sourceCache": "landmarks/TUFA/source/Dataloader/__init__.py",
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Dataloader/__init__.py"
+        },
+        {
+          "path": "source/Dataloader/All.py",
+          "sha256": "8babb8d42446034cf6763916a423f4055699d165c5960a599456480922487100",
+          "sizeBytes": 5618,
+          "sourceCache": "landmarks/TUFA/source/Dataloader/All.py",
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Dataloader/All.py"
+        },
+        {
+          "path": "source/Prompt.py",
+          "sha256": "164fbff2119c1e2f107845ddbdbded80312bebfee56b3b5628d9269ea3f49c81",
+          "sizeBytes": 1624,
+          "sourceCache": "landmarks/TUFA/source/Prompt.py",
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Prompt.py"
+        },
+        {
+          "path": "source/Test.py",
+          "sha256": "12e3cad35d9a4dcabd86d07bf6b50040fc48efac36434a68aa334b02642850f4",
+          "sizeBytes": 3611,
+          "sourceCache": "landmarks/TUFA/source/Test.py",
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Test.py"
+        },
+        {
+          "path": "source/utils/__init__.py",
+          "sha256": "276551bbd5b5f02aa32c1a8fd2fbeb67133dc032506ad401e8e5a1e589b8d37b",
+          "sizeBytes": 177,
+          "sourceCache": "landmarks/TUFA/source/utils/__init__.py",
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/utils/__init__.py"
+        },
+        {
+          "path": "source/utils/Detector.py",
+          "sha256": "d5e7360bc4085a09e8f8b26139adc789e9024fb6ebb77fbb2656b7382d8bbca8",
+          "sizeBytes": 6243,
+          "sourceCache": "landmarks/TUFA/source/utils/Detector.py",
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/utils/Detector.py"
+        },
+        {
+          "path": "source/utils/get_transforms.py",
+          "sha256": "a1db8e6d6608ec2898d7e7754326edb29f45cb12ce1d4bcf8c6bf25d549daafc",
+          "sizeBytes": 2229,
+          "sourceCache": "landmarks/TUFA/source/utils/get_transforms.py",
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/utils/get_transforms.py"
+        },
+        {
+          "path": "source/Prompt/shape_29.npz",
+          "sha256": "9561a0849a4ef09ea02c99697f320fa6ac909ed85a23de9ea532471b1175b5cd",
+          "sizeBytes": 1434,
+          "sourceCache": "landmarks/TUFA/source/Prompt/shape_29.npz",
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Prompt/shape_29.npz"
+        },
+        {
+          "path": "source/Prompt/shape_314.npz",
+          "sha256": "61e461e109f13f02628384b7b8d0478ede2dcc279f5e80476e477a0ade6b44c2",
+          "sizeBytes": 5290,
+          "sourceCache": "landmarks/TUFA/source/Prompt/shape_314.npz",
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Prompt/shape_314.npz"
+        },
+        {
+          "path": "source/Prompt/shape_68.npz",
+          "sha256": "c42f58fef5eff4ae44aa1784d7d2cc01827757f4f372eeec4b49862fe21ec53f",
+          "sizeBytes": 2682,
+          "sourceCache": "landmarks/TUFA/source/Prompt/shape_68.npz",
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Prompt/shape_68.npz"
+        },
+        {
+          "path": "source/Prompt/shape_98.npz",
+          "sha256": "014050982e090f1bedf2dd8992ea38c7da938750f3e1d35af4ff8390b28418b8",
+          "sizeBytes": 3642,
+          "sourceCache": "landmarks/TUFA/source/Prompt/shape_98.npz",
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Prompt/shape_98.npz"
+        },
+        {
+          "path": "source/LICENSE",
+          "sha256": "189b1af95d661151e054cea10c91b3d754e4de4d3fecfb074c1fb29476f7167b",
+          "sizeBytes": 18431,
+          "sourceCache": "landmarks/TUFA/source/LICENSE",
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/LICENSE"
+        },
+        {
+          "path": "weights/model.pth",
+          "sha256": "3fe7071bef814af320c6e6ec7d724b4b1bb253677500e1a48a5e2a66aaf10899",
+          "sizeBytes": 143969647,
+          "sourceCache": "landmarks/TUFA/weights/model.pth"
+        },
+        {
+          "path": "SOURCE.json",
+          "content": "{\n  \"id\": \"tufa\",\n  \"profile\": \"production\",\n  \"installRoot\": \"_internal/vision_models/production/tufa\",\n  \"sourceLicense\": \"GPL-2.0; combined-project license compatibility unreviewed\",\n  \"localInstallationAllowed\": true,\n  \"publicDistributionAllowed\": false,\n  \"weightLicenseStatus\": \"official-weight-origin-verified; no-separate-weight-redistribution-grant-confirmed\",\n  \"distributionAdmission\": \"local-review-resource-pack-only\",\n  \"source\": {\n    \"repository\": \"https://github.com/Jiahao-UTS/TUFA\",\n    \"revision\": \"58b3833ebbd481aeaa72a8500d5cc781e4ab8112\",\n    \"license\": \"GPL-2.0\",\n    \"official_weight_url\": \"https://drive.google.com/file/d/1rRAB3W74QK-J6W_EnjC7HhS-zjT9BuED/view\"\n  }\n}\n",
+          "sha256": "3e6d81931577c71fe90caaa3a7ab8b582f181432adf4dd895926e8c5ce3353af",
+          "sizeBytes": 695
+        }
+      ]
+    },
+    {
+      "id": "bisenet-celebamaskhq",
+      "profile": "production",
+      "installRoot": "_internal/vision_models/production/bisenet-celebamaskhq",
+      "sourceLicense": "MIT; face-parsing upstream source; weight training-data terms separately recorded",
+      "localInstallationAllowed": true,
+      "publicDistributionAllowed": false,
+      "weightLicenseStatus": "official-weight-origin-verified; no-separate-weight-redistribution-grant-confirmed",
+      "distributionAdmission": "local-review-resource-pack-only",
+      "source": {
+        "repository": "https://github.com/zllrunning/face-parsing.PyTorch",
+        "revision": "d2e684cf1588b46145635e8fe7bcc29544e5537e",
+        "license": "MIT",
+        "weightUrl": "https://drive.google.com/uc?export=download&id=154JgKpzCPW82qINcVieuPH3fZ2e0P812",
+        "acquiredFromOfficial": true
+      },
+      "files": [
+        {
+          "path": "assets.json",
+          "content": "{\n  \"schemaVersion\": 1,\n  \"inferenceOnly\": true,\n  \"models\": [\n    {\n      \"id\": \"bisenet-celebamaskhq\",\n      \"sourceRoot\": \"bisenet-source\",\n      \"repository\": \"https://github.com/zllrunning/face-parsing.PyTorch\",\n      \"revision\": \"d2e684cf1588b46145635e8fe7bcc29544e5537e\",\n      \"license\": \"MIT\",\n      \"weightUrl\": \"https://drive.google.com/uc?export=download&id=154JgKpzCPW82qINcVieuPH3fZ2e0P812\",\n      \"acquiredFromOfficial\": true,\n      \"weights\": [\n        {\n          \"path\": \"79999_iter.pth\",\n          \"sha256\": \"468e13ca13a9b43cc0881a9f99083a430e9c0a38abd935431d1c28ee94b26567\",\n          \"sizeBytes\": 53289463\n        }\n      ],\n      \"sourceFiles\": [\n        {\n          \"path\": \"bisenet-source/evaluate.py\",\n          \"sha256\": \"a218c20ccce683ebe7804b6324589c8b3780fe645e8faf80435d442204bb02e3\",\n          \"sizeBytes\": 3195\n        },\n        {\n          \"path\": \"bisenet-source/face_dataset.py\",\n          \"sha256\": \"f345b3c405d0611bd50c3039281e367c064b7f4193c5e43fbd5cfe951edb414f\",\n          \"sizeBytes\": 3113\n        },\n        {\n          \"path\": \"bisenet-source/logger.py\",\n          \"sha256\": \"3632cfe9599d6fa43af6f404799e3582d69fd730b682aaa44929ca5792eca898\",\n          \"sizeBytes\": 621\n        },\n        {\n          \"path\": \"bisenet-source/loss.py\",\n          \"sha256\": \"27ac2f06113734ba95018b6d512884c47c59d4d74b2aff06e7c2eb36bbed27cd\",\n          \"sizeBytes\": 2391\n        },\n        {\n          \"path\": \"bisenet-source/makeup.py\",\n          \"sha256\": \"5308f438d4fec0455b8ce8a9af0d5130684397ca7cc238b8f9ef4875ac954b4d\",\n          \"sizeBytes\": 3469\n        },\n        {\n          \"path\": \"bisenet-source/model.py\",\n          \"sha256\": \"9322ed99ae5539bc8f2f404be744dbedc976198d1d04fda93573a43c713a10e0\",\n          \"sizeBytes\": 10876\n        },\n        {\n          \"path\": \"bisenet-source/modules/__init__.py\",\n          \"sha256\": \"d92673753e318bcb4f5324d72b0a6cac611a7d2d79b12c431c4b3ff6bc704752\",\n          \"sizeBytes\": 240\n        },\n        {\n          \"path\": \"bisenet-source/modules/bn.py\",\n          \"sha256\": \"650a6a6618f99ebc5ebe1975047cecedbce1c2870051b3abfb30efcfbc95aca1\",\n          \"sizeBytes\": 5047\n        },\n        {\n          \"path\": \"bisenet-source/modules/deeplab.py\",\n          \"sha256\": \"7d7a91c0eb55d39804639132d1de7935188a799b42a73d46b7e96db880342ed3\",\n          \"sizeBytes\": 3573\n        },\n        {\n          \"path\": \"bisenet-source/modules/dense.py\",\n          \"sha256\": \"27638b0b3bf406d71107b09f0ba71d177f14e7978731dbcc7819ab96260fa6d3\",\n          \"sizeBytes\": 1457\n        },\n        {\n          \"path\": \"bisenet-source/modules/functions.py\",\n          \"sha256\": \"1ead7623b52f8fca575c396aab11efb0d11456d5e92c0a00c89596c9d8972011\",\n          \"sizeBytes\": 7874\n        },\n        {\n          \"path\": \"bisenet-source/modules/misc.py\",\n          \"sha256\": \"7be28ab1ef82a086f19633a20920c86d20dd81ca5bcea8167c979ca68413597f\",\n          \"sizeBytes\": 622\n        },\n        {\n          \"path\": \"bisenet-source/modules/residual.py\",\n          \"sha256\": \"590902080db61c967e9851e6635ed93d7eea19352ca730a2b966ef765e3b82a9\",\n          \"sizeBytes\": 3610\n        },\n        {\n          \"path\": \"bisenet-source/optimizer.py\",\n          \"sha256\": \"e17e50ba4160ea13b796c23c71d8b9eab06b09c1a45b69251b32a1fd19e198ad\",\n          \"sizeBytes\": 2214\n        },\n        {\n          \"path\": \"bisenet-source/prepropess_data.py\",\n          \"sha256\": \"087ca7db783c87222547f7903a817b5cc81d984ebf55dace9c715e0fdf11c08a\",\n          \"sizeBytes\": 1181\n        },\n        {\n          \"path\": \"bisenet-source/resnet.py\",\n          \"sha256\": \"3f4c136303b332733f1226902e066acc3cdcd0af6bb963a7a064bc76f90c1ca7\",\n          \"sizeBytes\": 3757\n        },\n        {\n          \"path\": \"bisenet-source/test.py\",\n          \"sha256\": \"8d9e4c1089da4b0ae99637b90c20f6c6504fcf700aa21123823e5c94b1acd9eb\",\n          \"sizeBytes\": 3139\n        },\n        {\n          \"path\": \"bisenet-source/train.py\",\n          \"sha256\": \"e8f007c82736776190478a38bb8e1140389a99c35a2b068c5f9ed2a67c4021af\",\n          \"sizeBytes\": 5386\n        },\n        {\n          \"path\": \"bisenet-source/transform.py\",\n          \"sha256\": \"48947758e820839ce2b68b8ee6ffadfb6d09eb5c309dc772b8d3b5020a84049e\",\n          \"sizeBytes\": 4270\n        }\n      ],\n      \"licenseFiles\": [\n        {\n          \"path\": \"bisenet-source/LICENSE\",\n          \"sha256\": \"69cbe123bddc6c22ef171e83226f2bfd1dbc158853074ff0aa398bfce4332aa4\",\n          \"sizeBytes\": 1081\n        }\n      ]\n    }\n  ]\n}\n",
+          "sha256": "cbb524e06558ba396fd60be4e3fe73d56c8b8c49de22245a9a0785ec4c123bfc",
+          "sizeBytes": 4450
+        },
+        {
+          "path": "79999_iter.pth",
+          "sha256": "468e13ca13a9b43cc0881a9f99083a430e9c0a38abd935431d1c28ee94b26567",
+          "sizeBytes": 53289463,
+          "sourceCache": "masks/79999_iter.pth"
+        },
+        {
+          "path": "bisenet-source/evaluate.py",
+          "sha256": "a218c20ccce683ebe7804b6324589c8b3780fe645e8faf80435d442204bb02e3",
+          "sizeBytes": 3195,
+          "sourceCache": "masks/bisenet-source/evaluate.py"
+        },
+        {
+          "path": "bisenet-source/face_dataset.py",
+          "sha256": "f345b3c405d0611bd50c3039281e367c064b7f4193c5e43fbd5cfe951edb414f",
+          "sizeBytes": 3113,
+          "sourceCache": "masks/bisenet-source/face_dataset.py"
+        },
+        {
+          "path": "bisenet-source/logger.py",
+          "sha256": "3632cfe9599d6fa43af6f404799e3582d69fd730b682aaa44929ca5792eca898",
+          "sizeBytes": 621,
+          "sourceCache": "masks/bisenet-source/logger.py"
+        },
+        {
+          "path": "bisenet-source/loss.py",
+          "sha256": "27ac2f06113734ba95018b6d512884c47c59d4d74b2aff06e7c2eb36bbed27cd",
+          "sizeBytes": 2391,
+          "sourceCache": "masks/bisenet-source/loss.py"
+        },
+        {
+          "path": "bisenet-source/makeup.py",
+          "sha256": "5308f438d4fec0455b8ce8a9af0d5130684397ca7cc238b8f9ef4875ac954b4d",
+          "sizeBytes": 3469,
+          "sourceCache": "masks/bisenet-source/makeup.py"
+        },
+        {
+          "path": "bisenet-source/model.py",
+          "sha256": "9322ed99ae5539bc8f2f404be744dbedc976198d1d04fda93573a43c713a10e0",
+          "sizeBytes": 10876,
+          "sourceCache": "masks/bisenet-source/model.py"
+        },
+        {
+          "path": "bisenet-source/modules/__init__.py",
+          "sha256": "d92673753e318bcb4f5324d72b0a6cac611a7d2d79b12c431c4b3ff6bc704752",
+          "sizeBytes": 240,
+          "sourceCache": "masks/bisenet-source/modules/__init__.py"
+        },
+        {
+          "path": "bisenet-source/modules/bn.py",
+          "sha256": "650a6a6618f99ebc5ebe1975047cecedbce1c2870051b3abfb30efcfbc95aca1",
+          "sizeBytes": 5047,
+          "sourceCache": "masks/bisenet-source/modules/bn.py"
+        },
+        {
+          "path": "bisenet-source/modules/deeplab.py",
+          "sha256": "7d7a91c0eb55d39804639132d1de7935188a799b42a73d46b7e96db880342ed3",
+          "sizeBytes": 3573,
+          "sourceCache": "masks/bisenet-source/modules/deeplab.py"
+        },
+        {
+          "path": "bisenet-source/modules/dense.py",
+          "sha256": "27638b0b3bf406d71107b09f0ba71d177f14e7978731dbcc7819ab96260fa6d3",
+          "sizeBytes": 1457,
+          "sourceCache": "masks/bisenet-source/modules/dense.py"
+        },
+        {
+          "path": "bisenet-source/modules/functions.py",
+          "sha256": "1ead7623b52f8fca575c396aab11efb0d11456d5e92c0a00c89596c9d8972011",
+          "sizeBytes": 7874,
+          "sourceCache": "masks/bisenet-source/modules/functions.py"
+        },
+        {
+          "path": "bisenet-source/modules/misc.py",
+          "sha256": "7be28ab1ef82a086f19633a20920c86d20dd81ca5bcea8167c979ca68413597f",
+          "sizeBytes": 622,
+          "sourceCache": "masks/bisenet-source/modules/misc.py"
+        },
+        {
+          "path": "bisenet-source/modules/residual.py",
+          "sha256": "590902080db61c967e9851e6635ed93d7eea19352ca730a2b966ef765e3b82a9",
+          "sizeBytes": 3610,
+          "sourceCache": "masks/bisenet-source/modules/residual.py"
+        },
+        {
+          "path": "bisenet-source/optimizer.py",
+          "sha256": "e17e50ba4160ea13b796c23c71d8b9eab06b09c1a45b69251b32a1fd19e198ad",
+          "sizeBytes": 2214,
+          "sourceCache": "masks/bisenet-source/optimizer.py"
+        },
+        {
+          "path": "bisenet-source/prepropess_data.py",
+          "sha256": "087ca7db783c87222547f7903a817b5cc81d984ebf55dace9c715e0fdf11c08a",
+          "sizeBytes": 1181,
+          "sourceCache": "masks/bisenet-source/prepropess_data.py"
+        },
+        {
+          "path": "bisenet-source/resnet.py",
+          "sha256": "3f4c136303b332733f1226902e066acc3cdcd0af6bb963a7a064bc76f90c1ca7",
+          "sizeBytes": 3757,
+          "sourceCache": "masks/bisenet-source/resnet.py"
+        },
+        {
+          "path": "bisenet-source/test.py",
+          "sha256": "8d9e4c1089da4b0ae99637b90c20f6c6504fcf700aa21123823e5c94b1acd9eb",
+          "sizeBytes": 3139,
+          "sourceCache": "masks/bisenet-source/test.py"
+        },
+        {
+          "path": "bisenet-source/train.py",
+          "sha256": "e8f007c82736776190478a38bb8e1140389a99c35a2b068c5f9ed2a67c4021af",
+          "sizeBytes": 5386,
+          "sourceCache": "masks/bisenet-source/train.py"
+        },
+        {
+          "path": "bisenet-source/transform.py",
+          "sha256": "48947758e820839ce2b68b8ee6ffadfb6d09eb5c309dc772b8d3b5020a84049e",
+          "sizeBytes": 4270,
+          "sourceCache": "masks/bisenet-source/transform.py"
+        },
+        {
+          "path": "bisenet-source/LICENSE",
+          "sha256": "69cbe123bddc6c22ef171e83226f2bfd1dbc158853074ff0aa398bfce4332aa4",
+          "sizeBytes": 1081,
+          "sourceCache": "masks/bisenet-source/LICENSE"
+        },
+        {
+          "path": "SOURCE.json",
+          "content": "{\n  \"id\": \"bisenet-celebamaskhq\",\n  \"profile\": \"production\",\n  \"installRoot\": \"_internal/vision_models/production/bisenet-celebamaskhq\",\n  \"sourceLicense\": \"MIT; face-parsing upstream source; weight training-data terms separately recorded\",\n  \"localInstallationAllowed\": true,\n  \"publicDistributionAllowed\": false,\n  \"weightLicenseStatus\": \"official-weight-origin-verified; no-separate-weight-redistribution-grant-confirmed\",\n  \"distributionAdmission\": \"local-review-resource-pack-only\",\n  \"source\": {\n    \"repository\": \"https://github.com/zllrunning/face-parsing.PyTorch\",\n    \"revision\": \"d2e684cf1588b46145635e8fe7bcc29544e5537e\",\n    \"license\": \"MIT\",\n    \"weightUrl\": \"https://drive.google.com/uc?export=download&id=154JgKpzCPW82qINcVieuPH3fZ2e0P812\",\n    \"acquiredFromOfficial\": true\n  }\n}\n",
+          "sha256": "48303059fa856efe0d2adf376d633cedf782a608288b51cbb70c28bef417c198",
+          "sizeBytes": 796
+        }
+      ]
+    },
+    {
+      "id": "swinir-psnr",
+      "profile": "restoration",
+      "installRoot": "_internal/vision_models/production/swinir-psnr",
+      "sourceLicense": "Apache-2.0",
+      "localInstallationAllowed": true,
+      "publicDistributionAllowed": false,
+      "weightLicenseStatus": "official-weight-origin-verified; no-separate-weight-redistribution-grant-confirmed",
+      "distributionAdmission": "local-review-resource-pack-only",
+      "source": {
+        "name": "003_realSR_BSRGAN_DFOWMFC_s64w8_SwinIR-L_x4_PSNR.pth",
+        "sha256": "450be6eac63a59959b55a83df6743444de9f018547f81d16f699b3680d366ad7",
+        "bytes": 142473947,
+        "official_url": "https://github.com/JingyunLiang/SwinIR/releases/download/v0.0/003_realSR_BSRGAN_DFOWMFC_s64w8_SwinIR-L_x4_PSNR.pth",
+        "license_url": "https://github.com/JingyunLiang/SwinIR/blob/6545850fbf8df298df73d81f3e8cba638787c8bd/LICENSE",
+        "source_revision": "6545850fbf8df298df73d81f3e8cba638787c8bd",
+        "distribution": false
+      },
+      "files": [
+        {
+          "path": "003_realSR_BSRGAN_DFOWMFC_s64w8_SwinIR-L_x4_PSNR.pth",
+          "sha256": "450be6eac63a59959b55a83df6743444de9f018547f81d16f699b3680d366ad7",
+          "sizeBytes": 142473947,
+          "sourceCache": "restoration/003_realSR_BSRGAN_DFOWMFC_s64w8_SwinIR-L_x4_PSNR.pth",
+          "url": "https://github.com/JingyunLiang/SwinIR/releases/download/v0.0/003_realSR_BSRGAN_DFOWMFC_s64w8_SwinIR-L_x4_PSNR.pth"
+        },
+        {
+          "path": "network_swinir.py",
+          "sha256": "9e143898679ebeebc5d2fc94ad1b89c38aa4a4d43da4e0fcba0f93e476994913",
+          "sizeBytes": 36832,
+          "sourceCache": "restoration/network_swinir.py",
+          "url": "https://raw.githubusercontent.com/JingyunLiang/SwinIR/6545850fbf8df298df73d81f3e8cba638787c8bd/models/network_swinir.py"
+        },
+        {
+          "path": "LICENSE.txt",
+          "sha256": "d66ccc11682c7458b19b376e1335e8665cbe412ff71f554bfec25f1791cddfa0",
+          "sizeBytes": 11348,
+          "sourceCache": "restoration/LICENSE"
+        },
+        {
+          "path": "SOURCE.json",
+          "content": "{\n  \"id\": \"swinir-psnr\",\n  \"profile\": \"restoration\",\n  \"installRoot\": \"_internal/vision_models/production/swinir-psnr\",\n  \"sourceLicense\": \"Apache-2.0\",\n  \"localInstallationAllowed\": true,\n  \"publicDistributionAllowed\": false,\n  \"weightLicenseStatus\": \"official-weight-origin-verified; no-separate-weight-redistribution-grant-confirmed\",\n  \"distributionAdmission\": \"local-review-resource-pack-only\",\n  \"source\": {\n    \"name\": \"003_realSR_BSRGAN_DFOWMFC_s64w8_SwinIR-L_x4_PSNR.pth\",\n    \"sha256\": \"450be6eac63a59959b55a83df6743444de9f018547f81d16f699b3680d366ad7\",\n    \"bytes\": 142473947,\n    \"official_url\": \"https://github.com/JingyunLiang/SwinIR/releases/download/v0.0/003_realSR_BSRGAN_DFOWMFC_s64w8_SwinIR-L_x4_PSNR.pth\",\n    \"license_url\": \"https://github.com/JingyunLiang/SwinIR/blob/6545850fbf8df298df73d81f3e8cba638787c8bd/LICENSE\",\n    \"source_revision\": \"6545850fbf8df298df73d81f3e8cba638787c8bd\",\n    \"distribution\": false\n  }\n}\n",
+          "sha256": "99c9e9f901d7eb4224c525e64380950c55a163b1b297afa9cf0081b12507f900",
+          "sizeBytes": 940
+        }
+      ]
+    },
+    {
+      "id": "realesrgan-x4plus",
+      "profile": "restoration",
+      "installRoot": "_internal/vision_models/production/realesrgan-x4plus",
+      "sourceLicense": "BSD-3-Clause",
+      "localInstallationAllowed": true,
+      "publicDistributionAllowed": false,
+      "weightLicenseStatus": "official-weight-origin-verified; no-separate-weight-redistribution-grant-confirmed",
+      "distributionAdmission": "local-review-resource-pack-only",
+      "source": {
+        "name": "RealESRGAN_x4plus.pth",
+        "sha256": "4fa0d38905f75ac06eb49a7951b426670021be3018265fd191d2125df9d682f1",
+        "bytes": 67040989,
+        "official_url": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth",
+        "official_asset_api_url": "https://api.github.com/repos/xinntao/Real-ESRGAN/releases/assets/40831506",
+        "official_asset_id": 40831506,
+        "official_digest": null,
+        "license_url": "https://raw.githubusercontent.com/xinntao/Real-ESRGAN/master/LICENSE",
+        "license_sha256": "4a699ec4863d96a91fc265948a0c90033f7e8735d515524dcf3444736406e0c2",
+        "distribution": false,
+        "purpose": "bounded inference quality comparison; no training",
+        "networkSource": {
+          "package": "basicsr",
+          "version": "1.4.2",
+          "module": "basicsr/archs/rrdbnet_arch.py",
+          "sha256": "6aa8eb3f77e918b90eeff4ebfaf8745abe0c40eb8fcc03abbc1928693d70ab58",
+          "installedOfficialPackage": true
+        }
+      },
+      "files": [
+        {
+          "path": "RealESRGAN_x4plus.pth",
+          "sha256": "4fa0d38905f75ac06eb49a7951b426670021be3018265fd191d2125df9d682f1",
+          "sizeBytes": 67040989,
+          "sourceCache": "restoration/RealESRGAN_x4plus.pth",
+          "url": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth"
+        },
+        {
+          "path": "LICENSE.txt",
+          "sha256": "4a699ec4863d96a91fc265948a0c90033f7e8735d515524dcf3444736406e0c2",
+          "sizeBytes": 1519,
+          "sourceCache": "restoration/RealESRGAN_x4plus.pth.LICENSE"
+        },
+        {
+          "path": "SOURCE.json",
+          "content": "{\n  \"id\": \"realesrgan-x4plus\",\n  \"profile\": \"restoration\",\n  \"installRoot\": \"_internal/vision_models/production/realesrgan-x4plus\",\n  \"sourceLicense\": \"BSD-3-Clause\",\n  \"localInstallationAllowed\": true,\n  \"publicDistributionAllowed\": false,\n  \"weightLicenseStatus\": \"official-weight-origin-verified; no-separate-weight-redistribution-grant-confirmed\",\n  \"distributionAdmission\": \"local-review-resource-pack-only\",\n  \"source\": {\n    \"name\": \"RealESRGAN_x4plus.pth\",\n    \"sha256\": \"4fa0d38905f75ac06eb49a7951b426670021be3018265fd191d2125df9d682f1\",\n    \"bytes\": 67040989,\n    \"official_url\": \"https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth\",\n    \"official_asset_api_url\": \"https://api.github.com/repos/xinntao/Real-ESRGAN/releases/assets/40831506\",\n    \"official_asset_id\": 40831506,\n    \"official_digest\": null,\n    \"license_url\": \"https://raw.githubusercontent.com/xinntao/Real-ESRGAN/master/LICENSE\",\n    \"license_sha256\": \"4a699ec4863d96a91fc265948a0c90033f7e8735d515524dcf3444736406e0c2\",\n    \"distribution\": false,\n    \"purpose\": \"bounded inference quality comparison; no training\",\n    \"networkSource\": {\n      \"package\": \"basicsr\",\n      \"version\": \"1.4.2\",\n      \"module\": \"basicsr/archs/rrdbnet_arch.py\",\n      \"sha256\": \"6aa8eb3f77e918b90eeff4ebfaf8745abe0c40eb8fcc03abbc1928693d70ab58\",\n      \"installedOfficialPackage\": true\n    }\n  }\n}\n",
+          "sha256": "226839a027607caa9be2fb5e0165e9ed944d3acbc96001bf4499a49cccdd994f",
+          "sizeBytes": 1387
+        }
+      ]
+    },
+    {
+      "id": "mambairv2",
+      "profile": "restoration",
+      "installRoot": "_internal/vision_models/production/mambairv2",
+      "sourceLicense": "Apache-2.0; selective-scan reference Apache-2.0",
+      "localInstallationAllowed": true,
+      "publicDistributionAllowed": false,
+      "weightLicenseStatus": "official-release-weight-origin-verified; separate weight redistribution not inferred from source license",
+      "distributionAdmission": "local-review-resource-pack-only",
+      "source": {
+        "schemaVersion": 1,
+        "model": "MambaIRv2 Large classicSR x4",
+        "repository": "https://github.com/csguoh/MambaIR",
+        "revision": "33d7b3460c4665229334cc8de38c7f4c766ed3be",
+        "weightUrl": "https://github.com/csguoh/MambaIR/releases/download/v1.0/mambairv2_classicSR_Large_x4.pth",
+        "sourceLicense": "Apache-2.0",
+        "weightRedistribution": "recorded; not inferred from source license",
+        "scanReferenceRepository": "https://github.com/state-spaces/mamba",
+        "scanReferenceRevision": "e9594ce1c732d97440f0332fdc43170a2294dbfa",
+        "scanReferenceLicense": "Apache-2.0",
+        "fixedConfiguration": "test_MambaIRv2_SRLarge_x4.yml",
+        "newTraining": false,
+        "runtime": "PyTorch only; local FP32 affine scan validated against pinned official reference; TF32 disabled"
+      },
+      "files": [
+        {
+          "path": "LICENSE",
+          "sourceCache": "restoration/mambairv2/LICENSE",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+          "sizeBytes": 11357
+        },
+        {
+          "path": "MAMBA-LICENSE.txt",
+          "sourceCache": "restoration/mambairv2/MAMBA-LICENSE.txt",
+          "sha256": "760939b000194d04548ede6a857bbe735d1695d8422ec85955c8e2bd7f4b95c5",
+          "sizeBytes": 11348
+        },
+        {
+          "path": "mambairv2_arch.py",
+          "sourceCache": "restoration/mambairv2/mambairv2_arch.py",
+          "sha256": "89123f88ed2bcd343dcb64515453046eeec92321d4ebc727d99bbf7ad7f1051c",
+          "sizeBytes": 40067
+        },
+        {
+          "path": "mambairv2_classicSR_Large_x4.pth",
+          "sourceCache": "restoration/mambairv2/mambairv2_classicSR_Large_x4.pth",
+          "sha256": "9f9090cda07ed4b8498c2db9863c8c263cd300f445017ec77b7fc8babbb8a78d",
+          "sizeBytes": 138562575
+        },
+        {
+          "path": "revision.txt",
+          "sourceCache": "restoration/mambairv2/revision.txt",
+          "sha256": "1590f42afeaa72c077e40b986577291691f8808357a71ba76f68292a94342813",
+          "sizeBytes": 40
+        },
+        {
+          "path": "scan-revision.txt",
+          "sourceCache": "restoration/mambairv2/scan-revision.txt",
+          "sha256": "c941bf932796b3b2bc0cf3ac5a411ee168aa368ae3bcd99222ce4438e557476f",
+          "sizeBytes": 40
+        },
+        {
+          "path": "selective_scan_interface.reference.py",
+          "sourceCache": "restoration/mambairv2/selective_scan_interface.reference.py",
+          "sha256": "a570f4f15a2eebabf62024a9ffb0d1dde04280300405e1632f43809f448bfb1a",
+          "sizeBytes": 20441
+        },
+        {
+          "path": "SOURCE.json",
+          "sourceCache": "restoration/mambairv2/SOURCE.json",
+          "sha256": "c7420381333955b4fa4581138eb6f6c53d08262e4fc25087c0e7940215a8479b",
+          "sizeBytes": 779
+        },
+        {
+          "path": "test_MambaIRv2_SRLarge_x4.yml",
+          "sourceCache": "restoration/mambairv2/test_MambaIRv2_SRLarge_x4.yml",
+          "sha256": "fbfe1b404b8dd0bd5d36e26cab3b4de305c98c12d785ab56ce3185f11a632785",
+          "sizeBytes": 2272
+        }
+      ]
+    },
+    {
+      "id": "transnetv2",
+      "profile": "scene",
+      "installRoot": "_internal/vision_models/production/transnetv2",
+      "sourceLicense": "MIT",
+      "localInstallationAllowed": true,
+      "publicDistributionAllowed": false,
+      "weightLicenseStatus": "official-repository-checkpoint-verified; exact lossless PyTorch remap; source license not treated as separate weight grant",
+      "distributionAdmission": "local-review-resource-pack-only",
+      "source": {
+        "schemaVersion": 1,
+        "repository": "https://github.com/soCzech/TransNetV2",
+        "revision": "85cef72af9a916bdfd7cc94a670c9cdfbf12d1ed",
+        "sourceLicense": "MIT",
+        "weightOrigin": "official-repository-Git-LFS-checkpoint",
+        "conversion": "pinned-official-name-and-axis-remapping; pure-Python-binary-checkpoint-reader",
+        "reader": {
+          "package": "tensorflow-checkpoint-reader",
+          "version": "0.2.2",
+          "repository": "https://github.com/shawwn/tensorflow-checkpoint-reader",
+          "license": "MIT"
+        },
+        "files": [
+          {
+            "file": "transnetv2_pytorch.py",
+            "sha256": "f7c1d437465579a8ec28a5add19853d2cb2755248ea4a4207678210a609428e1",
+            "sizeBytes": 12475
+          },
+          {
+            "file": "convert_weights.py",
+            "sha256": "3572d76ddccc92e7ccca13ac3c47aaf39c86f56ce4e392d4d0d6a60da05b42fa",
+            "sizeBytes": 4199
+          },
+          {
+            "file": "variables.index",
+            "sha256": "8b99e28b4ad11372d9a1ad9703298c2e370df14859da4245fdbe818e92dd403f",
+            "sizeBytes": 5526
+          },
+          {
+            "file": "variables.data-00000-of-00001",
+            "sha256": "b8c9dc3eb807583e6215cabee9ca61737b3eb1bceff68418b43bf71459669367",
+            "sizeBytes": 30516656
+          },
+          {
+            "file": "transnetv2-pytorch-weights.pth",
+            "sha256": "bb135534c7f734d421d84c66d2124e8f3971e5ce134962a23866383e1ea0c4c6",
+            "sizeBytes": 30509621
+          }
+        ],
+        "mappedFloat32Variables": 84,
+        "stateKeyCount": 90,
+        "everyTensorInversePermutationExact": true,
+        "savedStateExact": true,
+        "tensorflowRuntimeImported": false,
+        "tensorflowForwardEquivalenceTested": false,
+        "torchForwardFunctionalTested": false
+      },
+      "files": [
+        {
+          "path": "transnetv2_pytorch.py",
+          "sourceCache": "scene/transnetv2/transnetv2_pytorch.py",
+          "sha256": "f7c1d437465579a8ec28a5add19853d2cb2755248ea4a4207678210a609428e1",
+          "sizeBytes": 12475
+        },
+        {
+          "path": "transnetv2-pytorch-weights.pth",
+          "sourceCache": "scene/transnetv2/transnetv2-pytorch-weights.pth",
+          "sha256": "bb135534c7f734d421d84c66d2124e8f3971e5ce134962a23866383e1ea0c4c6",
+          "sizeBytes": 30509621
+        },
+        {
+          "path": "identity.json",
+          "sourceCache": "scene/transnetv2/identity.json",
+          "sha256": "997dd899bec05d2bdf1efc4948c4776dd6589d9ac79a8574663a358bc4cf6521",
+          "sizeBytes": 48692
+        },
+        {
+          "path": "LICENSE",
+          "sourceCache": "scene/transnetv2/LICENSE",
+          "sha256": "a8d7a056688ccedebe89f18fd60f1a47128df94cb82669cd02459934919cbb6f",
+          "sizeBytes": 1072
+        },
+        {
+          "path": "README.md",
+          "sourceCache": "scene/transnetv2/README.md",
+          "sha256": "028c25f4aa54b18ee5f02cbc1592c46d10f0004c9b58ddbe02d3574e73da3a7c",
+          "sizeBytes": 1451
+        },
+        {
+          "path": "revision.txt",
+          "sourceCache": "scene/transnetv2/revision.txt",
+          "sha256": "f8cbe590c8c06d6951be94a6b10bd0d206026f5540366c675df81bc3ba913cf8",
+          "sizeBytes": 40
+        },
+        {
+          "path": "convert_weights.py",
+          "sourceCache": "scene/transnetv2/convert_weights.py",
+          "sha256": "3572d76ddccc92e7ccca13ac3c47aaf39c86f56ce4e392d4d0d6a60da05b42fa",
+          "sizeBytes": 4199
+        },
+        {
+          "path": "variables.index",
+          "sourceCache": "scene/transnetv2/variables.index",
+          "sha256": "8b99e28b4ad11372d9a1ad9703298c2e370df14859da4245fdbe818e92dd403f",
+          "sizeBytes": 5526
+        },
+        {
+          "path": "variables.data-00000-of-00001",
+          "sourceCache": "scene/transnetv2/variables.data-00000-of-00001",
+          "sha256": "b8c9dc3eb807583e6215cabee9ca61737b3eb1bceff68418b43bf71459669367",
+          "sizeBytes": 30516656
+        },
+        {
+          "path": "transnetv2.reference.py",
+          "sourceCache": "scene/transnetv2/transnetv2.reference.py",
+          "sha256": "f55b3a75727d1502438707ac15e8f6257a736817e713e2113e4b84176500ca65",
+          "sizeBytes": 8045
+        },
+        {
+          "path": "SOURCE.json",
+          "content": "{\n  \"id\": \"transnetv2\",\n  \"profile\": \"scene\",\n  \"installRoot\": \"_internal/vision_models/production/transnetv2\",\n  \"sourceLicense\": \"MIT\",\n  \"localInstallationAllowed\": true,\n  \"publicDistributionAllowed\": false,\n  \"weightLicenseStatus\": \"official-repository-checkpoint-verified; exact lossless PyTorch remap; source license not treated as separate weight grant\",\n  \"distributionAdmission\": \"local-review-resource-pack-only\",\n  \"source\": {\n    \"schemaVersion\": 1,\n    \"repository\": \"https://github.com/soCzech/TransNetV2\",\n    \"revision\": \"85cef72af9a916bdfd7cc94a670c9cdfbf12d1ed\",\n    \"sourceLicense\": \"MIT\",\n    \"weightOrigin\": \"official-repository-Git-LFS-checkpoint\",\n    \"conversion\": \"pinned-official-name-and-axis-remapping; pure-Python-binary-checkpoint-reader\",\n    \"reader\": {\n      \"package\": \"tensorflow-checkpoint-reader\",\n      \"version\": \"0.2.2\",\n      \"repository\": \"https://github.com/shawwn/tensorflow-checkpoint-reader\",\n      \"license\": \"MIT\"\n    },\n    \"files\": [\n      {\n        \"file\": \"transnetv2_pytorch.py\",\n        \"sha256\": \"f7c1d437465579a8ec28a5add19853d2cb2755248ea4a4207678210a609428e1\",\n        \"sizeBytes\": 12475\n      },\n      {\n        \"file\": \"convert_weights.py\",\n        \"sha256\": \"3572d76ddccc92e7ccca13ac3c47aaf39c86f56ce4e392d4d0d6a60da05b42fa\",\n        \"sizeBytes\": 4199\n      },\n      {\n        \"file\": \"variables.index\",\n        \"sha256\": \"8b99e28b4ad11372d9a1ad9703298c2e370df14859da4245fdbe818e92dd403f\",\n        \"sizeBytes\": 5526\n      },\n      {\n        \"file\": \"variables.data-00000-of-00001\",\n        \"sha256\": \"b8c9dc3eb807583e6215cabee9ca61737b3eb1bceff68418b43bf71459669367\",\n        \"sizeBytes\": 30516656\n      },\n      {\n        \"file\": \"transnetv2-pytorch-weights.pth\",\n        \"sha256\": \"bb135534c7f734d421d84c66d2124e8f3971e5ce134962a23866383e1ea0c4c6\",\n        \"sizeBytes\": 30509621\n      }\n    ],\n    \"mappedFloat32Variables\": 84,\n    \"stateKeyCount\": 90,\n    \"everyTensorInversePermutationExact\": true,\n    \"savedStateExact\": true,\n    \"tensorflowRuntimeImported\": false,\n    \"tensorflowForwardEquivalenceTested\": false,\n    \"torchForwardFunctionalTested\": false\n  }\n}\n",
+          "sha256": "4012c9e37a6854d48bff82df67fc651efa38a0deafb2fe9448a934a02f17b2a0",
+          "sizeBytes": 2131
+        }
+      ]
+    }
+  ]
+}

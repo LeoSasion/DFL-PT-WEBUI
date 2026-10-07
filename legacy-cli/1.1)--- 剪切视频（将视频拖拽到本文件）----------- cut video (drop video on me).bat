@@ -2,6 +2,7 @@
 
 cd /d "%~dp0.."
 call "%~dp0..\_internal\setenv.bat"
+if errorlevel 1 exit /b %errorlevel%
 
 set "INPUT_VIDEO=%~1"
 if not defined INPUT_VIDEO (

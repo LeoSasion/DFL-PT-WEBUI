@@ -3,7 +3,11 @@ param(
     [string]$ProjectRoot = '',
     [switch]$NoNetwork,
     [switch]$SkipFFmpeg,
-    [switch]$PreserveExisting
+    [switch]$PreserveExisting,
+    [string]$ResourcePackPath = '',
+    [string]$VisionCacheRoot = '',
+    [switch]$IncludeRestoration,
+    [switch]$IncludeScene
 )
 $ErrorActionPreference = 'Stop'
 # A Node process launched from PowerShell 7 can pass incompatible module paths
@@ -57,8 +61,7 @@ $dflRevision = 'e4b7543ffa1d73b26fce1e31852727f658ba490c'
 $models = @(
     @{ Name='S3FD.npy'; Hash='b4894ecfba8e6461eb1a69490f76184620c816605238ff0ba3216f1143a06c29'; Repository='iperov/DeepFaceLab'; Revision=$dflRevision },
     @{ Name='2DFAN.npy'; Hash='ca2dc7f0b2aa146842e6de2119fedff1142188b7cff5ab702564952d6cba4624'; Repository='iperov/DeepFaceLab'; Revision=$dflRevision },
-    @{ Name='3DFAN.npy'; Hash='b50d2faf0fd4d6503aba9d19365e7aff06f2ea96bac37fc5f8f25a191a0a63a9'; Repository='iperov/DeepFaceLab'; Revision=$dflRevision },
-    @{ Name='FaceEnhancer.npy'; Hash='254958f67c9adfe97a0c9fc7b3c343ba490a1519c01862a50945fa228875476a'; Repository='iperov/DeepFaceLab'; Revision=$dflRevision }
+    @{ Name='3DFAN.npy'; Hash='b50d2faf0fd4d6503aba9d19365e7aff06f2ea96bac37fc5f8f25a191a0a63a9'; Repository='iperov/DeepFaceLab'; Revision=$dflRevision }
 )
 foreach ($model in $models) {
     $source = Resolve-VisionPath ('_internal/DeepFaceLab/facelib/' + $model.Name)
@@ -143,5 +146,21 @@ if (-not $SkipFFmpeg -and -not ($ffmpegBinariesReady -and $ffmpegDocumentationRe
         Install-Verified $file.FullName ('_internal/ffmpeg/' + $relative) $resourceHash
     }
 }
-if ($SkipFFmpeg) { Write-Host 'Helper weights verified: S3FD, 2DFAN, 3DFAN, FaceEnhancer, generic XSeg, SFace. FFmpeg left to the caller.' }
-else { Write-Host 'Visual dependencies verified: FFmpeg, S3FD, 2DFAN, 3DFAN, FaceEnhancer, generic XSeg, SFace.' }
+if ($SkipFFmpeg) { Write-Host 'Helper weights verified: S3FD, 2DFAN, 3DFAN, generic XSeg, SFace. FFmpeg left to the caller.' }
+else { Write-Host 'Visual dependencies verified: FFmpeg, S3FD, 2DFAN, 3DFAN, generic XSeg, SFace.' }
+# Resource acquisition is an installation step; inference never downloads.
+$resourcePython = Resolve-VisionPath '.venv/Scripts/python.exe'
+$resourceTool = Resolve-VisionPath 'tools/prepare-production-vision.py'
+$resourceProfiles = @('production')
+if ($IncludeRestoration) { $resourceProfiles += 'restoration' }
+if ($IncludeScene) { $resourceProfiles += 'scene' }
+if ($ResourcePackPath) {
+    & $resourcePython -I $resourceTool install-pack --project-root $visionRoot --output $ResourcePackPath --profiles @resourceProfiles
+} else {
+    $resourceOptions = @('install','--project-root',$visionRoot,'--profiles') + $resourceProfiles
+    if (-not $VisionCacheRoot) { $VisionCacheRoot = Join-Path $visionRoot 'workspace/.vision-models' }
+    $resourceOptions += @('--cache-root',$VisionCacheRoot)
+    if (-not $NoNetwork) { $resourceOptions += '--allow-download' }
+    & $resourcePython -I $resourceTool @resourceOptions
+}
+if ($LASTEXITCODE -ne 0) { throw 'Production vision resources incomplete. Supply a verified separate ResourcePackPath (TUFA official weights require explicit acquisition); no fallback or automatic inference download is permitted.' }

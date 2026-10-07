@@ -41,7 +41,21 @@ namespace DflPtWebUi.Launcher
                     throw new InvalidOperationException("无法加载 _internal\\setenv.bat。退出码：" + process.ExitCode);
                 }
 
-                return ParseOutput(output, projectRoot);
+                IDictionary<string, string> values = ParseOutput(output, projectRoot);
+                string workspace;
+                string activeId;
+                if (!values.TryGetValue("WORKSPACE", out workspace)
+                    || !values.TryGetValue("DFL_ACTIVE_PROJECT_ID", out activeId)
+                    || !System.Text.RegularExpressions.Regex.IsMatch(activeId, "^[a-z0-9][a-z0-9-]{0,47}$"))
+                {
+                    throw new InvalidOperationException("项目环境没有有效的当前项目与工作区。");
+                }
+                string expected = Path.GetFullPath(Path.Combine(projectRoot,
+                    activeId == "default" ? "workspace" : Path.Combine("workspaces", activeId)));
+                if (!String.Equals(Path.GetFullPath(workspace), expected, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("当前项目环境工作区不一致。");
+                if (logs != null) logs.Add("environment", "当前项目：" + activeId + " | 工作区：" + workspace, "info");
+                return values;
             }
         }
 

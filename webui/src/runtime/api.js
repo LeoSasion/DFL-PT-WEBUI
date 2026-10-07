@@ -172,6 +172,7 @@ export function watchOperations({
   onError,
   onConnectionChange,
   onSettled,
+  onRecords,
   requestTimeoutMs = 10_000,
   pollIntervalMs = 750,
   maxPollIntervalMs = 8_000,
@@ -216,6 +217,7 @@ export function watchOperations({
           throw error;
         }
         const activeRecords = records.filter((item) => ACTIVE_OPERATION_STATES.has(item?.status));
+        notify(onRecords, records);
         const byId = new Map(records.map(item => [item.id, item]));
         for (const [id, previous] of observed) {
           const current = byId.get(id);
@@ -397,6 +399,29 @@ export const runtimeApi = {
     body: JSON.stringify({ kind, side, parameters }),
   }),
   runOperation,
+  restorationInputs: (side, { offset = 0, limit = 500 } = {}) => request(`/api/restoration/inputs?side=${encodeURIComponent(side)}&offset=${offset}&limit=${limit}`),
+  restorationTasks: () => request("/api/restoration/tasks"),
+  createRestoration: payload => request("/api/restoration/tasks", { method: "POST", body: JSON.stringify(payload) }),
+  restorationTask: taskId => request(`/api/restoration/tasks/${encodeURIComponent(taskId)}`),
+  cancelRestoration: taskId => request(`/api/restoration/tasks/${encodeURIComponent(taskId)}/cancel`, { method: "POST" }),
+  maskAssistDrafts: side => request(`/api/mask-assist/${encodeURIComponent(side)}/drafts`),
+  maskAssistDraft: (side, id) => request(`/api/mask-assist/${encodeURIComponent(side)}/drafts/${encodeURIComponent(id)}`),
+  createMaskAssist: (side, names, options = {}) => runOperation("mask-assist", side, { names }, options),
+  publishMaskAssist: (side, draftId, options = {}) => runOperation("mask-publish", side, { draftId, reviewed: true }, options),
+  bestFacesetPlans: side => request(`/api/best-facesets/${encodeURIComponent(side)}/plans`),
+  mergePreview: id => request(`/api/tools/merge-preview/${encodeURIComponent(id)}`),
+  bestFacesetStatus: () => request("/api/best-facesets/status"),
+  bestFacesetDraft: (side, { projectKey } = {}) => request(`/api/best-facesets/${encodeURIComponent(side)}/draft${projectKey ? `?projectKey=${encodeURIComponent(projectKey)}` : ""}`),
+  saveBestFacesetDraft: (side, payload) => request(`/api/best-facesets/${encodeURIComponent(side)}/draft`, { method: "POST", body: JSON.stringify(payload) }),
+  trainingInputs: ({ projectKey, ...options } = {}) => request(`/api/training-inputs${projectKey ? `?projectKey=${encodeURIComponent(projectKey)}` : ""}`, options),
+  saveTrainingInput: payload => request("/api/training-inputs", { method: "POST", body: JSON.stringify(payload) }),
+  bestFacesetPlan: (side, id, { offset = 0, limit = 120, status } = {}) => request(`/api/best-facesets/${encodeURIComponent(side)}/plans/${encodeURIComponent(id)}?offset=${offset}&limit=${limit}${status ? `&status=${encodeURIComponent(status)}` : ""}`),
+  createBestFaceset: (side, parameters, options = {}) => runOperation("best-faceset-init", side, parameters, options),
+  analyzeBestFaceset: (side, planId, parameters, options = {}) => runOperation("best-faceset-analyze", side, { ...parameters, planId }, options),
+  selectBestFaceset: (side, planId, identityReferences, options = {}) => runOperation("best-faceset-select", side, { planId, identityReferences }, options),
+  publishBestFaceset: (side, planId, dryRun, options = {}) => runOperation("best-faceset-publish", side,
+    { planId, dryRun, expectedReferences: options.expectedReferences, expectedRevision: options.expectedRevision }, options),
+  recoverBestFaceset: (side, planId, dryRun, options = {}) => runOperation("best-faceset-recover", side, { planId, dryRun }, options),
   watchOperations,
   resumeOperation,
   operation: (id, options = {}) => request(`/api/operations/${encodeURIComponent(id)}`, options),
@@ -521,10 +546,10 @@ export const runtimeApi = {
   ),
   importVideo: uploadVideo,
   videoTimeline: (side) => request(`/api/tools/video/${side}/timeline`),
-  detectVideoScenes: (side, threshold, options = {}) => runOperation(
+  detectVideoScenes: (side, parameters, options = {}) => runOperation(
     "detect-scenes",
     side,
-    { threshold },
+    typeof parameters === "number" ? { threshold: parameters } : parameters,
     options,
   ),
   saveVideoSegments: (side, segments) => request(`/api/tools/video/${side}/segments`, {

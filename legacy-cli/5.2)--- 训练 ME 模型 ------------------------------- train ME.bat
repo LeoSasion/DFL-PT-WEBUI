@@ -3,6 +3,7 @@ setlocal EnableExtensions
 chcp 65001 >nul
 title DFL-PT-WEBUI ME Training
 call "%~dp0..\_internal\setenv.bat"
+if errorlevel 1 exit /b %errorlevel%
 echo PyTorch ME - Ctrl+C saves and stops training.
 "%PYTHON_EXECUTABLE%" "%DFL_ROOT%\main.py" train ^
     --training-data-src-dir "%WORKSPACE%\data_src\aligned" ^

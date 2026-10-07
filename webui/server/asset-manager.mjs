@@ -11,7 +11,7 @@ import {
   unlink,
 } from "node:fs/promises";
 import { createHash, randomBytes } from "node:crypto";
-import { spawn } from "node:child_process";
+import { runHelperProcess } from "./helper-process.mjs";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { buildDflEnvironment } from "./environment.mjs";
@@ -293,120 +293,21 @@ export async function resolveQuarantinedImage(side, token, encodedName) {
   return target;
 }
 
-function runAssetHelper(args, input, {
-  signal,
-  onProgress,
-  timeoutMs = 120_000,
-} = {}) {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(new AssetError("操作已取消", "OPERATION_CANCELLED", 499));
-      return;
+async function runAssetHelper(args, input, { signal, onProgress, timeoutMs = 120_000 } = {}) {
+  let pending = "";
+  const progress = line => {
+    if (line.startsWith("DFL_PROGRESS ")) {
+      try { onProgress?.(JSON.parse(line.slice(13))); } catch { /* malformed progress is not a result */ }
     }
-    const helper = path.join(PATHS.webuiRoot, "python", "dfl_asset_tool.py");
-    const child = spawn(PATHS.python, [helper, ...args], {
-      cwd: PATHS.currentDflRoot,
-      env: buildDflEnvironment("current"),
-      windowsHide: true,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    const stdout = [];
-    const stderr = [];
-    let stderrRemainder = "";
-    let outputBytes = 0;
-    let settled = false;
-    const finish = (callback, value) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      signal?.removeEventListener("abort", abort);
-      callback(value);
-    };
-    const abort = () => {
-      child.kill();
-      finish(reject, new AssetError("操作已取消", "OPERATION_CANCELLED", 499));
-    };
-    signal?.addEventListener("abort", abort, { once: true });
-    const timeout = setTimeout(() => {
-      child.kill();
-      finish(
-        reject,
-        new AssetError(
-          `DFL 分析超过 ${Math.ceil(timeoutMs / 60_000)} 分钟，已安全终止`,
-          "HELPER_TIMEOUT",
-          504,
-        ),
-      );
-    }, timeoutMs);
-    const collect = (target) => (chunk) => {
-      outputBytes += chunk.length;
-      if (outputBytes > MAX_HELPER_OUTPUT) {
-        child.kill();
-        finish(
-          reject,
-          new AssetError("DFL 分析响应超过 4 MiB", "HELPER_OUTPUT_TOO_LARGE", 500),
-        );
-        return;
-      }
-      target.push(chunk);
-    };
-    child.stdout.on("data", collect(stdout));
-    child.stderr.on("data", (chunk) => {
-      outputBytes += chunk.length;
-      if (outputBytes > MAX_HELPER_OUTPUT) {
-        child.kill();
-        finish(
-          reject,
-          new AssetError("DFL 分析响应超过 4 MiB", "HELPER_OUTPUT_TOO_LARGE", 500),
-        );
-        return;
-      }
-      stderrRemainder += chunk.toString("utf8");
-      const lines = stderrRemainder.split(/\r?\n/);
-      stderrRemainder = lines.pop() || "";
-      for (const line of lines) {
-        if (line.startsWith("DFL_PROGRESS ")) {
-          try {
-            onProgress?.(JSON.parse(line.slice("DFL_PROGRESS ".length)));
-          } catch {
-            // A malformed progress update must not invalidate the analysis result.
-          }
-        } else if (line) {
-          stderr.push(Buffer.from(`${line}\n`, "utf8"));
-        }
-      }
-    });
-    child.once("error", (error) => finish(reject, error));
-    child.once("exit", (code) => {
-      if (settled) return;
-      if (stderrRemainder) {
-        if (stderrRemainder.startsWith("DFL_PROGRESS ")) {
-          try {
-            onProgress?.(JSON.parse(stderrRemainder.slice("DFL_PROGRESS ".length)));
-          } catch {
-            // Ignore malformed progress while preserving the final result.
-          }
-        } else {
-          stderr.push(Buffer.from(stderrRemainder, "utf8"));
-        }
-      }
-      if (code !== 0) {
-        finish(reject, new AssetError(
-          Buffer.concat(stderr).toString("utf8").trim() || "读取 DFL 元数据失败",
-          "DFL_METADATA_FAILED",
-          422,
-        ));
-        return;
-      }
-      try {
-        finish(resolve, JSON.parse(Buffer.concat(stdout).toString("utf8")));
-      } catch {
-        finish(reject, new AssetError("DFL 分析响应不是有效 JSON", "DFL_METADATA_INVALID", 500));
-      }
-    });
-    if (input === undefined) child.stdin.end();
-    else child.stdin.end(JSON.stringify(input));
+  };
+  const result = await runHelperProcess(PATHS.python, [path.join(PATHS.webuiRoot, "python", "dfl_asset_tool.py"), ...args], {
+    cwd: PATHS.currentDflRoot, env: buildDflEnvironment("current"), input, signal, timeoutMs,
+    label: "DFL 分析", maxBytes: MAX_HELPER_OUTPUT,
+    onStderr: chunk => { pending += chunk.toString("utf8"); const lines = pending.split(/\r?\n/); pending = lines.pop() || ""; lines.forEach(progress); },
   });
+  if (pending) progress(pending);
+  if (result.code !== 0) throw new AssetError(result.stderr.split(/\r?\n/).filter(line => !line.startsWith("DFL_PROGRESS ")).join("\n").trim() || "读取 DFL 元数据失败", "DFL_METADATA_FAILED", 422);
+  try { return JSON.parse(result.stdout); } catch { throw new AssetError("DFL 分析响应不是有效 JSON", "DFL_METADATA_INVALID", 500); }
 }
 
 export async function listAlignedAssets(side, { offset = 0, limit = 60 } = {}) {
@@ -530,7 +431,7 @@ export async function buildAlignedSimilarityGroups(
     return {
       side, workspaceKey: PATHS.workspaceRoot, threshold: safeThreshold, total: 0, analyzedCount: 0, invalidCount: 0,
       truncated: false, groupCount: 0, groupedCount: 0, ungroupedCount: 0,
-      method: "dct-hsv-edge-v1", groups: [], cached: false,
+      method: "dct-hsv-edge-ssim-complete-link-v2", groups: [], cached: false,
       fingerprint: before.fingerprint, mode, offset: safeOffset,
       compareOffset: safeCompareOffset, limit: safeLimit, windowSize,
       pageCount: 0, pageIndex: Math.floor(safeOffset / windowSize),

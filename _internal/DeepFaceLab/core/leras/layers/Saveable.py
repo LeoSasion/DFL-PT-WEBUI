@@ -1,6 +1,7 @@
 import pickle
 from pathlib import Path
 from core import pathex
+from core.safe_pickle import load_file as load_data_pickle_file
 import numpy as np
 import torch
 import os
@@ -95,8 +96,7 @@ class Saveable():
         # directory contains wrong-format checkpoints), treat as "not loaded"
         # so the caller can re-initialize.
         try:
-            with open(filepath, 'rb') as f:
-                d = pickle.load(f)
+            d = load_data_pickle_file(filepath, profile='weights')
         except (pickle.UnpicklingError, EOFError, ValueError, OSError) as e:
             try:
                 with open(filepath, 'rb') as f:

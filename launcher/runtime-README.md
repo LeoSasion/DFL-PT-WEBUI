@@ -24,6 +24,16 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\launcher\install-sourc
 
 Python 便携构建包含标准库、`venv` 和 `ensurepip`，无需注册到系统或修改全局 PATH。Python base 已存在时接受有效的独立 Python 3.12 x64；安装入口不会把现有 3.12.x 强制替换为 3.12.14。所有运行时目录和用户工作区均被 Git 忽略。
 
+2026-10-07 起安装使用 `release/python-locks/*-win-cp312.txt` 的全传递 SHA-256 锁，见 `release/python-sbom.json`。默认 production 61 包；restoration 78、validation 66、evaluation 89、scene 64 包分别用于修复、ONNX 数值校验、比较工具和场景检测。production 不带 h5py、onnxruntime、BasicSR/GFPGAN、tb-nightly、ffmpeg-python 或 pytest；桌面环境只装 GUI OpenCV wheel，不能叠装 headless。旧 timm 0.4.12 与 BasicSR 1.4.2 在完成同权重数值等价前保留，不把库更新当成质量提升。
+
+YOLO/TUFA/BiSeNet 等安装到 `_internal/vision_models/production/<id>`，源码、权重、许可证、原始来源逐件锁定，多个工作区共用；研究 cache 仅作旧兼容读源，不依赖 active 项目。新项目须提供独立核验资源包：`-ResourcePackPath <vision-local-review.zip>`；可选 `-RuntimeProfile restoration` 准备 MambaIRv2/Real-ESRGAN 人脸链及既有 SwinIR 源帧链。Aligned 与 ME 预测脸只使用 MambaIRv2/Real-ESRGAN，旧 FaceEnhancer 已移除。在线安装不会使推理自动下载。TUFA 的官方 Drive 权重暂无固定无交互下载 URL，缺资源时明确停止，不能静默回退 FAN。离线命令示例：
+
+```powershell
+.\launcher\install-source.ps1 -NoNetwork -WheelhousePath <wheelhouse> -ResourcePackPath <resource-pack>
+```
+
+`tools/runtime-dependencies.py generate --directory <maintainer-cache> --download` 是显式维护锁定入口；消费者只安装锁定 wheel。`tools/prepare-production-vision.py pack` 生成并核验独立本地复核包；`--public-distribution` 必须所有资源都有独立准入，未证实权重再分发许可的组会被拒绝。上游代码许可证不自动等同权重许可证，不改变本项目 GPL。generic XSeg 原权重及许可仍在 source/portable 两类主包中固定携带。
+
 三个运行时压缩包在解压前必须通过脚本内固定的 SHA-256 校验：
 
 | 文件 | SHA-256 |
@@ -58,7 +68,7 @@ Python 和 FFmpeg 散列来自相应 GitHub 上游发行资产的 SHA-256 digest
 .\install-source.bat -NoNetwork -ArchiveDirectory D:\DFL-offline\runtimes -WheelhousePath D:\DFL-offline\wheels
 ```
 
-`-WheelhousePath` 一旦指定，Python 包安装仅使用该目录，即使没有 `-NoNetwork` 也不访问包索引。仍需准备 WebUI 依赖与辅助权重。视觉权重可以预先安装到它们的目标路径，或放到 `.launcher-install/vision` 缓存；缓存名为 `S3FD.npy`、`2DFAN.npy`、`3DFAN.npy`、`FaceEnhancer.npy`、`sface-2021dec.onnx`、`XSeg_256.pth`，仍执行散列校验。
+`-WheelhousePath` 一旦指定，Python 包安装仅使用该目录，即使没有 `-NoNetwork` 也不访问包索引。仍需准备 WebUI 依赖与辅助权重。视觉权重可以预先安装到它们的目标路径，或放到 `.launcher-install/vision` 缓存；缓存名为 `S3FD.npy`、`2DFAN.npy`、`3DFAN.npy`、`sface-2021dec.onnx`、`XSeg_256.pth`，仍执行散列校验。
 
 源码包和便携包已经含通用 XSeg 推理权重、WF 元数据及来源许可，不依赖首次联网下载。仅 Git 克隆需要安装入口从本项目固定发行资产获取相同权重，并校验 `release/generic-xseg.json` 中的 SHA。它没有原训练状态或优化器，项目专用 XSeg 仍需标注和训练。
 
@@ -74,7 +84,7 @@ WebUI 依赖由项目内 Node/Corepack 执行 `pnpm install --frozen-lockfile`�
 
 ## 启动器本地检查
 
-完整便携发布包须同时包含 Python base 和 venv。Windows venv 会记录 base 的绝对路径；项目移动后，原有 `setup-runtime.ps1` 的本地检查会将 `pyvenv.cfg` 重新指向当前项目 Python base，WebUI 管理器在启动前调用它。
+完整便携发布包须同时包含 Python base 和 venv。解包或移动后先使用启动器、WebUI 入口或下方 bootstrap；它们将 `pyvenv.cfg` 重新指向当前项目 Python base。完成初始化后再调用 `.venv/Scripts/python.exe` 或安装可选依赖；不能把移动后尚未初始化的 venv 当作直接可运行环境。
 
 ```powershell
 # 已有便携环境的本地检查与迁移路径修复：
@@ -84,3 +94,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\launcher\bootstrap.ps1
 `setup-runtime.ps1 -InstallDependencies` 是原有显式包修复接口，需要先有 `_internal/python_base`；新用户可使用启动器或上面的 `install-source.bat` 完成独立环境准备。启动器使用官方源码 ZIP 进行首次安装；Git 更新和 EXE 自动更新仍关闭，运行时安装入口不配置 Git 远端或更新通道。
 
 本轮已实测官方 GitHub 源码获取，完成 Windows PowerShell 5.1/7 的离线安装路由与保护测试、已有环境的 `-NoNetwork` 验证，以及完整 UI/native 构建和打包校验；尚未在全新的 Windows 环境下载整套多 GB 运行时并完成启动、训练验收。
+
+## 最佳训练人脸
+
+在「工具 → 质量方案 → 最佳训练人脸」确认同人参考，以每批最多 500 张累计分析，再生成全量代表性训练子集。推荐数量是上限，多样性增益不足时提前停止；发布独立 `selected/`、`review/`、`rejected/` 与回执，保留源 JPEG、DFL 元数据和辅助记录。更改参考后必须重新生成才能发布；训练按钮只填写有效 `selected` 路径，不启动训练。使用说明见 `docs/BEST_TRAINING_FACESET_WEBUI.md`。
+
+生产仍使用以 Tenengrad 为主的既有综合质量分。唯一 Efficient-FIQA 对照未达到预先固定的替换收益门槛，资源不纳入生产包或生产 Python 依赖；它可通过显式评测工具准备，不会在推理时自动下载。该功能没有改变 ME 训练桥接，也没有新增训练架构。

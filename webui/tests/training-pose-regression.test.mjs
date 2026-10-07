@@ -120,3 +120,107 @@ test("pose regression keeps confidence separate and classifies metric direction"
   assert.equal(result.totals.regressed, 1);
   assert.ok(!Object.hasOwn(result, "score"));
 });
+
+test("ME bridge flat reconstruction metrics populate shared pose cells", () => {
+  const flatSample = (id, metrics, side = "dst") => ({
+    ...sample(id, "p0-y15", {}, side),
+    metrics,
+    variants: ["input", "reconstruction", "target-mask", "predicted-mask"],
+  });
+  for (const side of ["src", "dst"]) {
+    const baseline = snapshot({
+      samples: [1, 2, 3].map((index) => flatSample(`${side}-p0-y15-0${index}`, {
+        maskedMse: 0.007,
+        eyesMouthMse: 0.02,
+        maskDice: 0.8,
+        sharpnessRatio: 0.2,
+        ...(side === "dst" ? { swap: { maskDice: 0.7, sharpnessRatio: 0.1 } } : {}),
+      }, side)),
+    });
+    const current = snapshot({
+      iteration: 2000,
+      samples: [1, 2, 3].map((index) => flatSample(`${side}-p0-y15-0${index}`, {
+        maskedMse: 0.004,
+        eyesMouthMse: 0.01,
+        maskDice: 0.9,
+        sharpnessRatio: 0.3,
+        ...(side === "dst" ? { swap: { maskDice: 0.75, sharpnessRatio: 0.15 } } : {}),
+      }, side)),
+    });
+    const result = buildTrainingPoseRegression({ baseline, current, side });
+    const cell = result.cells.find(({ id }) => id === "p0-y15");
+    assert.equal(result.sharedSampleCount, 3);
+    assert.equal(cell.sampleCount, 3);
+    assert.equal(cell.confidence, 1);
+    assert.equal(cell.status, "improved");
+    for (const metric of Object.values(cell.metrics)) {
+      assert.equal(metric.sampleCount, 3);
+      assert.equal(metric.status, "improved");
+    }
+    assert.equal(result.totals.improved, 1);
+  }
+});
+
+test("explicit reconstruction metrics take precedence over flat snapshot keys", () => {
+  const baseline = snapshot({
+    samples: [{
+      ...sample("dst-p0-y0-01", "p0-y0", { maskedMse: 0.1 }),
+      metrics: { maskedMse: 0.2, reconstruction: { maskedMse: 0.1 } },
+    }],
+  });
+  const current = snapshot({
+    samples: [{
+      ...sample("dst-p0-y0-01", "p0-y0", { maskedMse: 0.08 }),
+      metrics: { maskedMse: 0.4, reconstruction: { maskedMse: 0.08 } },
+    }],
+  });
+  const cell = buildTrainingPoseRegression({ baseline, current }).cells
+    .find(({ id }) => id === "p0-y0");
+  assert.equal(cell.status, "improved");
+  assert.equal(cell.selectedMetric.baseline, 0.1);
+  assert.equal(cell.selectedMetric.current, 0.08);
+
+  for (const reconstruction of [null, {}, { maskedMse: null }]) {
+    const invalidCurrent = {
+      ...current,
+      samples: [{ ...current.samples[0], metrics: { maskedMse: 0.04, reconstruction } }],
+    };
+    const invalidCell = buildTrainingPoseRegression({ baseline, current: invalidCurrent }).cells
+      .find(({ id }) => id === "p0-y0");
+    assert.equal(invalidCell.status, "empty");
+    assert.equal(invalidCell.sampleCount, 0);
+  }
+});
+
+test("swap metrics never fall back to reconstruction or flat snapshot keys", () => {
+  const baseline = snapshot({
+    samples: [{
+      ...sample("dst-p0-y0-01", "p0-y0", { maskDice: 0.5 }),
+      metrics: { maskDice: 0.5, reconstruction: { maskDice: 0.5 } },
+    }],
+  });
+  const current = snapshot({
+    samples: [{
+      ...sample("dst-p0-y0-01", "p0-y0", { maskDice: 0.8 }),
+      metrics: { maskDice: 0.8, reconstruction: { maskDice: 0.8 } },
+    }],
+  });
+  const options = { baseline, current, channel: "swap", metricKey: "maskDice" };
+  const missing = buildTrainingPoseRegression(options).cells
+    .find(({ id }) => id === "p0-y0");
+  assert.equal(missing.status, "empty");
+  assert.equal(missing.sampleCount, 0);
+
+  const withSwap = (snapshot, maskDice) => ({
+    ...snapshot,
+    samples: [{ ...snapshot.samples[0], metrics: { ...snapshot.samples[0].metrics, swap: { maskDice } } }],
+  });
+  const cell = buildTrainingPoseRegression({
+    ...options,
+    baseline: withSwap(baseline, 0.9),
+    current: withSwap(current, 0.8),
+  }).cells.find(({ id }) => id === "p0-y0");
+  assert.equal(cell.status, "regressed");
+  assert.equal(cell.selectedMetric.baseline, 0.9);
+  assert.equal(cell.selectedMetric.current, 0.8);
+});

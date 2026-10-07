@@ -1,6 +1,6 @@
 """Project-local anonymous face grouping; never modifies aligned files.
 
-SFace embeddings use the OpenCV reference five-point alignment and RGB input.
+SFace embeddings use the reference five-point alignment and PyTorch RGB inference.
 Complete linkage prevents a chain of weak matches from joining different roles.
 Co-occurring faces remain separate. All groups are review candidates.
 """
@@ -84,9 +84,8 @@ def group_directory(directory, model_path, load_dfl, report, threshold=0.5, limi
     if hashlib.sha256(model_path.read_bytes()).hexdigest() != MODEL_SHA256:
         raise ValueError("角色分组模型校验失败，请重新准备视觉依赖")
     cv2.setNumThreads(2)
-    net = cv2.dnn.readNetFromONNX(str(model_path))
-    net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
-    net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
+    from vision_identity import SFaceTorch
+    net = SFaceTorch(model_path, device="cpu")
     records, vectors = [], []
     for index, image_path in enumerate(paths[:limit]):
         try:
@@ -97,8 +96,7 @@ def group_directory(directory, model_path, load_dfl, report, threshold=0.5, limi
             if image is None:
                 raise ValueError("图片无法解码")
             face = aligned_face_input(image, dfl.get_landmarks())
-            net.setInput(cv2.dnn.blobFromImage(face, 1, (112, 112), (0, 0, 0), True, False))
-            vector = net.forward().reshape(-1)
+            vector = net.embedding_bgr(face)
             norm = np.linalg.norm(vector)
             if not np.isfinite(vector).all() or norm < 1e-8:
                 raise ValueError("人脸特征不可用")

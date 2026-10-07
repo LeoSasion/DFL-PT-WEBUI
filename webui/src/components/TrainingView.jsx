@@ -33,6 +33,8 @@ import { LoadingProgress } from "./ProgressFeedback.jsx";
 import { pipelineTasks as defaultPipelineTasks } from "../data/dashboard.js";
 import { useI18n } from "../i18n.jsx";
 import { jobPresentation } from "../domain/job-presentation.js";
+import { getTrainingSaveStatus } from "../domain/workflow-readiness.js";
+import "./WorkflowGuidance.css";
 import {
   MAX_PREVIEW_REFRESH_SECONDS,
   MIN_PREVIEW_REFRESH_SECONDS,
@@ -81,7 +83,7 @@ function formatEta(seconds, t) {
   return t("{minutes}分钟", { minutes: remainingMinutes });
 }
 
-export function PipelinePanel({ activeTask, tasks = defaultPipelineTasks, onSelectTask }) {
+export function PipelinePanel({ activeTask, tasks = defaultPipelineTasks, title = "当前流水线", description, onSelectTask }) {
   const { t } = useI18n();
   const [showCompleted, setShowCompleted] = useState(false);
   const hiddenCompletedCount = tasks.filter((task) => task.state === "done" && task.id !== activeTask).length;
@@ -91,9 +93,10 @@ export function PipelinePanel({ activeTask, tasks = defaultPipelineTasks, onSele
   return (
     <section className="panel pipeline-panel" aria-labelledby="pipeline-title">
       <div className="panel-heading">
-        <h2 id="pipeline-title">{t("当前流水线")}</h2>
+        <h2 id="pipeline-title">{t(title)}</h2>
       </div>
       <div className="pipeline-list">
+        {description ? <p className="training-entry-note">{t(description)}</p> : null}
         {hiddenCompletedCount ? (
           <button
             className="pipeline-completed-summary"
@@ -131,6 +134,10 @@ export function PipelinePanel({ activeTask, tasks = defaultPipelineTasks, onSele
                 <span className="state-mark failed" aria-label={t("失败")}>
                   <IconAlertTriangle size={13} stroke={2.2} />
                 </span>
+              ) : task.state === "unconfirmed" ? (
+                <span className="state-mark failed" aria-label={t("本次保存未确认")}><IconAlertTriangle size={13} stroke={2.2}/></span>
+              ) : task.state === "available" ? (
+                <span className="state-mark waiting" aria-label={t("已检测到产物")}><IconFolderOpen size={13} stroke={2}/></span>
               ) : (
                 <span className="state-mark waiting" aria-label={task.id === "xseg" ? t("可选") : task.id === "sort" ? t("待复核") : t("等待中")}>
                   <IconCircle size={11} stroke={2} />
@@ -350,7 +357,8 @@ export function TrainingWorkspace({
   const presentation = jobPresentation(trainingJob ?? { state: trainingState });
   const stateLabel = t(presentation.label);
   const stateTone = presentation.tone;
-  const recommendDiagnostics = Boolean(savedModel) && !isRunning;
+  const saveStatus = getTrainingSaveStatus(trainingJob, savedModel);
+  const recommendDiagnostics = Boolean(latestEvaluationSnapshotId);
   const [refreshIntervalSeconds, setRefreshIntervalSeconds] = useState(
     readPreviewRefreshSeconds,
   );
@@ -414,7 +422,7 @@ export function TrainingWorkspace({
             type="button"
             onClick={onOpenDiagnostics}
           >
-            <IconChartDots3 size={14} stroke={1.9}/>{recommendDiagnostics ? t("下一步：质量诊断") : t("质量诊断")}
+            <IconChartDots3 size={14} stroke={1.9}/>{t("质量诊断")}
           </button>
         </div>
       </div>
@@ -467,6 +475,10 @@ export function TrainingWorkspace({
           <IconShieldX size={17} stroke={1.9} />{t("安全停止")}
         </button>
       </div>}
+      <div className={`workflow-save-status is-${saveStatus.saveState}`} role="status">
+        <strong>{t(saveStatus.historyLabel)}</strong>
+        <p>{t(saveStatus.detail)}</p>
+      </div>
     </section>
   );
 }

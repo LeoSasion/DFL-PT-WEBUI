@@ -90,12 +90,13 @@ mask_mode_dict = {0:'full',
                   6:'XSeg-prd',
                   7:'XSeg-dst',
                   8:'XSeg-prd*XSeg-dst',
-                  9:'learned-prd*learned-dst*XSeg-prd*XSeg-dst'
+                  9:'learned-prd*learned-dst*XSeg-prd*XSeg-dst',
+                  10:'reviewed-dst', 11:'learned-prd*reviewed-dst'
                   }
 
 
-ctm_dict = { 0: "None", 1:"rct", 2:"lct", 3:"mkl", 4:"mkl-m", 5:"idt", 6:"idt-m", 7:"sot-m", 8:"mix-m" }
-ctm_str_dict = {None:0, "rct":1, "lct":2, "mkl":3, "mkl-m":4, "idt":5, "idt-m":6, "sot-m":7, "mix-m":8 }
+ctm_dict = { 0: "None", 1:"rct", 2:"lct", 3:"mkl", 4:"mkl-m", 5:"idt", 6:"idt-m", 7:"sot-m", 8:"mix-m", 9:"robust-lab", 10:"lab-quantile" }
+ctm_str_dict = {None:0, "rct":1, "lct":2, "mkl":3, "mkl-m":4, "idt":5, "idt-m":6, "sot-m":7, "mix-m":8, "robust-lab":9, "lab-quantile":10 }
 
 class MergerConfigMasked(MergerConfig):
 
@@ -110,10 +111,16 @@ class MergerConfigMasked(MergerConfig):
                        motion_blur_power = 0,
                        output_face_scale = 0,
                        super_resolution_power = 0,
+                       super_resolution_model = "mambairv2",
                        color_transfer_mode = ctm_str_dict['rct'],
                        image_denoise_power = 0,
                        bicubic_degrade_power = 0,
                        color_degrade_power = 0,
+                       random_seed = 0,
+                       geometry_mode = "off",
+                       geometry_strength = 0,
+                       blend_mode = "legacy",
+                       blend_width = 3,
                        **kwargs
                        ):
 
@@ -138,10 +145,16 @@ class MergerConfigMasked(MergerConfig):
         self.motion_blur_power = motion_blur_power
         self.output_face_scale = output_face_scale
         self.super_resolution_power = super_resolution_power
+        self.super_resolution_model = super_resolution_model
         self.color_transfer_mode = color_transfer_mode
         self.image_denoise_power = image_denoise_power
         self.bicubic_degrade_power = bicubic_degrade_power
         self.color_degrade_power = color_degrade_power
+        self.random_seed = random_seed
+        self.geometry_mode = geometry_mode
+        self.geometry_strength = geometry_strength
+        self.blend_mode = blend_mode
+        self.blend_width = blend_width
 
     def copy(self):
         return copy.copy(self)
@@ -221,9 +234,16 @@ class MergerConfigMasked(MergerConfig):
             self.color_transfer_mode = io.input_str ( "预测人脸的颜色迁移模式", None, valid_list=list(ctm_str_dict.keys())[1:] )
             self.color_transfer_mode = ctm_str_dict[self.color_transfer_mode]
 
+        self.random_seed = io.input_int('颜色随机种子（局部、可复现）', 0, valid_range=[0, 4294967295])
+        self.geometry_mode = io.input_str('几何稳定方案', 'off', valid_list=['off', 'bounded-center-scale'])
+        self.geometry_strength = io.input_int('中心/尺度稳定强度', 0, valid_range=[0, 100]) if self.geometry_mode != 'off' else 0
+        self.blend_mode = io.input_str('边缘融合方案', 'legacy', valid_list=['legacy', 'distance', 'multiband'])
+        self.blend_width = io.input_int('距离场羽化宽度（脸宽百分比）', 3, valid_range=[0, 20]) if self.blend_mode == 'distance' else 3
+
         super().ask_settings()
 
         self.super_resolution_power = np.clip ( io.input_int ("选择 超分强度", 0, add_info="0..100", help_message="通过超分网络增强细节。"), 0, 100)
+        self.super_resolution_model = io.input_str("预测脸增强模型", "mambairv2", valid_list=["mambairv2", "realesrgan-x4plus"]) if self.super_resolution_power else "mambairv2"
 
         if 'raw' not in self.mode:
             self.image_denoise_power = np.clip ( io.input_int ("选择 去噪降质强度", 0, add_info="0..500"), 0, 500)
@@ -247,9 +267,15 @@ class MergerConfigMasked(MergerConfig):
                    self.output_face_scale == other.output_face_scale and \
                    self.color_transfer_mode == other.color_transfer_mode and \
                    self.super_resolution_power == other.super_resolution_power and \
+                   self.super_resolution_model == other.super_resolution_model and \
                    self.image_denoise_power == other.image_denoise_power and \
                    self.bicubic_degrade_power == other.bicubic_degrade_power and \
-                   self.color_degrade_power == other.color_degrade_power
+                   self.color_degrade_power == other.color_degrade_power and \
+                   self.random_seed == other.random_seed and \
+                   self.geometry_mode == other.geometry_mode and \
+                   self.geometry_strength == other.geometry_strength and \
+                   self.blend_mode == other.blend_mode and \
+                   self.blend_width == other.blend_width
 
         return False
 
@@ -278,13 +304,14 @@ class MergerConfigMasked(MergerConfig):
             r += f"""color_transfer_mode: {ctm_dict[self.color_transfer_mode]}\n"""
             r += super().to_string(filename)
 
-        r += f"""super_resolution_power: {self.super_resolution_power}\n"""
+        r += f"""super_resolution_power: {self.super_resolution_power}\nsuper_resolution_model: {self.super_resolution_model}\n"""
 
         if 'raw' not in self.mode:
             r += (f"""image_denoise_power: {self.image_denoise_power}\n"""
                   f"""bicubic_degrade_power: {self.bicubic_degrade_power}\n"""
                   f"""color_degrade_power: {self.color_degrade_power}\n""")
 
+        r += f"random_seed: {self.random_seed}\ngeometry: {self.geometry_mode} ({self.geometry_strength})\nblend: {self.blend_mode} ({self.blend_width}% face width)\n"
         r += "================"
 
         return r

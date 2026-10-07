@@ -5,7 +5,7 @@ import scipy as sp
 from numpy import linalg as npla
 
 
-def color_transfer_sot(src,trg, steps=10, batch_size=5, reg_sigmaXY=16.0, reg_sigmaV=5.0):
+def color_transfer_sot(src,trg, steps=10, batch_size=5, reg_sigmaXY=16.0, reg_sigmaV=5.0, seed=None):
     """
     Color Transform via Sliced Optimal Transfer
     ported by @iperov from https://github.com/dcoeurjo/OTColorTransfer
@@ -35,10 +35,11 @@ def color_transfer_sot(src,trg, steps=10, batch_size=5, reg_sigmaXY=16.0, reg_si
     new_src = src.copy()
 
     advect = np.empty ( (h*w,c), dtype=src_dtype )
+    rng = np.random.default_rng(seed)
     for step in range (steps):
         advect.fill(0)
         for batch in range (batch_size):
-            dir = np.random.normal(size=c).astype(src_dtype)
+            dir = rng.normal(size=c).astype(src_dtype)
             dir /= npla.norm(dir)
 
             projsource = np.sum( new_src*dir, axis=-1).reshape ((h*w))
@@ -90,7 +91,7 @@ def color_transfer_mkl(x0, x1):
     result = np.dot(x0-mx0, t) + mx1
     return np.clip ( result.reshape ( (h,w,c) ).astype(x0.dtype), 0, 1)
 
-def color_transfer_idt(i0, i1, bins=256, n_rot=20):
+def color_transfer_idt(i0, i1, bins=256, n_rot=20, seed=None):
     import scipy.stats
 
     relaxation = 1 / n_rot
@@ -105,9 +106,10 @@ def color_transfer_idt(i0, i1, bins=256, n_rot=20):
     d0 = i0.T
     d1 = i1.T
 
+    rng = np.random.default_rng(seed)
     for i in range(n_rot):
 
-        r = sp.stats.special_ortho_group.rvs(n_dims).astype(np.float32)
+        r = sp.stats.special_ortho_group.rvs(n_dims, random_state=rng).astype(np.float32)
 
         d0r = np.dot(r, d0)
         d1r = np.dot(r, d1)
@@ -117,6 +119,9 @@ def color_transfer_idt(i0, i1, bins=256, n_rot=20):
 
             lo = min(d0r[j].min(), d1r[j].min())
             hi = max(d0r[j].max(), d1r[j].max())
+            if hi - lo < 1e-7:
+                d_r[j] = d0r[j]
+                continue
 
             p0r, edges = np.histogram(d0r[j], bins=bins, range=[lo, hi])
             p1r, _     = np.histogram(d1r[j], bins=bins, range=[lo, hi])
@@ -169,41 +174,64 @@ def reinhard_color_transfer(target : np.ndarray, source : np.ndarray, target_mas
     source = cv2.cvtColor(source, cv2.COLOR_BGR2LAB)
     target = cv2.cvtColor(target, cv2.COLOR_BGR2LAB)
 
-    source_input = source
-    if source_mask is not None:
-        source_input = source_input.copy()
-        source_input[source_mask[...,0] < mask_cutoff] = [0,0,0]
+    source_input = _foreground_samples(source, source_mask, mask_cutoff)
+    target_input = _foreground_samples(target, target_mask, mask_cutoff)
+    if source_input.size == 0 or target_input.size == 0:
+        return cv2.cvtColor(target, cv2.COLOR_LAB2BGR).astype(np.float32)
+    source_mean, source_std = source_input.mean(axis=0), source_input.std(axis=0)
+    target_mean, target_std = target_input.mean(axis=0), target_input.std(axis=0)
+    # A flat channel carries no contrast evidence; translate its mean only.
+    scale = np.divide(source_std, target_std, out=np.ones(3, np.float32), where=target_std > 1e-4)
+    output = (target - target_mean) * scale + source_mean
+    output = np.nan_to_num(output, nan=0., posinf=127., neginf=-127.)
+    output[..., 0] = np.clip(output[..., 0], 0, 100)
+    output[..., 1:] = np.clip(output[..., 1:], -127, 127)
+    return np.clip(cv2.cvtColor(output.astype(np.float32), cv2.COLOR_LAB2BGR), 0, 1)
 
-    target_input = target
-    if target_mask is not None:
-        target_input = target_input.copy()
-        target_input[target_mask[...,0] < mask_cutoff] = [0,0,0]
 
-    target_l_mean, target_l_std, target_a_mean, target_a_std, target_b_mean, target_b_std, \
-        = target_input[...,0].mean(), target_input[...,0].std(), target_input[...,1].mean(), target_input[...,1].std(), target_input[...,2].mean(), target_input[...,2].std()
+def _foreground_samples(image, mask, cutoff=.5):
+    if image.ndim != 3 or image.shape[2] != 3 or not np.isfinite(image).all():
+        raise ValueError('Finite H W 3 color image required')
+    if mask is None:
+        return image.reshape(-1, 3)
+    mask = np.asarray(mask)
+    if mask.ndim == 3 and mask.shape[2] == 1:
+        mask = mask[..., 0]
+    if mask.shape != image.shape[:2] or not np.isfinite(mask).all():
+        raise ValueError('Finite mask in image coordinates required')
+    return image[mask >= cutoff]
 
-    source_l_mean, source_l_std, source_a_mean, source_a_std, source_b_mean, source_b_std, \
-        = source_input[...,0].mean(), source_input[...,0].std(), source_input[...,1].mean(), source_input[...,1].std(), source_input[...,2].mean(), source_input[...,2].std()
 
-    # not as in the paper: scale by the standard deviations using reciprocal of paper proposed factor
-    target_l = target[...,0]
-    target_l = ne.evaluate('(target_l - target_l_mean) * source_l_std / target_l_std + source_l_mean')
-
-    target_a = target[...,1]
-    target_a = ne.evaluate('(target_a - target_a_mean) * source_a_std / target_a_std + source_a_mean')
-
-    target_b = target[...,2]
-    target_b = ne.evaluate('(target_b - target_b_mean) * source_b_std / target_b_std + source_b_mean')
-
-    np.clip(target_l,    0, 100, out=target_l)
-    np.clip(target_a, -127, 127, out=target_a)
-    np.clip(target_b, -127, 127, out=target_b)
-
-    out = cv2.cvtColor(np.stack([target_l, target_a, target_b], -1), cv2.COLOR_LAB2BGR)
-    # 保持与调用方的 float32 约定一致。
-    if out.dtype != np.float32:
-        out = out.astype(np.float32)
-    return out
+def robust_lab_transfer(target, source, target_mask=None, source_mask=None, quantile=False):
+    """Optional foreground median/IQR or quantile candidate; no quality claim."""
+    target = np.ascontiguousarray(np.asarray(target, dtype=np.float32))
+    source = np.ascontiguousarray(np.asarray(source, dtype=np.float32))
+    _foreground_samples(target, target_mask)
+    _foreground_samples(source, source_mask)
+    tl = cv2.cvtColor(np.clip(target, 0, 1), cv2.COLOR_BGR2LAB)
+    sl = cv2.cvtColor(np.clip(source, 0, 1), cv2.COLOR_BGR2LAB)
+    ts, ss = _foreground_samples(tl, target_mask), _foreground_samples(sl, source_mask)
+    if len(ts) < 16 or len(ss) < 16:
+        return target.copy()
+    out = tl.copy()
+    for channel in range(3):
+        if quantile:
+            q = np.linspace(.02, .98, 49)
+            tq, sq = np.quantile(ts[:, channel], q), np.quantile(ss[:, channel], q)
+            knots, ids = np.unique(tq, return_index=True)
+            if len(knots) > 1:
+                out[..., channel] = np.interp(tl[..., channel], knots, sq[ids])
+            else:
+                out[..., channel] += np.median(ss[:, channel]) - np.median(ts[:, channel])
+        else:
+            tm, sm = np.median(ts[:, channel]), np.median(ss[:, channel])
+            ti = np.diff(np.quantile(ts[:, channel], [.25, .75]))[0]
+            si = np.diff(np.quantile(ss[:, channel], [.25, .75]))[0]
+            scale = float(np.clip(si / ti, .5, 2.)) if ti > 1e-4 else 1.
+            out[..., channel] = (tl[..., channel] - tm) * scale + sm
+    out[..., 0] = np.clip(out[..., 0], 0, 100)
+    out[..., 1:] = np.clip(out[..., 1:], -127, 127)
+    return np.clip(cv2.cvtColor(out.astype(np.float32), cv2.COLOR_LAB2BGR), 0, 1)
 
 
 def linear_color_transfer(target_img, source_img, mode='pca', eps=1e-5):
@@ -308,7 +336,7 @@ def color_hist_match(src_im, tar_im, hist_match_threshold=255):
     matched = np.stack(to_stack, axis=-1).astype(src_im.dtype)
     return matched
 
-def color_transfer_mix(img_src,img_trg):
+def color_transfer_mix(img_src,img_trg, seed=None):
     img_src = np.clip(img_src*255.0, 0, 255).astype(np.uint8)
     img_trg = np.clip(img_trg*255.0, 0, 255).astype(np.uint8)
 
@@ -325,7 +353,7 @@ def color_transfer_mix(img_src,img_trg):
     img_trg_lab[...,0] = (np.ones_like (rct_light)*100).astype(np.uint8)
     img_trg_lab = cv2.cvtColor(img_trg_lab, cv2.COLOR_LAB2BGR)
 
-    img_rct = color_transfer_sot( img_src_lab.astype(np.float32), img_trg_lab.astype(np.float32) )
+    img_rct = color_transfer_sot( img_src_lab.astype(np.float32), img_trg_lab.astype(np.float32), seed=seed )
     img_rct = np.clip(img_rct, 0, 255).astype(np.uint8)
 
     img_rct = cv2.cvtColor(img_rct, cv2.COLOR_BGR2LAB)

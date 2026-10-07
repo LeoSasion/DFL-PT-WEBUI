@@ -28,9 +28,10 @@ import {
 } from "./AdvancedWorkbenchPanels.jsx";
 import { LoadingProgress } from "./ProgressFeedback.jsx";
 import { ImageServiceWorkbench, IMAGE_TOOL_MODES } from "./ImageServiceWorkbench.jsx";
+import { QualityPipelinePanel } from "./QualityPipelinePanel.jsx";
 
 const QUALITY_LABELS = ["< 0.2", "0.2 – 0.4", "0.4 – 0.6", "0.6 – 0.8", "> 0.8"];
-const SIDE_AWARE_TABS = new Set(["audit", "extract", "video", "metadata"]);
+const SIDE_AWARE_TABS = new Set(["audit", "extract", "video", "metadata", "quality"]);
 
 const MIGRATION_GROUPS = [
   {
@@ -706,7 +707,7 @@ function normalizeImageToolId(toolId) {
   return IMAGE_TOOL_MODES.some((tool) => tool.id === toolId) ? toolId : "clarity";
 }
 
-export function ToolLabView({ commands, workspaceKey, onWorkspaceChange, onOpenCommand, onError, onNotice, onNavigateDataset, poseFocus, toolFocus }) {
+export function ToolLabView({ commands, workspaceKey, onWorkspaceChange, onOpenCommand, onUseTrainingInput, onError, onNotice, onNavigateDataset, poseFocus, toolFocus }) {
   const { t } = useI18n();
   const [activeTab, setActiveTab] = useState("audit");
   const [activeImageTool, setActiveImageTool] = useState("clarity");
@@ -721,15 +722,19 @@ export function ToolLabView({ commands, workspaceKey, onWorkspaceChange, onOpenC
   }, [poseFocus?.cellId, poseFocus?.nonce]);
 
   useEffect(() => {
+    if (toolFocus?.tab) { setActiveTab(toolFocus.tab); if (["src", "dst"].includes(toolFocus.side)) setSide(toolFocus.side); return; }
     if (!toolFocus?.toolId) return;
     setActiveTab("image-tools");
     setActiveImageTool(normalizeImageToolId(toolFocus.toolId));
     if (["src", "dst"].includes(toolFocus.side)) setSide(toolFocus.side);
-  }, [toolFocus?.nonce, toolFocus?.side, toolFocus?.toolId]);
+  }, [toolFocus?.nonce, toolFocus?.side, toolFocus?.toolId, toolFocus?.tab]);
 
   return (
     <section className="tool-lab-view">
       <nav className="tool-lab-tabs" aria-label={t("工具实验室视图") }>
+        <button className={activeTab === "quality" ? "is-active" : ""} type="button" onClick={() => setActiveTab("quality")}>
+          <IconCheck size={16}/>{t("质量方案")}
+        </button>
         <button className={activeTab === "audit" ? "is-active" : ""} type="button" onClick={() => setActiveTab("audit")}>
           <IconFileAnalytics size={16} />{t("数据审计")}
         </button>
@@ -779,8 +784,12 @@ export function ToolLabView({ commands, workspaceKey, onWorkspaceChange, onOpenC
       </nav>
 
       <div className="tool-lab-content">
-        {activeTab === "audit" ? (
+        {activeTab === "quality" ? (
+          <QualityPipelinePanel key={`${workspaceKey}:${side}`} side={side} projectKey={workspaceKey} initialPlanId={toolFocus?.planId} initialPlanRequest={toolFocus?.nonce} initialMode={toolFocus?.mode} initialDraftId={toolFocus?.draftId} refreshVersion={refreshVersion} onError={onError} onNotice={onNotice} onOpenCommand={onOpenCommand} onUseTrainingInput={onUseTrainingInput}/>
+        ) : activeTab === "audit" ? (
           <DatasetCleaningPanel
+            initialMode={toolFocus?.mode}
+            initialModeRequest={toolFocus?.nonce}
             workspaceKey={workspaceKey}
             onWorkspaceChange={onWorkspaceChange}
             side={side}

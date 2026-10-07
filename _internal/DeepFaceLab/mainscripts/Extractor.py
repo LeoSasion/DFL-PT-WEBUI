@@ -38,6 +38,9 @@ class ExtractSubprocessor(Subprocessor):
             self.force_output_path = force_output_path
             self.final_output_files = final_output_files or []
             self.faces_detected = 0
+            self.landmark_provenance = None
+            self.native_landmarks98 = []
+            self.restoration_provenance = None
 
     class Cli(Subprocessor.Cli):
 
@@ -52,6 +55,9 @@ class ExtractSubprocessor(Subprocessor):
             self.cpu_only = client_dict['device_type'] == 'CPU'
             self.final_output_path = client_dict['final_output_path']
             self.output_debug_path = client_dict['output_debug_path']
+            self.detector = client_dict.get('detector', 's3fd')
+            self.landmark_model = client_dict.get('landmark_model', 'fan')
+            self.source_map = client_dict.get('source_map', {})
 
             stdin_fd = client_dict['stdin_fd']
             if stdin_fd is not None and DEBUG:
@@ -69,12 +75,27 @@ class ExtractSubprocessor(Subprocessor):
 
             self.log_info(f"正在运行于 {client_dict['device_name']}")
 
-            if self.type == 'all' or self.type == 'rects-s3fd' or 'landmarks' in self.type:
-                self.rects_extractor = facelib.S3FDExtractor(place_model_on_cpu=place_model_on_cpu)
+            if self.type == 'all' or 'rects' in self.type or 'landmarks' in self.type:
+                from facelib.DetectorCandidates import CANDIDATE_IDS, CandidateDetector
+                if self.detector in CANDIDATE_IDS:
+                    self.rects_extractor = CandidateDetector(self.detector,
+                        device='cpu' if place_model_on_cpu else str(nn.device))
+                elif self.detector in ('s3fd', 'manual'):
+                    self.rects_extractor = facelib.S3FDExtractor(place_model_on_cpu=place_model_on_cpu)
+                else:
+                    raise ValueError(f"Unsupported face detector: {self.detector}")
 
+            self.tufa_extractor = None
+            if self.landmark_model == 'tufa' and (self.type == 'all' or self.type == 'final'):
+                from facelib.LandmarkCandidates import TufaExtractor
+                self.tufa_extractor = TufaExtractor(device='cpu' if place_model_on_cpu else str(nn.device))
             if self.type == 'all' or 'landmarks' in self.type:
-                self.landmarks_extractor = facelib.FANExtractor(landmarks_3D=self.face_type >= FaceType.HEAD,
-                                                                place_model_on_cpu=place_model_on_cpu)
+                if self.tufa_extractor is not None and self.face_type < FaceType.HEAD:
+                    self.landmarks_extractor = self.tufa_extractor
+                else:
+                    # Interactive edits and HEAD retain the existing FAN geometry.
+                    self.landmarks_extractor = facelib.FANExtractor(landmarks_3D=self.face_type >= FaceType.HEAD,
+                                                                    place_model_on_cpu=place_model_on_cpu)
 
             self.cached_image = (None, None)
 
@@ -91,7 +112,11 @@ class ExtractSubprocessor(Subprocessor):
                     self.log_err(f'无法打开 {filepath}，原因：cv2_imread() 读取失败。')
                     return data
                 image = imagelib.normalize_channels(image, 3)
-                image = imagelib.cut_odd_image(image)
+                # Validated restored inputs retain the original frame canvas.
+                # Cropping an odd edge would invalidate their immutable source
+                # mapping and change the coordinates used during publication.
+                if filepath.name not in self.source_map:
+                    image = imagelib.cut_odd_image(image)
                 self.cached_image = (filepath, image)
 
             h, w, c = image.shape
@@ -113,6 +138,19 @@ class ExtractSubprocessor(Subprocessor):
                 )
 
             if self.type == 'final' or self.type == 'all':
+                from facelib.LandmarkCandidates import fan_identity, sha256
+                alignment_model = 'fan3d' if self.face_type >= FaceType.HEAD else 'fan68' if data.manual or self.landmark_model == 'fan' else 'tufa68'
+                data.landmark_provenance = {
+                    'schemaVersion': 1, 'alignmentModel': alignment_model,
+                    'asset': self.tufa_extractor.identity if alignment_model == 'tufa68' else fan_identity(self.face_type >= FaceType.HEAD),
+                    'policy': 'dfl-native-68-v1', 'legacy68': {'definition': 'IBUG68', 'count': 68, 'dimensions': 2},
+                    'manual': data.manual, 'depthAvailable': False,
+                    'headPolicy': 'existing FAN3D heatmap model; 68 XY output; unchanged DFL HEAD alignment' if self.face_type >= FaceType.HEAD else None,
+                    'processedSourceSha256': sha256(filepath), 'processedCanvasWH': [w, h],
+                }
+                data.restoration_provenance = self.source_map.get(filepath.name)
+                if self.tufa_extractor is not None:
+                    data.native_landmarks98 = self.tufa_extractor.audit(image, data.rects)
                 data = ExtractSubprocessor.Cli.final_stage(
                     data=data,
                     image=image,
@@ -196,7 +234,7 @@ class ExtractSubprocessor(Subprocessor):
                 debug_image = image.copy()
 
             face_idx = 0
-            for rect, image_landmarks in zip(rects, landmarks):
+            for source_face_idx, (rect, image_landmarks) in enumerate(zip(rects, landmarks)):
                 if image_landmarks is None:
                     continue
 
@@ -232,11 +270,38 @@ class ExtractSubprocessor(Subprocessor):
                 dflimg = DFLJPG.load(output_filepath)
                 dflimg.set_face_type(FaceType.toString(face_type))
                 dflimg.set_landmarks(face_image_landmarks.tolist())
-                dflimg.set_source_filename(filepath.name)
+                restoration = getattr(data, 'restoration_provenance', None)
+                dflimg.set_source_filename(restoration['sourceFilename'] if restoration else filepath.name)
                 dflimg.set_source_rect(rect)
                 dflimg.set_source_landmarks(image_landmarks.tolist())
                 dflimg.set_image_to_face_mat(image_to_face_mat)
+                provenance = getattr(data, 'landmark_provenance', None)
+                if provenance is not None:
+                    dflimg.get_dict()['landmark_provenance'] = provenance
+                if restoration is not None:
+                    dflimg.get_dict()['restoration_provenance'] = restoration
+                audits = getattr(data, 'native_landmarks98', [])
+                audit = None
+                if audits:
+                    audit = dict(audits[source_face_idx])
+                    points = np.asarray(audit['points_original'], dtype=np.float64)
+                    if points.shape != (98, 2) or not np.isfinite(points).all():
+                        raise ValueError('Native TUFA98 audit must retain finite WFLW98 points')
+                    matrix = np.eye(3)[:2] if image_to_face_mat is None else image_to_face_mat
+                    audit.update({'points_aligned': LandmarksProcessor.transform_points(points, matrix).tolist(),
+                                  'aligned_canvas_wh': [face_image.shape[1], face_image.shape[0]],
+                                  'source_to_aligned_affine': np.asarray(matrix).tolist(),
+                                  'usage': 'native98 audit only; does not replace legacy68 or create depth/masks'})
+                    dflimg.get_dict()['native_landmarks98'] = audit
                 dflimg.save()
+                if audit is not None:
+                    from facelib.LandmarkCandidates import local_module, sha256
+                    local_module('vision_assets').atomic_json(Path(str(output_filepath) + '.landmarks.json'), {
+                        'schemaVersion': 1, 'aligned_filename': output_filepath.name,
+                        'aligned_sha256': sha256(output_filepath), 'source_filename': dflimg.get_source_filename(),
+                        'landmark_provenance': provenance, 'native_landmarks98': audit,
+                        'restoration_provenance': restoration,
+                    })
 
                 data.final_output_files.append(output_filepath)
                 face_idx += 1
@@ -291,6 +356,9 @@ class ExtractSubprocessor(Subprocessor):
         manual_window_size=1368,
         final_output_path=None,
         device_config=None,
+        detector='s3fd',
+        landmark_model='fan',
+        source_map=None,
     ):
         if type == 'landmarks-manual':
             for x in input_data:
@@ -307,6 +375,9 @@ class ExtractSubprocessor(Subprocessor):
         self.final_output_path = final_output_path
         self.output_debug_path = output_debug_path
         self.device_config = device_config
+        self.detector = detector
+        self.landmark_model = landmark_model
+        self.source_map = source_map or {}
 
         if self.device_config is None:
             self.device_config = nn.DeviceConfig.BestGPU()
@@ -360,6 +431,9 @@ class ExtractSubprocessor(Subprocessor):
             'final_output_path': self.final_output_path,
             'output_debug_path': self.output_debug_path,
             'stdin_fd': stdin_fd,
+            'detector': self.detector,
+            'landmark_model': self.landmark_model,
+            'source_map': self.source_map,
         }
 
         for (device_idx, device_type, device_name, device_total_vram_gb) in self.devices:
@@ -588,6 +662,8 @@ class ExtractSubprocessor(Subprocessor):
 
     # override
     def get_result(self):
+        if self.landmark_model == 'tufa' and self.type in ('all', 'final') and self.input_data:
+            raise RuntimeError('TUFA extraction did not complete; see worker error. No fallback was performed')
         return self.result
 
     def redraw(self):
@@ -692,11 +768,29 @@ def main(
     jpeg_quality=None,
     cpu_only=False,
     force_gpu_idxs=None,
+    landmark_model='fan',
+    source_map=None,
 ):
 
     if not input_path.exists():
         io.log_err('未找到输入目录，请确认路径存在。')
         return
+
+    from facelib.DetectorCandidates import CANDIDATE_IDS, validate_candidate_assets
+    if detector is not None and detector not in ('s3fd', 'manual', *CANDIDATE_IDS):
+        raise ValueError(f"Unsupported face detector: {detector}")
+    if detector in CANDIDATE_IDS and not manual_output_debug_fix:
+        validate_candidate_assets(detector)
+
+    from facelib.LandmarkCandidates import validate_landmark_assets, load_source_map
+    validate_landmark_assets(landmark_model, face_type)
+    if landmark_model == 'tufa' and (detector == 'manual' or detector is None or manual_fix or manual_output_debug_fix):
+        # Interactive extraction may use FAN even when TUFA98 auditing is selected.
+        validate_landmark_assets('fan', face_type)
+    mapping_requested = source_map is not None
+    source_map = load_source_map(source_map, input_path)
+    if mapping_requested and any(Path(filename).name not in source_map for filename in pathex.get_image_paths(input_path)):
+        raise ValueError('Every restored input image must be registered in source-map')
 
     if not output_path.exists():
         output_path.mkdir(parents=True, exist_ok=True)
@@ -742,7 +836,7 @@ def main(
         max_faces_from_image = io.input_int('每张图最多提取人脸数', 0, help_message='如果你在提取 SRC 时遇到单帧多人脸，建议将最大人脸数设为 3 以加速提取。0 表示不限制。')
 
     if image_size is None:
-        image_size = io.input_int('输出图像尺寸', 512 if face_type < FaceType.HEAD else 768, valid_range=[256, 2048], help_message='输出人脸图像尺寸。尺寸越大，FaceEnhancer 效果可能越差。只有当源图足够清晰且不需要增强时，才建议使用高于 512 的值。')
+        image_size = io.input_int('输出图像尺寸', 512 if face_type < FaceType.HEAD else 768, valid_range=[256, 2048], help_message='输出人脸图像尺寸。请按源图可用细节选择分辨率；增强模型另用独立副本复核。')
 
     if jpeg_quality is None:
         jpeg_quality = io.input_int('JPEG 质量', 90, valid_range=[1, 100], help_message='JPEG 质量。质量越高，输出文件越大。')
@@ -780,14 +874,14 @@ def main(
     if images_found != 0:
         if detector == 'manual':
             io.log_info('正在执行手动提取...')
-            data = ExtractSubprocessor([ExtractSubprocessor.Data(Path(filename)) for filename in input_image_paths], 'landmarks-manual', image_size, jpeg_quality, face_type, output_debug_path if output_debug else None, manual_window_size=manual_window_size, device_config=device_config).run()
+            data = ExtractSubprocessor([ExtractSubprocessor.Data(Path(filename)) for filename in input_image_paths], 'landmarks-manual', image_size, jpeg_quality, face_type, output_debug_path if output_debug else None, manual_window_size=manual_window_size, device_config=device_config, landmark_model=landmark_model, source_map=source_map).run()
 
             io.log_info('正在执行第 3 次处理...')
-            data = ExtractSubprocessor(data, 'final', image_size, jpeg_quality, face_type, output_debug_path if output_debug else None, final_output_path=output_path, device_config=device_config).run()
+            data = ExtractSubprocessor(data, 'final', image_size, jpeg_quality, face_type, output_debug_path if output_debug else None, final_output_path=output_path, device_config=device_config, landmark_model=landmark_model, source_map=source_map).run()
 
         else:
             io.log_info('正在提取人脸...')
-            data = ExtractSubprocessor([ExtractSubprocessor.Data(Path(filename)) for filename in input_image_paths], 'all', image_size, jpeg_quality, face_type, output_debug_path if output_debug else None, max_faces_from_image=max_faces_from_image, final_output_path=output_path, device_config=device_config).run()
+            data = ExtractSubprocessor([ExtractSubprocessor.Data(Path(filename)) for filename in input_image_paths], 'all', image_size, jpeg_quality, face_type, output_debug_path if output_debug else None, max_faces_from_image=max_faces_from_image, final_output_path=output_path, device_config=device_config, detector=detector, landmark_model=landmark_model, source_map=source_map).run()
 
         faces_detected += sum([d.faces_detected for d in data])
 
@@ -797,8 +891,8 @@ def main(
             else:
                 fix_data = [ExtractSubprocessor.Data(d.filepath) for d in data if d.faces_detected == 0]
                 io.log_info('正在对 %d 张图片执行手动修复...' % (len(fix_data)))
-                fix_data = ExtractSubprocessor(fix_data, 'landmarks-manual', image_size, jpeg_quality, face_type, output_debug_path if output_debug else None, manual_window_size=manual_window_size, device_config=device_config).run()
-                fix_data = ExtractSubprocessor(fix_data, 'final', image_size, jpeg_quality, face_type, output_debug_path if output_debug else None, final_output_path=output_path, device_config=device_config).run()
+                fix_data = ExtractSubprocessor(fix_data, 'landmarks-manual', image_size, jpeg_quality, face_type, output_debug_path if output_debug else None, manual_window_size=manual_window_size, device_config=device_config, landmark_model=landmark_model, source_map=source_map).run()
+                fix_data = ExtractSubprocessor(fix_data, 'final', image_size, jpeg_quality, face_type, output_debug_path if output_debug else None, final_output_path=output_path, device_config=device_config, landmark_model=landmark_model, source_map=source_map).run()
                 faces_detected += sum([d.faces_detected for d in fix_data])
 
     io.log_info('-------------------------')

@@ -19,7 +19,7 @@ from core.leras.weight_io import load_weight_mapping
 from core.imagelib import SegIEPolys, SegIEPolyType
 from DFLIMG import DFLJPG
 from ErrFaceFilter.ErrFaceFilter import LandmarkErrorClassifier, audit_directory, draw_directory
-from facelib import FaceEnhancer, FANExtractor, S3FDExtractor, XSegNet
+from facelib import FANExtractor, S3FDExtractor, XSegNet
 from mainscripts import Sorter, Util, Trainer, FacesetResizer, FacesetEnhancer, VideoEd, Merger, XSegUtil
 from samplelib import PackedFaceset, SampleLoader
 from tests.me_fixtures import make_aligned
@@ -37,16 +37,6 @@ def cpu_helper_networks():
     nn.initialize(nn.DeviceConfig([]), data_format="NCHW")
 
 
-def test_distributed_face_enhancer_loads_all_weights_and_runs():
-    network = FaceEnhancer(place_model_on_cpu=True)
-    weights = pickle.loads((BACKEND / "facelib" / "FaceEnhancer.npy").read_bytes())
-    assert len(network.model.get_weights()) == len(weights) == 72
-    np.testing.assert_array_equal(network.model.conv1.weight.detach().numpy(),
-                                  weights["conv1/weight:0"].transpose(3, 2, 0, 1))
-    result = network.enhance(np.zeros((64, 64, 3), dtype=np.float32))
-    assert result.shape == (64, 64, 3) and np.isfinite(result).all()
-
-
 def test_detector_and_landmark_distributed_weights_run():
     image = np.zeros((256, 256, 3), dtype=np.uint8)
     detector = S3FDExtractor(place_model_on_cpu=True)
@@ -57,18 +47,14 @@ def test_detector_and_landmark_distributed_weights_run():
         assert points is not None and points.shape == (68, 2) and np.isfinite(points).all()
 
 
-def test_auxiliary_weight_rejection_is_atomic():
-    network = FaceEnhancer(place_model_on_cpu=True).model
-    weights = pickle.loads((BACKEND / "facelib" / "FaceEnhancer.npy").read_bytes())
-    original = network.conv1.weight.detach().clone()
-    malformed = copy.copy(weights)
-    malformed["conv1/weight:0"] = np.zeros_like(malformed["conv1/weight:0"])
-    malformed.pop("out4x_conv1/bias:0")
-    with pytest.raises(ValueError, match="names mismatch"):
-        load_weight_mapping(network, malformed)
-    assert torch.equal(network.conv1.weight, original)
+def test_auxiliary_weight_rejection_is_atomic(tmp_path):
+    network = XSegNet("XSeg", weights_file_root=REPOSITORY / '_internal/model_generic_xseg', place_model_on_cpu=True, raise_on_no_model_files=True).model
+    original = [weight.detach().clone() for weight in network.get_weights()]
+    malformed = {f'param_{index}': weight.cpu().numpy().copy() for index, weight in enumerate(original)}
+    malformed.pop(next(reversed(malformed)))
     with pytest.raises(ValueError, match="names/count"):
-        load_weight_mapping(network, {"param_0": np.zeros(tuple(original.shape), dtype=np.float32)})
+        load_weight_mapping(network, malformed)
+    assert all(torch.equal(before, after) for before, after in zip(original, network.get_weights()))
 
 
 def test_xseg_training_save_reload_and_missing_weights(tmp_path):

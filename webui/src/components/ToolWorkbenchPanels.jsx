@@ -201,10 +201,12 @@ export function DatasetAuditPanel({
 
       <section className="audit-kpi-strip" aria-label={t("审计摘要") }>
         <div className="is-total"><span>{t("样本总量")}</span><strong>{audit.total.toLocaleString()}</strong><small>{t("本批分析 {count}", { count: audit.analyzedCount })}</small></div>
-        <div className="is-usable"><span>{t("当前可用")}</span><strong>{audit.usableCount ?? 0}</strong><small>{percent((audit.usableCount ?? 0) / Math.max(audit.analyzedCount, 1))}</small></div>
-        <div className="is-warning"><span>{t("发现问题")}</span><strong>{audit.issueItemCount ?? 0}</strong><small>{t("本批问题样本")}</small></div>
+        <div className="is-usable"><span>{t("通过基本校验")}</span><strong>{audit.usableCount ?? 0}</strong><small>{percent((audit.usableCount ?? 0) / Math.max(audit.analyzedCount, 1))}</small></div>
+        <div className="is-warning"><span>{t("需关注")}</span><strong>{audit.issueItemCount ?? 0}</strong><small>{t("本批规则提示样本")}</small></div>
         <div className="is-danger"><span>{t("高风险")}</span><strong>{audit.severeIssueCount ?? 0}</strong><small>{t("需优先处理")}</small></div>
       </section>
+      <p className="tool-audit-summary-note">{t("“通过基本校验”统计可读取 DFL 元数据且基础质量分达到阈值的素材；“需关注”统计存在规则提示的素材，两类可重叠。")}
+        <br/>{t("通过基本校验不代表已通过人物或训练选集确认。缺失元数据、图片无法读取等高风险须先处理。")}</p>
 
       <div className="dataset-audit-layout">
         <section className="dataset-audit-main">
@@ -522,7 +524,7 @@ export function MetadataPackPanel({ side, refreshVersion, onError, onOpenCommand
           <div><dt>{t("重复来源组")}</dt><dd>{audit.duplicateSourceGroupCount}</dd></div>
           <div><dt>{t("已应用遮罩")}</dt><dd>{audit.maskedCount}</dd></div>
         </dl>
-        <div className="metadata-commands"><button className="button secondary" type="button" onClick={() => onOpenCommand(`${side}.metadata_save`)}>{t("保存元数据快照")}</button><button className="button secondary" type="button" onClick={() => onOpenCommand(`${side}.metadata_restore`)}>{t("打开恢复命令")}</button></div>
+        <div className="metadata-commands"><button className="button secondary" type="button" onClick={() => onOpenCommand(`${side}.metadata_save`)}>{t("保存元数据快照")}</button><button className="button secondary" type="button" onClick={() => onOpenCommand(`${side}.metadata_restore`)}>{t("打开恢复命令")}</button><button className="button secondary" type="button" onClick={() => onOpenCommand(`${side}.recover_batch`)}>{t("恢复排序或元数据批次")}</button></div>
       </section>
       <section className="pack-ledger">
         <header><div><h3>{t("PackedFaceset")}</h3><p>{t("只解析固定包头、配置数量和完整性标记。")}</p></div><span className={pack.status === "ready" ? "is-ok" : pack.status === "invalid" ? "is-warning" : ""}>{pack.status === "ready" ? t("可用") : pack.status === "invalid" ? t("异常") : t("未打包")}</span></header>

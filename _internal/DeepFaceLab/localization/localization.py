@@ -1,7 +1,7 @@
 ﻿import sys
 import locale
 
-system_locale = locale.getdefaultlocale()[0]
+system_locale = locale.getlocale()[0]
 # system_locale may be nil
 system_language = system_locale[0:2] if system_locale is not None else "en"
 if system_language not in ['en','ru','zh']:

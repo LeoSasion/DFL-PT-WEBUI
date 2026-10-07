@@ -167,7 +167,7 @@ export class OperationManager {
     return operation ? publicOperation(operation) : null;
   }
 
-  async start(kind, runner, { label = kind, cancellable = true, detail = null } = {}) {
+  async start(kind, runner, { label = kind, cancellable = true, detail = null, resultTarget = null } = {}) {
     if (typeof runner !== "function") throw new TypeError("operation runner must be a function");
     const id = operationId();
     const controller = new AbortController();
@@ -176,6 +176,7 @@ export class OperationManager {
       kind: String(kind).slice(0, 96),
       label: String(label).slice(0, 160),
       detail,
+      resultTarget,
       stage: "等待开始",
       status: "queued",
       cancellable: Boolean(cancellable),
@@ -232,7 +233,10 @@ export class OperationManager {
           operation.result = result ?? null;
         }
       } catch (error) {
-        if (controller.signal.aborted || error?.name === "AbortError") {
+        if (["MASK_STOP_UNCONFIRMED", "HELPER_STOP_UNCONFIRMED", "RESTORATION_STOP_UNCONFIRMED"].includes(error?.code)) {
+          operation.status = "failed";
+          operation.error = { code: error.code, message: error.message };
+        } else if (controller.signal.aborted || error?.name === "AbortError") {
           operation.status = "cancelled";
           operation.error = null;
         } else {

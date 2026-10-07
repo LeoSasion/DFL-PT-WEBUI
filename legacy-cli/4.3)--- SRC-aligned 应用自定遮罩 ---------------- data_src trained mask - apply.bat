@@ -8,6 +8,7 @@ title DFL-PT-WEBUI Tools
 echo.
 
 call "%~dp0..\_internal\setenv.bat"
+if errorlevel 1 exit /b %errorlevel%
 echo 请将遮罩模型放入workspace\xseg_model\
 
 "%PYTHON_EXECUTABLE%" "%DFL_ROOT%\main.py" xseg apply ^

@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 
 from core import pathex
+from core.safe_pickle import load_file as load_data_pickle_file, validate_session_mapping
 from core.cv2ex import *
 from core.interact import interact as io
 from core.leras import nn
@@ -24,7 +25,7 @@ def apply_xseg(input_path, model_path):
 
     model_dat = model_path / 'XSeg_data.dat'
     if model_dat.exists():
-        dat = pickle.loads( model_dat.read_bytes() )
+        dat = validate_session_mapping(load_data_pickle_file(model_dat, profile='session'))
         dat_options = dat.get('options', None)
         if dat_options is not None:
             face_type = dat_options.get('face_type', None)

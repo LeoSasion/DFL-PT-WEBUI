@@ -30,6 +30,14 @@
 .me-change-summary dl > div { display: flex; justify-content: space-between; gap: 12px; color: var(--text-soft); font-size: 12px; }
 .me-change-summary dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
 .me-change-summary dt { min-width: 0; }
+.me-resume-summary { min-width: 0; padding: 14px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface-2); }
+.me-resume-summary > strong { font-size: 14px; }
+.me-resume-summary > p { color: var(--text-soft); font-size: 13px; line-height: 1.6; margin: 8px 0 12px; }
+.me-resume-summary dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; margin: 0; }
+.me-resume-summary dl > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; min-width: 0; font-size: 13px; }
+.me-resume-summary dt { color: var(--text-soft); }
+.me-resume-summary dd { margin: 0; overflow-wrap: anywhere; }
+.me-resume-configuration-fields { display: grid; gap: 12px; padding: 0 12px 12px; }
 @media (max-width: 700px) {
   .me-training-fields .wizard-form-grid { grid-template-columns: minmax(0, 1fr); }
   .me-presets > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }

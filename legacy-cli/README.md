@@ -4,7 +4,7 @@
 
 只有 PyTorch ME 主模型训练；XSeg 保留为辅助遮罩模型。ME 训练、merge、DFM 使用新后端 main.py 的兼容命令入口；Ctrl+C 保存并停止。所有工具使用本项目 setenv.bat 与 .venv，不调用旧项目、旧 TensorFlow 解释器或 RG 切换。旧模型训练、格式转换及 Explorer 隐藏菜单已移除。
 
-直接使用某些配套工具时，可通过工具 BAT 提供相应输入参数；数据默认位于 workspace。WebUI 工具面板提供更完整的参数与可恢复操作。
+直接使用某些配套工具时，可通过工具 BAT 提供相应输入参数。每次调用 setenv 都读取 WebUI 同一 activeId：default 位于 workspace，其余位于 workspaces/<id>；菜单与命令显示绝对工作区。失效选择会停止，不回退到另一个项目。WebUI 工具面板提供更完整的参数与可恢复操作。
 
 aligned 预览与清洗默认使用 WebUI 的 SRC/DST 人脸浏览器，无需安装 XnViewMP。日常相似图审查默认使用“工具实验室 → 数据审计 → 相似组清洗”，无需另装 VisiPics；每次仅分析当前 aligned 的前 500 张，需人工复核并保留代表图，暂不支持切换批次或跨批查重。
 

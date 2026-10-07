@@ -91,7 +91,8 @@ async function transact(targetSide, replacements, label, extra = {}) {
   const directory = assertWithin(root, path.join(root, token));
   await mkdir(path.join(directory, "previous"), { recursive:true });
   const names = [...new Set([`data_${targetSide}`, ...await videoNames(targetSide), ...replacements.map(item => item.name),
-    ...(targetSide === "dst" ? ["result.mp4","result_mask.mp4","result.avi","result_mask.avi","result.mov","result_mask.mov"] : [])])];
+    ...(targetSide === "dst" ? ["mp4", "avi", "mov", "nut"].flatMap(extension =>
+      [`result.${extension}`, `result_mask.${extension}`].flatMap(name => [name, `${name}.media.json`])) : [])])];
   const previousLabel = (await readRoleLabels())[targetSide] ?? null;
   const manifest = { token, targetSide, label, previousLabel, state:"preparing", createdAt:new Date().toISOString(), previous:[], installed:[], ...extra };
   const journal = path.join(directory,"manifest.json");
