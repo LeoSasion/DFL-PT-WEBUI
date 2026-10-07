@@ -99,6 +99,25 @@ class Conv2DTranspose(nn.LayerBase):
         if self.use_wscale:
             weight = weight * self.wscale
 
+        if self.padding_mode == 'SAME':
+            # TF SAME is the adjoint of a forward convolution with any odd
+            # padding pixel on bottom/right. Symmetric Torch padding plus
+            # output_padding matches the size but shifts a 3x3/stride-2
+            # result up/left, breaking the original XSeg decoder weights.
+            height, width = x.shape[2:]
+            excess = self.kernel_size - self.strides
+            x = F.conv_transpose2d(
+                x, weight, bias=self.bias, stride=self.strides,
+                padding=0, output_padding=max(-excess, 0),
+            )
+            if excess > 0:
+                before = excess // 2
+                x = x[:, :, before:before + height * self.strides,
+                      before:before + width * self.strides]
+            if nhwc:
+                x = x.permute(0, 2, 3, 1).contiguous()
+            return x
+
         # Match TF deconv_length output sizing.
         in_h, in_w = int(x.shape[2]), int(x.shape[3])
 

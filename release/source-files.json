@@ -352,7 +352,7 @@
     },
     {
       "path": "_internal/DeepFaceLab/core/leras/layers/Conv2DTranspose.py",
-      "sha256": "2ed8862c5de077526ea03e788cb63b83d24d64cefe7de41aff18ae2b7a07190f"
+      "sha256": "590fb9c6756f5d065f2763751b6056351fedfd85896adf1c8dd44211502a80a8"
     },
     {
       "path": "_internal/DeepFaceLab/core/leras/layers/Dense.py",
