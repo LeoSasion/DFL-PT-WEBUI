@@ -1004,7 +1004,7 @@
     },
     {
       "path": "launcher/host/AssemblyInfo.cs",
-      "sha256": "b5ffbc59f35b38b8bf06c94671e0eef463e62735f54de0293b05bc2a19e2df38"
+      "sha256": "b8acad4a60047e27bd5c7d5a9a2087a5326dd45d67b69e9d1cfa26d48efd0e4f"
     },
     {
       "path": "launcher/host/CudaRuntimeService.cs",
