@@ -141,5 +141,3 @@ export function buildDiagnosticSnapshot({
     jobs: jobs.slice(-MAX_JOB_SUMMARIES).map(summarizeJob),
   };
 }
-
-export const DIAGNOSTIC_DEFAULT_RESERVE_BYTES = DEFAULT_RESERVE_BYTES;

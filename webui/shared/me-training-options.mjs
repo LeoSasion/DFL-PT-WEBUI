@@ -2,7 +2,7 @@
 export const ME_CONFIG_GROUPS = [
   { id: "architecture", label: "网络结构", help: "保存后不可更改；续训沿用检查点结构。" },
   { id: "optimization", label: "优化与训练", help: "续训修改配置需要明确启用允许配置变更。" },
-  { id: "memory", label: "显存与精度", help: "RG 用计算换显存；FP16 需要 CUDA。" },
+  { id: "memory", label: "显存与精度", help: "关闭混合精度即 FP32；BF16 与 FP16 互斥，均需要 CUDA。导出精度单独选择。" },
   { id: "loss", label: "重建与风格损失" },
   { id: "adversarial", label: "GAN 与 TrueFace", help: "TrueFace 仅支持 DF；预训练阶段关闭对抗和风格损失。" },
   { id: "data", label: "采样与增强" },
@@ -51,6 +51,7 @@ export const ME_CONFIG_PARAMETERS = [
   boolean("pretrain", "预训练阶段", "optimization", false, "使用专用预训练人脸集；进入或退出此阶段应重置数据状态。"),
   boolean("use_rg", "RG 梯度重计算", "memory", false, "显存不足时启用；受控单卡短基准节省约 14% 峰值显存，但单步慢约 32%。"),
   boolean("use_fp16", "FP16 混合精度", "memory", false, "仅 CUDA 可用；受控单卡短基准单步快约 15%、显存少约 9%，主权重和优化器仍为 FP32。"),
+  boolean("use_bf16", "BF16 混合精度", "memory", false, "需要支持 BF16 的 CUDA GPU；主权重和优化器保持 FP32。启用时须关闭 FP16。"),
   boolean("optimizer_on_cpu", "优化器放在 CPU", "memory", false, "仅显存仍不足时启用；受控单卡短基准峰值显存少约 36%，但单步耗时约为 6.4 倍。"),
   boolean("masked_training", "遮罩内训练", "loss", true),
   boolean("eyes_prio", "眼部优先", "loss"),
@@ -99,6 +100,8 @@ export function parametersFromConfig(config = {}) {
 }
 
 export function validateMeConfig(config) {
+  config = { use_bf16: false, ...config };
+  if (config.use_fp16 && config.use_bf16) throw new Error("FP16 与 BF16 不能同时启用");
   const unknown = Object.keys(config).filter(key => !Object.hasOwn(ME_DEFAULT_CONFIG, key));
   if (unknown.length) throw new Error(`不支持的 ME 配置：${unknown.join(", ")}`);
   for (const parameter of ME_CONFIG_PARAMETERS) {

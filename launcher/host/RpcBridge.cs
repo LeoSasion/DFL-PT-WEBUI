@@ -12,6 +12,7 @@ namespace DflPtWebUi.Launcher
         private readonly CoreWebView2 webView;
         private readonly HostController controller;
         private readonly JavaScriptSerializer serializer = new JavaScriptSerializer();
+        private volatile bool disposed;
 
         public RpcBridge(MainWindow window, CoreWebView2 webView, HostController controller)
         {
@@ -23,13 +24,16 @@ namespace DflPtWebUi.Launcher
             webView.WebMessageReceived += OnWebMessageReceived;
             controller.Logs.EntryAdded += OnLogEntryAdded;
             controller.ProgressChanged += OnProgressChanged;
+            controller.CudaRuntimeChanged += OnCudaRuntimeChanged;
         }
 
         public void Dispose()
         {
+            disposed = true;
             webView.WebMessageReceived -= OnWebMessageReceived;
             controller.Logs.EntryAdded -= OnLogEntryAdded;
             controller.ProgressChanged -= OnProgressChanged;
+            controller.CudaRuntimeChanged -= OnCudaRuntimeChanged;
         }
 
         internal static bool IsTrustedMessageSource(string source)
@@ -71,6 +75,7 @@ namespace DflPtWebUi.Launcher
 
         private async void OnWebMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs args)
         {
+            if (disposed) return;
             if (!IsTrustedMessageSource(args.Source))
             {
                 controller.Logs.Add("security", "已拒绝来自非启动器页面的 WebMessage。", "warning");
@@ -90,7 +95,8 @@ namespace DflPtWebUi.Launcher
                     json = args.WebMessageAsJson;
                 }
 
-                object parsed = serializer.DeserializeObject(json);
+                object parsed;
+                lock (serializer) { parsed = serializer.DeserializeObject(json); }
                 Dictionary<string, object> request = parsed as Dictionary<string, object>;
                 if (request == null)
                 {
@@ -162,6 +168,21 @@ namespace DflPtWebUi.Launcher
 
                 case "repairDependencies":
                     return await controller.RunBootstrapAsync(true);
+
+                case "checkCudaRuntime":
+                    return await controller.CheckCudaRuntimeAsync(ReadBoolean(parameters, "force", false));
+
+                case "prepareCudaRuntime":
+                    return await controller.PrepareCudaRuntimeAsync(ReadRequiredString(parameters, "targetRuntime"), ReadRequiredString(parameters, "expectedProjectDir"));
+
+                case "keepCudaRuntime":
+                    return await controller.KeepCudaRuntimeAsync(ReadRequiredString(parameters, "transactionId"), ReadRequiredString(parameters, "expectedProjectDir"));
+
+                case "deleteCudaRuntime":
+                    return await controller.DeleteCudaRuntimeAsync(ReadRequiredString(parameters, "transactionId"), ReadBoolean(parameters, "confirmed", false), ReadRequiredString(parameters, "expectedProjectDir"));
+
+                case "recoverCudaRuntime":
+                    return await controller.RecoverCudaRuntimeAsync(ReadRequiredString(parameters, "transactionId"), ReadRequiredString(parameters, "expectedProjectDir"));
 
                 case "chooseInstallPath":
                 case "project.select":
@@ -253,19 +274,26 @@ namespace DflPtWebUi.Launcher
             SendEvent("progress", value);
         }
 
+        private void OnCudaRuntimeChanged(object value)
+        {
+            SendEvent("cudaRuntime", value);
+        }
+
         private void Post(object value)
         {
-            string json = serializer.Serialize(value);
-            window.Dispatcher.BeginInvoke(new Action(delegate
+            if (disposed) return;
+            // Background package operations outlive a closed or navigating view.
+            // Posting their progress must never abort the operation or its logs.
+            try
             {
-                try
+                string json;
+                lock (serializer) { json = serializer.Serialize(value); }
+                window.Dispatcher.BeginInvoke(new Action(delegate
                 {
-                    webView.PostWebMessageAsJson(json);
-                }
-                catch
-                {
-                }
-            }));
+                    try { if (!disposed) webView.PostWebMessageAsJson(json); } catch { }
+                }));
+            }
+            catch { }
         }
 
         private static bool ChangesState(string method)
@@ -273,6 +301,13 @@ namespace DflPtWebUi.Launcher
             return method != "getState"
                 && method != "status.get"
                 && method != "getStatus"
+                // These return their state explicitly. Periodic CUDA checks
+                // must not launch the full Torch/WebUI health inspection.
+                && method != "checkCudaRuntime"
+                && method != "prepareCudaRuntime"
+                && method != "keepCudaRuntime"
+                && method != "deleteCudaRuntime"
+                && method != "recoverCudaRuntime"
                 && method != "logs.poll"
                 && method != "getLogs"
                 && method != "window.drag";
@@ -294,6 +329,22 @@ namespace DflPtWebUi.Launcher
                 return null;
             }
             return Convert.ToString(source[key]);
+        }
+
+        private static string ReadRequiredString(Dictionary<string, object> source, string key)
+        {
+            object value;
+            if (source == null || !source.TryGetValue(key, out value) || !(value is string) || String.IsNullOrWhiteSpace((string)value))
+                throw new RpcException("invalid_params", "缺少有效参数：" + key);
+            return (string)value;
+        }
+
+        private static bool ReadBoolean(Dictionary<string, object> source, string key, bool fallback)
+        {
+            object value;
+            if (source == null || !source.TryGetValue(key, out value)) return fallback;
+            if (!(value is bool)) throw new RpcException("invalid_params", "参数必须为布尔值：" + key);
+            return (bool)value;
         }
 
         private static int ReadInt(Dictionary<string, object> source, string key, int fallback)

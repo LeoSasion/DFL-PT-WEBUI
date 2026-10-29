@@ -6,8 +6,7 @@ import numpy as np
 
 from core import imagelib
 from core.cv2ex import *
-from core.interact import interact as io
-from facelib import FaceType, LandmarksProcessor
+from facelib import LandmarksProcessor
 from .quality_merge import merge_color, project_reviewed_mask, distance_feather, multiband_blend, sha256
 from .temporal_geometry import adjusted_affine
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { cp, mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { Writable } from "node:stream";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 import { getWorkflowArtifactState } from "../src/domain/workflow-readiness.js";
@@ -26,11 +27,12 @@ async function fixture(t) {
   assert.ok(path.basename(root).startsWith("dfl-workspace-image-stats-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   await cp(path.join(repository, "webui/server"), path.join(root, "webui/server"), { recursive: true });
+  await cp(path.join(repository, "webui/shared"), path.join(root, "webui/shared"), { recursive: true });
   await cp(path.join(repository, "release"), path.join(root, "release"), { recursive: true });
   const workspace = path.join(root, "workspace");
   await Promise.all(Object.values(slots).map(slot => mkdir(path.join(workspace, slot), { recursive: true })));
   const manager = await import(pathToFileURL(path.join(root, "webui/server/workspace-manager.mjs")));
-  return { workspace, inspect: manager.inspectWorkspace };
+  return { workspace, inspect: manager.inspectWorkspace, listMergeReview: manager.listMergeReview };
 }
 
 test("workspace image statistics ignore merge audits and dataset sidecars across all six slots", async (t) => {
@@ -89,4 +91,39 @@ test("auxiliary-only datasets stay unready without changing ME model discovery",
   assert.equal(result.readiness.me, true);
   assert.equal(result.models[0].name, "fixture-me");
   assert.equal(result.models[0].fileCount, 3);
+});
+
+test("merge review keeps natural frame order and matching masks across pages", async (t) => {
+  const { workspace, listMergeReview } = await fixture(t);
+  for (const name of ["frame10.jpg", "frame2.jpg", "frame1.jpg"]) {
+    await writeFile(path.join(workspace, "data_dst", name), jpeg);
+    await writeFile(path.join(workspace, "data_dst/merged", name), jpeg);
+  }
+  await writeFile(path.join(workspace, "data_dst/merged_mask/frame2.jpg"), jpeg);
+  const first = await listMergeReview({ offset: 0, limit: 2 });
+  assert.deepEqual(first.items.map(item => item.name), ["frame1.jpg", "frame2.jpg"]);
+  assert.equal(first.total, 3);
+  assert.equal(first.completeCount, 1);
+  assert.equal(first.items[0].complete, false);
+  assert.equal(first.items[1].complete, true);
+  const next = await listMergeReview({ offset: 2, limit: 2 });
+  assert.deepEqual(next.items.map(item => item.name), ["frame10.jpg"]);
+});
+
+test("aligned poster still selects the first English natural-order image", async (t) => {
+  const { workspace } = await fixture(t);
+  const { streamAlignedPoster } = await import(pathToFileURL(
+    path.join(path.dirname(workspace), "webui/server/asset-manager.mjs"),
+  ));
+  await writeFile(path.join(workspace, "data_src/aligned/frame10.png"), png);
+  await writeFile(path.join(workspace, "data_src/aligned/frame2.jpg"), jpeg);
+  const chunks = [];
+  const response = new Writable({ write(chunk, _encoding, callback) { chunks.push(Buffer.from(chunk)); callback(); } });
+  response.writeHead = (status, headers) => {
+    assert.equal(status, 200);
+    assert.equal(headers["Content-Type"], "image/jpeg");
+    assert.equal(headers["Content-Length"], jpeg.length);
+  };
+  await streamAlignedPoster(response, "src");
+  assert.deepEqual(Buffer.concat(chunks), jpeg);
 });

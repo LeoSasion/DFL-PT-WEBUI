@@ -66,8 +66,22 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 
 ## PyTorch repository decisions
 
-- This repository is DFL-PT-WEBUI. ME PyTorch is the only face-training, face-merge and DFM-export model family. Auxiliary XSeg tools remain available. Never reintroduce SAEHD, AMP, Quick or TensorFlow execution paths.
-- Use the repository `.venv/Scripts/python.exe`. Training launches the fixed `_internal/DeepFaceLab/me.py web-train` entry; tools use `_internal/DeepFaceLab/main.py`.
+- On 2026-10-18 the user authorized eight more hours of TAE training following the recommendation to reduce the base learning rate to 5e-5, keeping BS8, grad_clip1, LCT, expanded feather and random_warp=false. Base learning-rate changes on stopped resume preserve weights/iteration/data, reset AdamW/warmup and record the rate in stage history. Migrate existing sampler/reference fingerprints instead of resetting them.
+
+- On 2026-10-17 the user requested disabling random warp on the active TAE model while retaining LCT/expanded-feather and the original ten-hour absolute cutoff. Expose random_warp as resume-mutable with a recorded stage; migrate legacy sampler/reference fingerprints without resetting data state. A fixed cutoff includes resumed preparation and must never restart the original duration.
+
+- On 2026-10-16 the user requested resuming the existing TAE pretraining model with LCT replacing RCT and the accepted expanded-feather mask enabled, for a 10-hour training limit. TAE color transfer exposes none/RCT/LCT, reuses native transforms on SRC input and target, and keeps sampler state through a recorded optimization-stage change.
+
+- On 2026-10-16 the user requested TAE-only training-mask modes: native face / expanded feather / full aligned crop. Expanded coverage adds 10% of resolution (512: radius 51 px). The user refined feathering to span the whole added radius: weight 1 at the native 0.5 contour, linearly falling to 0 at the outer edge, without a full-weight plateau outside the face. Keep face-mask-head targets and eyes/mouth regions native. Treat changes on stopped resume as a recorded new optimization stage. Background-image blur is a separate concept; do not merge ME's existing blur_out_mask control into this setting. Do not start training for this change.
+
+- On 2026-10-14 the user added 512 to the TAE resolution presets for RTM2 pretraining (Inter 384, hidden 96, batch 4, frozen Encoder/Decoder), and requested launching through WebUI to exercise the real workflow. Expose explicit common-pool pretraining in the TAE task wizard, restore the checkpoint mode and pool on resume, and keep ordinary SRC/DST training separate.
+
+- The user selected **TAEQI2.1** and removed H3 training on 2026-10-10. Use `train.tae` / `merge.tae`, family `TAE`, checkpoint `tae.pt`. Encoder is always frozen. Show decoder choices frozen / tail / full (default frozen), relative LR (default 0.1), and training precision FP32 / BF16 (default BF16). These three fields are mutable on resume; changing one retains weights and iteration but resets AdamW and warmup as an explicit stage, with visible explanation. Resolution presets 256/448/512/640/832 remain; remove H3 tile claims. Keep ME independent.
+
+- This repository is DFL-PT-WEBUI. Per the user's 2026-10-10 instruction, ME and TAEQI2.1 are parallel PyTorch face-training, face-merge and DFM-export families. Export modes are normal FP32 and extreme FP8 / NVFP4; export precision is independent of training FP32/BF16. Extreme export requires Blackwell + TensorRT and real calibration, with verified engine execution before success. Larger models use external weight files rather than a 2GB rejection. Show the bundle-copy and runtime requirements. TAE uses independent tae.pt checkpoints. Auxiliary XSeg tools remain available. Never reintroduce TensorFlow execution paths.
+- Use the repository `.venv/Scripts/python.exe`. ME training launches `_internal/DeepFaceLab/me.py web-train`; TAE training launches `_internal/DeepFaceLab/tae.py web-train`. Tools use `_internal/DeepFaceLab/main.py`.
 - ME models are isolated under `workspace/model/<name>/me.pt` with non-executable `metadata.json`. Explicit creation and resume intent must prevent replacement or silent checkpoint substitution.
 - The initial Web configuration exposes only resolution and batch size for the supported liae-ud ME architecture. Resume preserves the checkpoint configuration.
 - ME safe-stop UI may claim a saved stop only after the Python process exits successfully and the matching close acknowledgement is completed.
+
+- 2026-10-20: TAE stopped resume may adjust eyes_mouth_weight as an explicit stage; retain weights/iterations/sampling, reset AdamW/warmup, migrate exact predecessor sampler fingerprints. Other loss weights remain immutable.

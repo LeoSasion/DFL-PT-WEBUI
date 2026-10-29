@@ -6,6 +6,7 @@ NCHW is the default data format in PyTorch.
 """
 
 import numpy as np
+from pathlib import Path
 
 from core.interact import interact as io
 from .device import Devices
@@ -25,6 +26,8 @@ class nn:
 
     @staticmethod
     def initialize(device_config=None, floatx="float32", data_format="NCHW"):
+        from core.torch_runtime_switch import assert_runtime_available
+        assert_runtime_available(Path(__file__).resolve().parents[4])
         if device_config is None:
             device_config = nn.DeviceConfig.BestGPU()
 

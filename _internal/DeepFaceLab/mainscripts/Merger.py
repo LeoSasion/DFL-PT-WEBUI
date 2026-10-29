@@ -1,4 +1,3 @@
-import math
 import multiprocessing
 import json
 import os
@@ -8,7 +7,6 @@ import traceback
 from pathlib import Path
 
 import numpy as np
-import numpy.linalg as npla
 
 import samplelib
 from core import pathex
@@ -364,7 +362,7 @@ def main (model_class_name=None,
                     'frameStart': preview_frame_start, 'frameCount': preview_frame_count,
                     'totalSourceFrames': total_source_frames, 'modelName': model.name,
                     'sourceFrameInventorySha256': source_frame_inventory_sha256,
-                    'modelSha256': sha256(model.directory / 'me.pt'),
+                    'modelSha256': sha256(model.directory / ('tae.pt' if model_class_name == 'TAE' else 'me.pt')),
                     'alignedPath': str(aligned_path.resolve().relative_to(input_path.resolve().parent)),
                     'requestedParameters': json.loads(web_config),
                     'device': {'cpuOnly': bool(cpu_only), 'gpuIndexes': force_gpu_idxs or ''},

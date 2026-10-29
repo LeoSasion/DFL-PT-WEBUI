@@ -1,17 +1,20 @@
 import { initializeMEParameters, modelMEParameters } from "./me-training-configuration.js";
+import { faceModelFamily, modelTAEParameters, restoreTAEModelConfiguration } from "./tae-training-configuration.js";
 
 export function commandModelFamily(command) {
   if (command?.id === "xseg.train") return "XSEG";
   if (["model.import_me_tf", "merge.preview_me"].includes(command?.id)) return "ME";
-  return /^(?:train|merge|export\.dfm)[._](me)$/i.exec(command?.id ?? "")?.[1].toUpperCase() ?? null;
+  const family = /^(?:train|merge|export\.dfm)[._](me|tae)$/i.exec(command?.id ?? "")?.[1].toUpperCase() ?? null;
+  return family;
 }
 
 export function taskModels(command, models = []) {
   const family = commandModelFamily(command);
   return models.filter(model => {
-    if (!family || model.type?.toUpperCase() !== family) return false;
+    if (!family || faceModelFamily(model) !== family) return false;
     if (model.ready === false) return false;
     if (family === "ME") return model.format === "me-pytorch" && model.files?.includes("me.pt");
+    if (family === "TAE") return model.format === "tae-liae-pytorch" && model.files?.includes("tae.pt");
     if (Array.isArray(model.files)) return model.files.some(file => /_data\.dat$/i.test(file));
     // Older runtimes represented the whole XSeg directory as a model name.
     return !(family === "XSEG" && model.name === "xseg_model");
@@ -58,6 +61,16 @@ export function createTaskConfiguration(command, supplied = {}, models = []) {
       }
     }
   }
+  if (command?.id === "train.tae" && !newModel) {
+    const selected = saved.find(model => model.name === parameters.forceModelName);
+    if (selected) {
+      Object.assign(parameters, modelTAEParameters(schemas, selected));
+      for (const id of ["vae_weights", ...schemas.filter(schema => schema.resumeMutable).map(schema => schema.id)]) {
+          if (Object.hasOwn(supplied ?? {}, id)) parameters[id] = supplied[id];
+        }
+      parameters.silentStart = true;
+    }
+  }
   if (parameters.cpuOnly && Object.hasOwn(parameters, "gpuIndexes")) parameters.gpuIndexes = "";
   return { parameters, newModel };
 }
@@ -91,6 +104,10 @@ export function selectTaskModel(command, current, name, models = []) {
     parameters = restoreMEModelConfiguration(command, parameters, creating ? null : model);
     parameters.forceModelName = creating ? "" : name;
   }
+  if (command?.id === "train.tae") {
+    parameters = restoreTAEModelConfiguration(command, parameters, creating ? null : model);
+    parameters.forceModelName = creating ? "" : name;
+  }
   if (Object.hasOwn(parameters, "silentStart")) parameters.silentStart = !creating && Boolean(name);
   return { parameters, newModel: creating };
 }
@@ -120,7 +137,12 @@ export function taskOutputLocations(command, workspace = {}, parameters = {}) {
   if (side && id.endsWith("extract_restored")) return { paths: [`data_${side}/aligned_restored/${parameters.restorationTaskId || "<修复记录>"}`] };
   if (id === "runtime.prepare_vision") return { paths: [], note: "runtime" };
   if (id === "xseg.train") return { paths: ["xseg_model"] };
-  if (["train.me", "export.dfm_me", "model.import_me_tf"].includes(id) && parameters.forceModelName) {
+  if (id.startsWith("export.dfm_") && parameters.forceModelName) {
+    const filename = parameters.exportMode === "extreme" ? "model_extreme.dfm" : "model.dfm";
+    return { paths: [`model/${parameters.forceModelName}/${filename}`,
+      `model/${parameters.forceModelName}/${filename}.export.json`], note: "dfm-bundle" };
+  }
+  if (["train.me", "train.tae", "model.import_me_tf"].includes(id) && parameters.forceModelName) {
     return { paths: [`model/${parameters.forceModelName}`] };
   }
   if (["training", "model"].includes(command?.category)) return { paths: ["model"] };

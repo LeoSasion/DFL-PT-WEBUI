@@ -10,12 +10,13 @@ import importlib.util
 import json
 from pathlib import Path
 import platform
-import re
 import subprocess
 import sys
-import zipfile
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / '_internal/DeepFaceLab'))
+from core.gpu_runtime import installed_runtime, load_manifest, render_profile, runtime_sbom, select_runtime
 PROFILE_FILES = {'production': 'requirements.txt', 'restoration': 'requirements-restoration.txt',
                  'validation': 'requirements-validation.txt', 'evaluation': 'tools/requirements-vision-evaluation.txt',
                  'scene': 'requirements-scene.txt'}
@@ -42,10 +43,11 @@ def direct(path, visited=None):
     return result
 
 
-def graph(profile):
+def graph(profile, cuda_runtime='cu128'):
     from packaging.requirements import Requirement
     from packaging.utils import canonicalize_name
-    result, queue = {}, ['torch==2.9.1+cu128'] + direct(ROOT / PROFILE_FILES[profile])
+    torch_version = load_manifest(ROOT)['runtimes'][cuda_runtime]['torch']
+    result, queue = {}, ['torch==' + torch_version] + direct(ROOT / PROFILE_FILES[profile])
     while queue:
         requirement = Requirement(queue.pop())
         if requirement.marker and not requirement.marker.evaluate({'extra': ''}):
@@ -86,13 +88,15 @@ def run(args):
     subprocess.run(command, check=True)
 
 
-def generate(destination, download, selected_profiles=None):
+def generate(destination, download, selected_profiles=None, cuda_runtime='cu128'):
     from packaging.utils import parse_wheel_filename, canonicalize_name
+    if cuda_runtime == 'cu126' and destination.resolve().is_relative_to(ROOT / 'release'):
+        raise ValueError('Legacy generation must not overwrite the source release baseline')
     destination.mkdir(parents=True, exist_ok=True)
-    profiles = {profile: graph(profile) for profile in (selected_profiles or PROFILE_FILES)}
+    profiles = {profile: graph(profile, cuda_runtime) for profile in (selected_profiles or PROFILE_FILES)}
     existing_sbom = ROOT / 'release/python-sbom.json'
     if selected_profiles and existing_sbom.exists():
-        existing = json.loads(existing_sbom.read_text(encoding='utf-8'))
+        existing = runtime_sbom(ROOT, cuda_runtime)
         for profile, names in existing['profiles'].items():
             if profile not in profiles:
                 profiles[profile] = {name: existing['packages'][name] for name in names}
@@ -107,7 +111,7 @@ def generate(destination, download, selected_profiles=None):
     if download:
         for cuda in ('torch', 'torchvision'):
             record = combined[cuda]
-            run(['download', '--no-deps', '--only-binary=:all:', '--index-url', 'https://download.pytorch.org/whl/cu128',
+            run(['download', '--no-deps', '--only-binary=:all:', '--index-url', load_manifest(ROOT)['runtimes'][cuda_runtime]['indexUrl'],
                  '--dest', str(wheelhouse), record['name'] + '==' + record['version']])
         ordinary = destination / 'resolved-maintainer-constraints.txt'
         ordinary.write_text('\n'.join(r['name'] + '==' + r['version'] for k, r in sorted(combined.items()) if k not in ('torch', 'torchvision')) + '\n', encoding='utf-8')
@@ -129,20 +133,23 @@ def generate(destination, download, selected_profiles=None):
         if wheels[key]['version'] != record['version']:
             raise ValueError('Wheel version differs from tested package: ' + key)
         record['wheel'] = wheels[key]
-    ROOT.joinpath('release/python-locks').mkdir(exist_ok=True)
+    # A legacy maintainer run must not replace the modern source baseline.
+    lock_root = ROOT / 'release/python-locks' if cuda_runtime == 'cu128' else destination / 'python-locks'
+    lock_root.mkdir(exist_ok=True)
     for profile, records in profiles.items():
-        path = ROOT / f'release/python-locks/{profile}-win-cp312.txt'
+        path = lock_root / f'{profile}-win-cp312.txt'
         path.write_text('# Generated from the tested Windows CPython 3.12 graph. No network resolution at installation.\n'
                         + '\n'.join(combined[key]['name'] + '==' + combined[key]['version'] + ' --hash=sha256:' + wheels[key]['sha256'] for key in sorted(records)) + '\n', encoding='utf-8')
-    payload = {'schemaVersion': 1, 'target': 'win_amd64-cp312', 'python': platform.python_version(),
+    payload = {'schemaVersion': 1, 'target': 'win_amd64-cp312', 'python': platform.python_version(), 'torchRuntime': cuda_runtime,
                'profiles': {key: sorted(value) for key, value in profiles.items()}, 'packages': combined}
-    (ROOT / 'release/python-sbom.json').write_text(json.dumps(payload, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+    sbom_path = ROOT / 'release/python-sbom.json' if cuda_runtime == 'cu128' else destination / 'python-sbom.json'
+    sbom_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
     (wheelhouse / 'python-sbom.json').write_text(json.dumps(payload, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
     print(json.dumps({'profiles': {k: len(v) for k, v in profiles.items()}, 'wheels': len(wheels), 'wheelhouse': str(wheelhouse)}))
 
 
-def verify(wheelhouse, profile):
-    payload = json.loads((ROOT / 'release/python-sbom.json').read_text(encoding='utf-8'))
+def verify(wheelhouse, profile, cuda_runtime='cu128'):
+    payload = runtime_sbom(ROOT, cuda_runtime)
     if payload.get('schemaVersion') != 1 or payload.get('target') != 'win_amd64-cp312':
         raise ValueError('Unsupported runtime lock target')
     if sys.version_info[:2] != (3, 12) or sys.platform != 'win32':
@@ -162,13 +169,20 @@ if __name__ == '__main__':
     parser.add_argument('--profile', choices=tuple(PROFILE_FILES), default='production')
     parser.add_argument('--download', action='store_true')
     parser.add_argument('--profiles', nargs='+', choices=tuple(PROFILE_FILES))
+    parser.add_argument('--cuda-runtime', choices=('cu128', 'cu126'), default='cu128')
     args = parser.parse_args()
     if args.command == 'generate':
-        generate(args.directory.resolve(), args.download, args.profiles)
+        generate(args.directory.resolve(), args.download, args.profiles, args.cuda_runtime)
     else:
-        verify(args.directory.resolve(), args.profile)
         if args.command == 'install':
-            run(['install', '--no-index', '--find-links', str(args.directory.resolve()), '--require-hashes', '--only-binary=:all:',
-                 '-r', str(ROOT / f'release/python-locks/{args.profile}-win-cp312.txt')])
+            select_runtime(args.cuda_runtime, installed_runtime(ROOT, load_manifest(ROOT)))
+        verify(args.directory.resolve(), args.profile, args.cuda_runtime)
+        if args.command == 'install':
+            temporary_root = ROOT / '.runtime'
+            temporary_root.mkdir(exist_ok=True)
+            with tempfile.TemporaryDirectory(prefix='runtime-lock-', dir=temporary_root) as directory:
+                resolved = render_profile(ROOT, args.cuda_runtime, args.profile, Path(directory))
+                run(['install', '--no-index', '--find-links', str(args.directory.resolve()), '--require-hashes', '--only-binary=:all:',
+                     '-r', resolved['requirements']])
             run(['check'])
         print('Locked wheelhouse verified: ' + args.profile)

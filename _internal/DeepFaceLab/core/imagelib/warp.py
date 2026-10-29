@@ -104,7 +104,7 @@ def gen_pts(W, H, rnd_state=None):
     return pts1, pts2
 
 
-def gen_warp_params (w, flip=False, rotation_range=[-10,10], scale_range=[-0.5, 0.5], tx_range=[-0.05, 0.05], ty_range=[-0.05, 0.05], rnd_state=None, warp_rnd_state=None  ):
+def gen_warp_params (w, flip=False, rotation_range=[-10,10], scale_range=[-0.5, 0.5], tx_range=[-0.05, 0.05], ty_range=[-0.05, 0.05], rnd_state=None, warp_rnd_state=None, generate_warp=True  ):
     if rnd_state is None:
         rnd_state = np.random
     if warp_rnd_state is None:
@@ -120,18 +120,22 @@ def gen_warp_params (w, flip=False, rotation_range=[-10,10], scale_range=[-0.5, 
     ty = rnd_state.uniform( ty_range[0], ty_range[1] )
     p_flip = flip and rnd_state.randint(10) < 4
 
-    #random warp V1
-    cell_size = [ w // (2**i) for i in range(1,4) ] [ warp_rnd_state.randint(3) ]
-    cell_count = w // cell_size + 1
-    grid_points = np.linspace( 0, w, cell_count)
-    mapx = np.broadcast_to(grid_points, (cell_count, cell_count)).copy()
-    mapy = mapx.T
-    mapx[1:-1,1:-1] = mapx[1:-1,1:-1] + randomex.random_normal( size=(cell_count-2, cell_count-2), rnd_state=warp_rnd_state )*(cell_size*0.24)
-    mapy[1:-1,1:-1] = mapy[1:-1,1:-1] + randomex.random_normal( size=(cell_count-2, cell_count-2), rnd_state=warp_rnd_state )*(cell_size*0.24)
-    half_cell_size = cell_size // 2
-    mapx = cv2.resize(mapx, (w+cell_size,)*2 )[half_cell_size:-half_cell_size,half_cell_size:-half_cell_size].astype(np.float32)
-    mapy = cv2.resize(mapy, (w+cell_size,)*2 )[half_cell_size:-half_cell_size,half_cell_size:-half_cell_size].astype(np.float32)
-    ##############
+    # ME/TAE use a private warp RNG per sample. When nonlinear warp is
+    # disabled, its dense maps have no consumer; affine/flip stay identical.
+    mapx = mapy = None
+    if generate_warp:
+        #random warp V1
+        cell_size = [ w // (2**i) for i in range(1,4) ] [ warp_rnd_state.randint(3) ]
+        cell_count = w // cell_size + 1
+        grid_points = np.linspace( 0, w, cell_count)
+        mapx = np.broadcast_to(grid_points, (cell_count, cell_count)).copy()
+        mapy = mapx.T
+        mapx[1:-1,1:-1] = mapx[1:-1,1:-1] + randomex.random_normal( size=(cell_count-2, cell_count-2), rnd_state=warp_rnd_state )*(cell_size*0.24)
+        mapy[1:-1,1:-1] = mapy[1:-1,1:-1] + randomex.random_normal( size=(cell_count-2, cell_count-2), rnd_state=warp_rnd_state )*(cell_size*0.24)
+        half_cell_size = cell_size // 2
+        mapx = cv2.resize(mapx, (w+cell_size,)*2 )[half_cell_size:-half_cell_size,half_cell_size:-half_cell_size].astype(np.float32)
+        mapy = cv2.resize(mapy, (w+cell_size,)*2 )[half_cell_size:-half_cell_size,half_cell_size:-half_cell_size].astype(np.float32)
+        ##############
 
     # random warp V2
     # pts1, pts2 = gen_pts(w, w, rnd_state)

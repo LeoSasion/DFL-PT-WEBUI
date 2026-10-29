@@ -88,6 +88,8 @@ async function prepareRepository(testRoot) {
     ),
 
     cp(path.join(sourceRepositoryRoot, "tools"), path.join(repositoryRoot, "tools"), { recursive: true }),
+    cp(path.join(sourceRepositoryRoot, "legacy-cli"), path.join(repositoryRoot, "legacy-cli"), { recursive: true }),
+    cp(path.join(sourceRepositoryRoot, "_internal", "setenv.bat"), path.join(internalRoot, "setenv.bat")),
     cp(path.join(sourceRepositoryRoot, "launcher"), path.join(repositoryRoot, "launcher"), { recursive: true,
       filter: candidate => !["node_modules", "dist", "bin", "obj", "vendor", "bin-host-verify", ".launcher-install"].includes(path.basename(candidate)) }),
     mapPythonRuntime(pythonRuntime, repositoryRoot),

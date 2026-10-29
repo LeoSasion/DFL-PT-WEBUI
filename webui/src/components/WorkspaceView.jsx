@@ -490,11 +490,11 @@ export function WorkspaceView({ serviceOnline, onError, onNotice, onArchived, on
       optional: true,
     },
     {
-      label: t("ME 模型"),
-      value: data.models.filter((model) => model.type === "ME").length
-        ? t("{count} 个", { count: data.models.filter((model) => model.type === "ME").length })
+      label: t("ME / TAEQI2.1 模型"),
+      value: data.models.filter((model) => ["ME", "TAE"].includes(model.type)).length
+        ? `ME ${data.models.filter(model => model.type === "ME").length} · TAEQI2.1 ${data.models.filter(model => ["TAE"].includes(model.type)).length}`
         : t("未检测"),
-      ready: data.readiness.me,
+      ready: data.readiness.me || data.readiness.tae,
     },
     {
       label: t("merged 序列"),
@@ -605,7 +605,7 @@ export function WorkspaceView({ serviceOnline, onError, onNotice, onArchived, on
           {data.models.length ? data.models.map((model, index) => (
             <div className={`workspace-model ${index === 0 ? "is-primary" : ""}`} key={`${model.type}-${model.name}`}>
               <div>
-                <span className={`model-type is-${model.type.toLowerCase()}`}>{model.type}</span>
+                <span className={`model-type is-${model.type.toLowerCase()}`}>{model.type === "TAE" ? "TAEQI2.1" : model.type}</span>
                 <strong>{model.name}</strong>
               </div>
               <dl>

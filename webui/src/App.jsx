@@ -14,7 +14,8 @@ import { DeferredDialog, StopConfirmDialog, Toast } from "./components/Overlays.
 import { BackgroundOperations } from "./components/BackgroundOperations.jsx";
 import { ProjectSwitchDialog } from "./components/ProjectSwitchDialog.jsx";
 import { WorkbenchGrid } from "./components/TrainingView.jsx";
-import { selectTrainingJob, resolveSavedTrainingModel, getSavedTrainingModelState } from "./domain/training-context.js";
+import { selectTrainingJob, resolveSavedTrainingModel, getSavedTrainingContext } from "./domain/training-context.js";
+import { trainingModelFamily } from "./domain/tae-training-configuration.js";
 import { LoadingProgress, ProgressHud } from "./components/ProgressFeedback.jsx";
 import {
   navigationWorkflowStages,
@@ -25,11 +26,13 @@ import { useI18n } from "./i18n.jsx";
 import { runtimeApi } from "./runtime/api.js";
 import { useRuntime } from "./runtime/useRuntime.js";
 import { useTrainingHistory } from "./runtime/useTrainingHistory.js";
-import { isFailedJob } from "./domain/job-presentation.js";
+import { activeJobStates as activeStates, isFailedJob } from "./domain/job-presentation.js";
 import { getNextWorkflowStep, getUsageReadiness, getWorkflowArtifactState, getTrainingSaveStatus } from "./domain/workflow-readiness.js";
 import { latestWorkflowJob } from "./domain/workflow-job-state.js";
+import { createLocalizedJobSelector } from "./domain/localized-jobs.js";
 import { FirstUseGuide } from "./components/FirstUseGuide.jsx";
 import { ReleaseStrip, useReleaseInfo } from "./components/ReleaseFeedbackPanel.jsx";
+import { nativeToolDestination } from "./domain/native-tool-links.js";
 
 const pipelineCommandMap = {
   extract: ["src.extract_frames", "dst.extract_frames"],
@@ -37,12 +40,11 @@ const pipelineCommandMap = {
   dst: ["dst.extract_faces"],
   sort: ["src.sort_faces", "dst.sort_faces"],
   xseg: ["xseg.train", "xseg.apply_src", "xseg.apply_dst"],
-  me: ["train.me"],
-  merge: ["merge.me"],
+  me: ["train.me", "train.tae"],
+  merge: ["merge.me", "merge.tae"],
   export: ["encode.quality", "encode.mp4", "encode.mp4_lossless", "encode.master", "encode.avi", "encode.mov_lossless"],
 };
 
-const activeStates = new Set(["queued", "starting", "running", "waiting_input", "stopping"]);
 const frameCommandFilter = (command) => ["src.extract_frames", "dst.extract_frames"].includes(command.id);
 const faceCommandFilter = (command) => ["src.extract_faces", "dst.extract_faces"].includes(command.id);
 const trainingCommandFilter = (command) => command.category === "training" || command.id === "model.import_me_tf";
@@ -76,7 +78,7 @@ function workspaceTaskReady(taskId, workspace) {
   if (taskId === "dst") return (datasets.dstFaces?.count ?? 0) > 0;
   if (taskId === "sort") return Boolean(workspace.roles?.src?.current && workspace.roles?.dst?.current);
   if (taskId === "xseg") return Boolean(readiness.xseg);
-  if (taskId === "me") return Boolean(readiness.me);
+  if (taskId === "me") return Boolean(readiness.me || readiness.tae);
   if (taskId === "merge") return Boolean(readiness.merged);
   if (taskId === "export") return Boolean(readiness.encoded);
   return false;
@@ -145,10 +147,8 @@ export function App() {
     () => new Map(commands.map((command) => [command.id, command])),
     [commands],
   );
-  const jobs = useMemo(() => runtime.jobs.map((job) => ({
-    ...job,
-    label: commandById.get(job.commandId)?.label ?? job.label,
-  })), [commandById, runtime.jobs]);
+  const selectLocalizedJobs = useMemo(createLocalizedJobSelector, []);
+  const jobs = useMemo(() => selectLocalizedJobs(runtime.jobs, commandById), [commandById, runtime.jobs, selectLocalizedJobs]);
   const selectedJob = useMemo(
     () => jobs.find((job) => job.id === runtime.selectedJobId) ?? null,
     [jobs, runtime.selectedJobId],
@@ -259,7 +259,7 @@ export function App() {
       latestJobs.find((candidate) => candidate.commandId === commandId)?.state
     ));
     const isActive = latestStates.some((state) => activeStates.has(state));
-    const isAlternativeGroup = task.id === "export";
+    const isAlternativeGroup = task.id === "export" || task.id === "merge";
     const isComplete = task.id !== "me" && (task.id !== "sort" && (isAlternativeGroup
       ? latestStates.some((state) => state === "succeeded")
       : requiredStates.every((state) => state === "succeeded")));
@@ -293,13 +293,13 @@ export function App() {
       const job = jobs.find((candidate) => candidate.commandId === commandId);
       if (!job) return artifactReady ? "available" : "waiting";
       if (activeStates.has(job.state)) return "active";
-      if (commandId === "train.me") {
+      if (["train.me", "train.tae"].includes(commandId)) {
         const save = getTrainingSaveStatus(job, resolveSavedTrainingModel(workspaceSnapshot?.models, job));
         if (save.saveState === "unconfirmed") return "unconfirmed";
         if (save.saveState === "confirmed") return "done";
       }
       if (isFailedJob(job)) return "failed";
-      if (commandId !== "train.me" && job.state === "succeeded") return "done";
+      if (!["train.me", "train.tae"].includes(commandId) && job.state === "succeeded") return "done";
       if (artifactReady) return "available";
       return "waiting";
     };
@@ -322,9 +322,9 @@ export function App() {
       faces: combinedStateFor(["src.extract_faces", "dst.extract_faces"], readiness.faces),
       clean: cleanState === "waiting" && readiness.faces ? "review" : cleanState,
       mask: combinedStateFor(["xseg.train", "xseg.apply_src", "xseg.apply_dst"], readiness.xseg),
-      train: stateFor("train.me", artifacts.meAvailable),
+      train: stateFor(selectTrainingJob(jobs)?.commandId ?? "train.me", artifacts.meAvailable || artifacts.taeAvailable),
       diagnose: diagnosticSnapshotCount >= 2 ? "done" : "waiting",
-      merge: stateFor("merge.me", artifacts.exportConfiguredReady),
+      merge: stateFor(latestWorkflowJob(jobs, pipelineCommandMap.merge)?.commandId ?? "merge.me", artifacts.exportConfiguredReady),
       encode: latestEncoding ? stateFor(latestEncoding.commandId, artifacts.encodedAvailable) : artifacts.encodedAvailable ? "available" : "waiting",
     };
   }, [diagnosticSnapshotCount, jobs, workspaceSnapshot]);
@@ -361,7 +361,7 @@ export function App() {
   }, [t, xsegDirty]);
 
   const handleNavigate = useCallback((id) => {
-    if (id !== activeNav && !confirmDiscardXSeg()) return;
+    if (id !== activeNav && !confirmDiscardXSeg()) return false;
     navigationTouchedRef.current = true;
     setActiveNav(id);
     const nextStage = navigationWorkflowStages[id];
@@ -371,7 +371,22 @@ export function App() {
       setActiveTask("diagnose");
     }
     setConsoleCollapsed(id !== "overview");
+    return true;
   }, [activeNav, confirmDiscardXSeg]);
+
+  const nativeLinkHandler = useRef(null);
+  nativeLinkHandler.current = () => {
+    const destination = nativeToolDestination(window.location.hash);
+    if (!destination || !handleNavigate(destination.nav)) return;
+    if (destination.focus) setToolFocus({ ...destination.focus, nonce: Date.now() });
+  };
+  useEffect(() => {
+    if (runtime.serviceState !== "online") return undefined;
+    const open = () => nativeLinkHandler.current();
+    open();
+    window.addEventListener("hashchange", open);
+    return () => window.removeEventListener("hashchange", open);
+  }, [runtime.serviceState, workspaceScope]);
 
   const handleStageSelect = useCallback((stage) => {
     const destination = workflowStageDestinations[stage.id];
@@ -661,19 +676,64 @@ export function App() {
   const workspacePath = runtime.health?.runtime?.current?.workspace ?? "workspace";
   const trainingMetric = trainingJob?.latestMetric;
   const trainingHistory = useTrainingHistory(trainingJob);
-  const savedTrainingModel = resolveSavedTrainingModel(workspaceSnapshot?.models,trainingJob);
-  const savedModelState = workspaceSnapshot ? getSavedTrainingModelState(workspaceSnapshot.models,trainingJob) : "loading";
-  const resumeTraining = () => {
+  const savedTrainingContext = useMemo(() => getSavedTrainingContext(workspaceSnapshot?.models, trainingJob), [workspaceSnapshot, trainingJob]);
+  const savedTrainingModel = savedTrainingContext.model;
+  const savedModelState = workspaceSnapshot ? savedTrainingContext.state : "loading";
+  const resumeTraining = useCallback(() => {
     setTaskInitialStep("parameters");
-    setTaskType("train.me");
+    setTaskType(trainingModelFamily(trainingJob, savedTrainingModel) === "TAE" ? "train.tae" : "train.me");
     setTaskDefaults({ ...(trainingJob?.parameters ?? {}), forceModelName:savedTrainingModel?.name ?? "", silentStart:Boolean(savedTrainingModel),
       allowConfigChange:false, resetOptimizer:false, resetDataState:false, debugSamples:false, stopAtTarget:false, initializeFrom:"" });
     setNewTaskOpen(true);
-  };
+  }, [savedTrainingModel, trainingJob]);
   const modelSummaryAside = useMemo(
     () => <ModelSummaryAside workspace={workspaceSnapshot} trainingJob={trainingJob} savedModel={savedTrainingModel} />,
     [workspaceSnapshot, trainingJob, savedTrainingModel],
   );
+  const overviewPipeline = useMemo(() => ({
+    activeTask,
+    title: "训练与评估",
+    description: "已有 PAK / aligned 可直接配置训练；需要处理素材时进入预处理。",
+    tasks: livePipelineTasks.filter(task => ["me", "diagnose"].includes(task.id)).map((task, index) => ({ ...task, index: index + 1 })),
+    onSelectTask: handleTaskSelect,
+  }), [activeTask, handleTaskSelect, livePipelineTasks]);
+  const overviewTraining = useMemo(() => ({
+    iteration: trainingMetric?.iteration ?? 0,
+    trainingState: trainingJob?.state ?? "idle",
+    trainingJob,
+    savedModel: savedTrainingModel,
+    savedModelState,
+    onResume: resumeTraining,
+    onMerge: () => openCommand(trainingModelFamily(trainingJob, savedTrainingModel) === "TAE" ? "merge.tae" : "merge.me", { forceModelName: savedTrainingModel?.name ?? "" }),
+    previewVersion: trainingJob?.previewVersion ?? null,
+    manualPreviewRefresh: previewRefresh,
+    etaSeconds: trainingMetric?.etaSeconds,
+    targetIterations: trainingMetric?.targetIterations,
+    startedAt: trainingJob?.startedAt,
+    operationKey: trainingJob?.id ? `job:${trainingJob.id}` : "job:training-me",
+    onSave: () => void controlTraining("save", t("保存请求已送入 Trainer")),
+    onBackup: () => void controlTraining("backup", t("备份请求已送入 Trainer")),
+    onRefresh: () => void controlTraining("preview", t("预览刷新请求已送入 Trainer")),
+    onEvaluate: () => void evaluateTraining().catch(() => {}),
+    onOpenDiagnostics: openQualityDiagnostics,
+    canEvaluate: Boolean(
+      evaluationJob
+      && ["starting", "running", "waiting_input"].includes(evaluationJob.state)
+      && evaluationJob.controls?.includes("evaluate")
+    ),
+    latestEvaluationSnapshotId: evaluationJob?.latestEvaluationSnapshotId,
+    pendingAction,
+    onSafeStop: () => trainingJob?.id && setStopTargetJobId(trainingJob.id),
+  }), [controlTraining, evaluateTraining, evaluationJob, openCommand, openQualityDiagnostics, pendingAction, previewRefresh, resumeTraining, savedModelState, savedTrainingModel, t, trainingJob, trainingMetric]);
+  const openModelDirectory = useCallback(() => handleCopyText(`${workspacePath}\\model`, t("模型目录已复制")), [handleCopyText, t, workspacePath]);
+  const overviewStatus = useMemo(() => ({
+    trainingJob,
+    telemetry: runtime.telemetry,
+    lossHistory: trainingHistory.points,
+    historyError: trainingHistory.error,
+    onRetryHistory: trainingHistory.retry,
+    onOpenModels: openModelDirectory,
+  }), [openModelDirectory, runtime.telemetry, trainingHistory.error, trainingHistory.points, trainingHistory.retry, trainingJob]);
 
   let mainContent;
   if (activeNav === "video") {
@@ -752,7 +812,7 @@ export function App() {
     mainContent = (
       <CommandCenterView
         title={t("模型训练")}
-        description={t("可直接使用已准备的 PAK / aligned 人脸集。选择人脸集所在目录，配置 ME 训练、预训练或微调。")}
+        description={t("选择已准备的 PAK / aligned 人脸集，使用 ME 或 TAEQI2.1。TAEQI2.1 始终冻结 Encoder，Decoder 训练范围可选。")}
         actions={<div className="training-page-actions"><button type="button" className="button secondary" onClick={() => handleNavigate("overview",t("总览"))}>{t("训练预览与曲线")}</button><button type="button" className="button primary" disabled={trainingJob && activeStates.has(trainingJob.state)} onClick={resumeTraining}>{savedTrainingModel ? t("继续训练") : savedModelState === "empty" ? t("新建训练") : t("选择训练模型")}</button></div>}
         commands={commands}
         filter={trainingCommandFilter}
@@ -778,10 +838,10 @@ export function App() {
   } else if (activeNav === "merge") {
     mainContent = (
       <div className="merge-workflow-page">
-      <MergePreviewPanel key={workspaceScope} workspace={workspaceSnapshot} jobs={jobs} onOpenCommand={openCommand} onOpenJob={openJobLog} onError={showError}/>
+      {workspaceSnapshot?.readiness?.me || !workspaceSnapshot?.readiness?.tae ? <MergePreviewPanel key={workspaceScope} workspace={workspaceSnapshot} jobs={jobs} onOpenCommand={openCommand} onOpenJob={openJobLog} onError={showError}/> : null}
       <CommandCenterView
         title={t("模型应用")}
-        description={t("使用所选 ME PyTorch 模型合成人脸，产物写入 merged 与 merged_mask 序列。")}
+        description={t("使用所选 ME 或 TAEQI2.1 模型合成人脸，产物写入 merged 与 merged_mask 序列。")}
         commands={commands}
         filter={mergeCommandFilter}
         onOpenCommand={openCommand}
@@ -825,49 +885,9 @@ export function App() {
   } else {
     mainContent = (
       <MemoWorkbenchGrid
-        pipeline={{
-          activeTask,
-          title: "训练与评估",
-          description: "已有 PAK / aligned 可直接配置训练；需要处理素材时进入预处理。",
-          tasks: livePipelineTasks.filter(task => ["me", "diagnose"].includes(task.id)).map((task, index) => ({ ...task, index: index + 1 })),
-          onSelectTask: handleTaskSelect,
-        }}
-        training={{
-          iteration: trainingMetric?.iteration ?? 0,
-          trainingState: trainingJob?.state ?? "idle",
-          trainingJob,
-          savedModel: savedTrainingModel,
-          savedModelState,
-          onResume: resumeTraining,
-          onMerge: () => handleNavigate("merge",t("模型应用")),
-          previewVersion: trainingJob?.previewVersion ?? null,
-          manualPreviewRefresh: previewRefresh,
-          etaSeconds: trainingMetric?.etaSeconds,
-          targetIterations: trainingMetric?.targetIterations,
-          startedAt: trainingJob?.startedAt,
-          operationKey: trainingJob?.id ? `job:${trainingJob.id}` : "job:training-me",
-          onSave: () => void controlTraining("save", t("保存请求已送入 Trainer")),
-          onBackup: () => void controlTraining("backup", t("备份请求已送入 Trainer")),
-          onRefresh: () => void controlTraining("preview", t("预览刷新请求已送入 Trainer")),
-          onEvaluate: () => void evaluateTraining().catch(() => {}),
-          onOpenDiagnostics: openQualityDiagnostics,
-          canEvaluate: Boolean(
-            evaluationJob
-            && ["starting", "running", "waiting_input"].includes(evaluationJob.state)
-            && evaluationJob.controls?.includes("evaluate")
-          ),
-          latestEvaluationSnapshotId: evaluationJob?.latestEvaluationSnapshotId,
-          pendingAction,
-          onSafeStop: () => trainingJob?.id && setStopTargetJobId(trainingJob.id),
-        }}
-        status={{
-          trainingJob,
-          telemetry: runtime.telemetry,
-          lossHistory: trainingHistory.points,
-          historyError: trainingHistory.error,
-          onRetryHistory: trainingHistory.retry,
-          onOpenModels: () => handleCopyText(`${workspacePath}\\model`, t("模型目录已复制")),
-        }}
+        pipeline={overviewPipeline}
+        training={overviewTraining}
+        status={overviewStatus}
       />
     );
   }
@@ -958,7 +978,7 @@ export function App() {
             commands={commands}
             jobs={jobs}
             selectedJob={selectedJob}
-            events={runtime.selectedEvents}
+            eventStore={runtime.terminalStore}
             onSelectJob={selectJob}
             onStart={handleStartJob}
             onOpenCommand={openCommand}

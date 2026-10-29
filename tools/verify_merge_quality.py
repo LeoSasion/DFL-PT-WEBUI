@@ -4,7 +4,6 @@ Requires genuine SHA-bound frames and DFL aligned files. Copies a checkpoint;
 never trains, edits the supplied checkpoint, or publishes a user mask batch.
 """
 import argparse
-import hashlib
 import json
 import os
 import random

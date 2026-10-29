@@ -1,4 +1,3 @@
-from pathlib import Path
 
 class FrameInfo(object):
     def __init__(self, filepath=None, landmarks_list=None, reviewed_masks=None, timing=None, geometry=None, source_sha256=None):

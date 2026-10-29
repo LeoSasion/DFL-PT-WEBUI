@@ -55,10 +55,26 @@ function New-OwnedProjectInstallTarget([string]$Path) {
     return $state
 }
 
+function New-ProjectUpgradeFixture([string]$Base, [string]$Label, [object[]]$Extra=@()) {
+    $target = Join-Path $Base ($Label+'-target')
+    $oldArchive = New-ProjectSourceFixture (Join-Path $Base ($Label+'-old.zip'))
+    if ((Invoke-ProjectSourceInstall -ProjectRoot $target -SourceArchivePath $oldArchive -NoNetwork) -ne 0) { throw 'Synthetic source install failed.' }
+    $sourceRoot = 'DFL-PT-WEBUI-' + ('a'*40)
+    $archive = New-ProjectSourceFixture (Join-Path $Base ($Label+'-new.zip')) -ArchiveRoot $sourceRoot -Extra $Extra
+    $pin = Join-Path $Base ($Label+'-pin.json')
+    @{schemaVersion=1;product='DFL-PT-WEBUI';applicationVersion='fixture';sourceCommit=('a'*40);archiveRoot=$sourceRoot;archiveSha256=(Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()} | ConvertTo-Json | Set-Content -LiteralPath $pin -Encoding UTF8
+    return @{target=$target;archive=$archive;pin=$pin}
+}
+
 Describe 'fixed source upgrade transactions' {
     BeforeEach {
         . (Join-Path $PSScriptRoot '../upgrade-project.ps1')
         Mock Assert-UpgradeIdle { }
+    }
+    It 'rejects Windows aliases in inventories and recovery paths' {
+        foreach($relative in @('.runtime./torch-variants/switch.json','workspace./model/tae.pt','_internal/python_base./Lib/site-packages/torch','webui/.env.local.','folder/../README.md','folder//file.txt','NUL.txt')){
+            Test-ProtectedUpgradePath $relative | Should Be $true
+        }
     }
     It 'backs up source and dependencies, preserves user data and restores after a failed build' {
         $target = Join-Path $TestDrive 'upgrade-target'
@@ -132,9 +148,213 @@ Describe 'fixed source upgrade transactions' {
         { Invoke-ProjectUpgrade $target 'apply' 'missing-pin' 'missing.zip' } | Should Throw 'running task'
         Test-Path (Join-Path $target '.launcher-install/upgrade-current') | Should Be $false
     }
+    It 'recovers a damaged current identity using the verified rollback receipt' {
+        $fixture=New-ProjectUpgradeFixture $TestDrive 'damaged-identity'
+        Invoke-ProjectUpgrade $fixture.target 'apply' $fixture.pin $fixture.archive
+        [IO.File]::WriteAllText((Join-Path $fixture.target 'release/version.json'),'{interrupted source write')
+        { Invoke-ProjectUpgrade $fixture.target 'rollback' $fixture.pin '' } | Should Not Throw
+        Assert-ProjectInstallIdentity $fixture.target
+    }
+    It 'resumes rollback after current dependencies were retained but original restoration failed' {
+        $fixture=New-ProjectUpgradeFixture $TestDrive 'rollback-resume'
+        $old=Join-Path $fixture.target 'webui/node_modules/original.txt'
+        New-Item -ItemType Directory -Path (Split-Path -Parent $old) -Force | Out-Null
+        [IO.File]::WriteAllText($old,'original dependency')
+        Invoke-ProjectUpgrade $fixture.target 'apply' $fixture.pin $fixture.archive
+        $current=Join-Path $fixture.target 'webui/node_modules/current.txt'
+        New-Item -ItemType Directory -Path (Split-Path -Parent $current) -Force | Out-Null
+        [IO.File]::WriteAllText($current,'new dependency')
+        $original=Join-Path $fixture.target '.launcher-install/upgrade-current/original-node_modules'
+        $script:rollbackInterrupted=$false
+        Mock Move-ProjectInstallEntry {
+            if(-not $script:rollbackInterrupted){$script:rollbackInterrupted=$true;throw 'synthetic restoration interrupted'}
+            [IO.Directory]::Move($Source,$Destination)
+        } -ParameterFilter {$Source -eq $original}
+        { Invoke-ProjectUpgrade $fixture.target 'rollback' $fixture.pin '' } | Should Throw
+        { Invoke-ProjectUpgrade $fixture.target 'rollback' $fixture.pin '' } | Should Not Throw
+        [IO.File]::ReadAllText($old) | Should Be 'original dependency'
+    }
+    It 'refuses to remove a newly published source file edited after upgrade' {
+        $name='added-by-upgrade.txt'
+        $fixture=New-ProjectUpgradeFixture $TestDrive 'changed-new-file' -Extra @(@{name=('DFL-PT-WEBUI-'+('a'*40)+'/'+$name);content='official new source'})
+        Invoke-ProjectUpgrade $fixture.target 'apply' $fixture.pin $fixture.archive
+        $changed=Join-Path $fixture.target $name
+        [IO.File]::WriteAllText($changed,'user edited this after upgrade')
+        { Invoke-ProjectUpgrade $fixture.target 'rollback' $fixture.pin '' } | Should Throw
+        [IO.File]::ReadAllText($changed) | Should Be 'user edited this after upgrade'
+    }
+    It 'rejects runtime transaction data in a source upgrade before publishing source' {
+        $fixture=New-ProjectUpgradeFixture $TestDrive 'runtime-protection' -Extra @(@{name=('DFL-PT-WEBUI-'+('a'*40)+'/.runtime/torch-variants/switch.json');content='must not publish'})
+        { Invoke-ProjectUpgrade $fixture.target 'apply' $fixture.pin $fixture.archive } | Should Throw
+        Test-Path -LiteralPath (Join-Path $fixture.target '.runtime/torch-variants/switch.json') | Should Be $false
+    }
+    It 'does not reset a Git working copy or its edited source' {
+        $fixture=New-ProjectUpgradeFixture $TestDrive 'git-protection'
+        New-Item -ItemType Directory -Path (Join-Path $fixture.target '.git') | Out-Null
+        $edited=Join-Path $fixture.target 'README.md';[IO.File]::WriteAllText($edited,'dirty source remains')
+        { Invoke-ProjectUpgrade $fixture.target 'apply' $fixture.pin $fixture.archive } | Should Throw 'Git'
+        [IO.File]::ReadAllText($edited) | Should Be 'dirty source remains'
+    }
+    It 'reads recovery status without importing or requiring the current source identity' {
+        $fixture=New-ProjectUpgradeFixture $TestDrive 'status-identity'
+        Invoke-ProjectUpgrade $fixture.target 'apply' $fixture.pin $fixture.archive
+        $version=Join-Path $fixture.target 'release/version.json';[IO.File]::WriteAllText($version,'broken identity')
+        $status=Invoke-ProjectUpgrade $fixture.target 'status' '' ''
+        $status.status | Should Be 'applied';$status.canRollback | Should Be $true
+        [IO.File]::ReadAllText($version) | Should Be 'broken identity'
+    }
+    It 'automatically restores source after a publication failure and allows repeated rollback' {
+        $fixture=New-ProjectUpgradeFixture $TestDrive 'auto-rollback'
+        [IO.File]::WriteAllText((Join-Path $fixture.target 'README.md'),'original source')
+        Mock Publish-ProjectUpgradeFile {throw 'synthetic source publication failure'} -ParameterFilter {$Relative -eq 'README.md' -and $Transaction -like '*auto-rollback-target*'}
+        {Invoke-ProjectUpgrade $fixture.target 'apply' $fixture.pin $fixture.archive} | Should Throw 'synthetic'
+        [IO.File]::ReadAllText((Join-Path $fixture.target 'README.md')) | Should Be 'original source'
+        {Invoke-ProjectUpgrade $fixture.target 'rollback' '' ''} | Should Not Throw
+        (Invoke-ProjectUpgrade $fixture.target 'status' '' '').canRollback | Should Be $false
+    }
+    It 'completes idempotently across both sides of the archive rename' {
+        foreach($afterMove in @($false,$true)){
+            $fixture=New-ProjectUpgradeFixture $TestDrive ('complete-'+$afterMove)
+            Invoke-ProjectUpgrade $fixture.target 'apply' $fixture.pin $fixture.archive
+            $current=Join-Path $fixture.target '.launcher-install/upgrade-current';$script:archiveInterrupted=$false
+            Mock Move-ProjectInstallEntry {
+                if(-not $script:archiveInterrupted){$script:archiveInterrupted=$true;if($afterMove){[IO.Directory]::Move($Source,$Destination)};throw 'synthetic archive interruption'}
+                [IO.Directory]::Move($Source,$Destination)
+            } -ParameterFilter {$Source -eq $current -and (Split-Path -Leaf $Destination) -like 'upgrade-backup-*'}
+            {Invoke-ProjectUpgrade $fixture.target 'complete' '' ''} | Should Throw 'synthetic'
+            (Invoke-ProjectUpgrade $fixture.target 'status' '' '').canComplete | Should Be $true
+            {Invoke-ProjectUpgrade $fixture.target 'complete' '' ''} | Should Not Throw
+            {Invoke-ProjectUpgrade $fixture.target 'complete' '' ''} | Should Not Throw
+            (Invoke-ProjectUpgrade $fixture.target 'status' '' '').status | Should Be 'none'
+        }
+    }
+    It 'keeps a completed upgrade committed when the notification consumer disconnects' {
+        $fixture=New-ProjectUpgradeFixture $TestDrive 'complete-notification'
+        Invoke-ProjectUpgrade $fixture.target 'apply' $fixture.pin $fixture.archive
+        Mock Write-ProjectInstallEvent {throw 'synthetic disconnected consumer'} -ParameterFilter {$Id -eq 'upgrade' -and $Progress -eq 100 -and $Status -eq 'complete'}
+        {Invoke-ProjectUpgrade $fixture.target 'complete' '' ''} | Should Not Throw
+        (Invoke-ProjectUpgrade $fixture.target 'status' '' '').status | Should Be 'none'
+        Assert-ProjectInstallIdentity $fixture.target
+    }
+    It 'resumes rollback after the current build was renamed before its done receipt' {
+        $fixture=New-ProjectUpgradeFixture $TestDrive 'dist-intent'
+        $dist=Join-Path $fixture.target 'webui/dist';New-Item -ItemType Directory -Path $dist -Force | Out-Null
+        [IO.File]::WriteAllText((Join-Path $dist 'original.txt'),'old build')
+        Invoke-ProjectUpgrade $fixture.target 'apply' $fixture.pin $fixture.archive
+        $script:distInterrupted=$false
+        Mock Move-ProjectInstallEntry {[IO.Directory]::Move($Source,$Destination);if(-not $script:distInterrupted){$script:distInterrupted=$true;throw 'synthetic dist intent interruption'}} -ParameterFilter {$Source -eq $dist}
+        {Invoke-ProjectUpgrade $fixture.target 'rollback' '' ''} | Should Throw 'synthetic'
+        {Invoke-ProjectUpgrade $fixture.target 'rollback' '' ''} | Should Not Throw
+        [IO.File]::ReadAllText((Join-Path $dist 'original.txt')) | Should Be 'old build'
+    }
+    It 'preserves interrupted preparation evidence and retries without a source journal' {
+        $fixture=New-ProjectUpgradeFixture $TestDrive 'prepare-intent'
+        $current=Join-Path $fixture.target '.launcher-install/upgrade-current';New-Item -ItemType Directory -Path $current | Out-Null
+        $pin=Get-Content -LiteralPath $fixture.pin -Raw | ConvertFrom-Json
+        Write-ProjectInstallJson (Join-Path $current 'preparation.json') @{schemaVersion=1;product='DFL-PT-WEBUI';sourceCommit=$pin.sourceCommit;archiveSha256=$pin.archiveSha256}
+        [IO.File]::WriteAllText((Join-Path $current 'unknown-evidence.txt'),'preserve unknown')
+        (Invoke-ProjectUpgrade $fixture.target 'status' '' '').status | Should Be 'preparing'
+        Invoke-ProjectUpgrade $fixture.target 'apply' $fixture.pin $fixture.archive
+        $retained=@(Get-ChildItem -LiteralPath (Join-Path $fixture.target '.launcher-install') -Filter 'upgrade-rejected-*')
+        [IO.File]::ReadAllText((Join-Path $retained[0].FullName 'unknown-evidence.txt')) | Should Be 'preserve unknown'
+    }
+    It 'refuses source mutation while runtime installation or WebUI preparation owns its lock' {
+        foreach($relative in @('source/source-install.lock','webui-preparation/operation.lock')){
+            $fixture=New-ProjectUpgradeFixture $TestDrive ('cross-lock-'+$relative.Replace('/','-').Replace('.','-'))
+            $path=Join-Path (Join-Path $fixture.target '.launcher-install') $relative
+            New-Item -ItemType Directory -Path (Split-Path -Parent $path) -Force | Out-Null
+            $held=[IO.File]::Open($path,[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+            try{{Invoke-ProjectUpgrade $fixture.target 'apply' $fixture.pin $fixture.archive} | Should Throw}
+            finally{$held.Dispose()}
+            Test-Path -LiteralPath (Join-Path $fixture.target '.launcher-install/upgrade-current/journal.json') | Should Be $false
+        }
+    }
+    It 'does not delete an obsolete source file changed since its ownership inventory' {
+        $fixture=New-ProjectUpgradeFixture $TestDrive 'changed-obsolete'
+        $obsolete=Join-Path $fixture.target 'obsolete-owned.txt';[IO.File]::WriteAllText($obsolete,'old official source')
+        $digest=(Get-FileHash -LiteralPath $obsolete -Algorithm SHA256).Hash.ToLowerInvariant()
+        Write-ProjectInstallJson (Join-Path $fixture.target 'release/source-files.json') @{schemaVersion=1;product='DFL-PT-WEBUI';files=@(@{path='obsolete-owned.txt';sha256=$digest})}
+        [IO.File]::WriteAllText($obsolete,'user modified obsolete source')
+        {Invoke-ProjectUpgrade $fixture.target 'apply' $fixture.pin $fixture.archive} | Should Throw '修改'
+        [IO.File]::ReadAllText($obsolete) | Should Be 'user modified obsolete source'
+    }
+    It 'returns a single UTF8 status JSON object for both valid and rejected recovery evidence' {
+        $fixture=New-ProjectUpgradeFixture $TestDrive 'status-protocol'
+        Invoke-ProjectUpgrade $fixture.target 'apply' $fixture.pin $fixture.archive
+        foreach($damaged in @($false,$true)){
+            if($damaged){[IO.File]::WriteAllText((Join-Path $fixture.target '.launcher-install/upgrade-current/backup/README.md'),'damaged backup')}
+            $start=New-Object Diagnostics.ProcessStartInfo
+            $start.FileName=[Diagnostics.Process]::GetCurrentProcess().MainModule.FileName;$start.UseShellExecute=$false;$start.CreateNoWindow=$true
+            $start.RedirectStandardOutput=$true;$start.RedirectStandardError=$true;$start.StandardOutputEncoding=[Text.Encoding]::UTF8;$start.StandardErrorEncoding=[Text.Encoding]::UTF8
+            $start.Arguments='-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../upgrade-project.ps1'))+'" -ProjectRoot "'+$fixture.target+'" -Action status'
+            $process=[Diagnostics.Process]::Start($start)
+            try{
+                $output=$process.StandardOutput.ReadToEndAsync();$errors=$process.StandardError.ReadToEndAsync();$process.WaitForExit(30000) | Should Be $true
+                $status=$output.GetAwaiter().GetResult() | ConvertFrom-Json
+                $errors.GetAwaiter().GetResult() | Should Be ''
+                if($damaged){$process.ExitCode | Should Be 1;$status.status | Should Be 'error';$status.canRollback | Should Be $false}
+                else{$process.ExitCode | Should Be 0;$status.status | Should Be 'applied';$status.canRollback | Should Be $true;$status.message | Should Match '源码'}
+            }finally{if(-not $process.HasExited){$process.Kill();$process.WaitForExit()};$process.Dispose()}
+        }
+    }
 }
 
 Describe 'bounded PT first-install source acquisition' {
+    It 'preserves unknown session files rather than recursively clearing them' {
+        $target=Join-Path $TestDrive 'unknown-session-target';$state=New-OwnedProjectInstallTarget $target
+        $session=Join-Path $state ('source-'+[Guid]::NewGuid().ToString('N'));New-Item -ItemType Directory -Path $session | Out-Null
+        Write-ProjectInstallJson (Join-Path $session 'ownership.json') @{schemaVersion=1;files=@('ownership.json','source.zip')}
+        $unknown=Join-Path $session 'user.txt';[IO.File]::WriteAllText($unknown,'preserve this file')
+        {Remove-ProjectInstallSession $state $session} | Should Throw '未知'
+        [IO.File]::ReadAllText($unknown) | Should Be 'preserve this file'
+    }
+    It 'recovers persisted publication intent after the installing process was killed' {
+        $archive=New-ProjectSourceFixture (Join-Path $TestDrive 'crash-publication.zip')
+        $target=Join-Path $TestDrive 'crash-publication-target';$marker=Join-Path $TestDrive 'publication-moved.txt'
+        $worker=Join-Path $TestDrive 'crash-worker.ps1'
+        [IO.File]::WriteAllText($worker,@'
+param($Installer,$Target,$Archive,$Marker)
+. $Installer
+$script:originalMove=(Get-Command Move-ProjectInstallEntry).ScriptBlock
+function Move-ProjectInstallEntry([string]$Source,[string]$Destination){
+ & $script:originalMove $Source $Destination
+ if($Source -match '[\\/]staging[\\/]'){
+  [IO.File]::WriteAllText($Marker,'owned publication move completed')
+  Start-Sleep -Seconds 30
+ }
+}
+$code=Invoke-ProjectSourceInstall -ProjectRoot $Target -SourceArchivePath $Archive -NoNetwork
+exit $code
+'@)
+        $start=New-Object Diagnostics.ProcessStartInfo
+        $start.FileName=[Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+        $start.UseShellExecute=$false;$start.CreateNoWindow=$true;$start.RedirectStandardOutput=$true;$start.RedirectStandardError=$true
+        $start.Arguments='-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+$worker+'" "'+[IO.Path]::GetFullPath($script:projectInstallerPath)+'" "'+$target+'" "'+$archive+'" "'+$marker+'"'
+        $process=[Diagnostics.Process]::Start($start)
+        try {
+            $stdout=$process.StandardOutput.ReadToEndAsync();$stderr=$process.StandardError.ReadToEndAsync()
+            $timer=[Diagnostics.Stopwatch]::StartNew()
+            while(-not (Test-Path -LiteralPath $marker) -and -not $process.HasExited -and $timer.Elapsed.TotalSeconds -lt 15){Start-Sleep -Milliseconds 50}
+            Test-Path -LiteralPath $marker | Should Be $true
+            if(-not $process.HasExited){$process.Kill();$process.WaitForExit()}
+        }finally{if(-not $process.HasExited){$process.Kill();$process.WaitForExit()};$process.Dispose()}
+        Invoke-ProjectSourceInstall -ProjectRoot $target -SourceArchivePath $archive -NoNetwork | Should Be 0
+        Assert-ProjectInstallIdentity $target
+    }
+    It 'reuses a verified pinned archive after a publication failure without its original input' {
+        $archiveRoot='DFL-PT-WEBUI-'+('a'*40)
+        $archive=New-ProjectSourceFixture (Join-Path $TestDrive 'cached-publication.zip') -ArchiveRoot $archiveRoot
+        $pin=Join-Path $TestDrive 'cached-publication-pin.json'
+        @{schemaVersion=1;product='DFL-PT-WEBUI';applicationVersion='fixture';sourceCommit=('a'*40);archiveRoot=$archiveRoot;archiveSha256=(Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()} | ConvertTo-Json | Set-Content -LiteralPath $pin -Encoding UTF8
+        $target=Join-Path $TestDrive 'cached-publication-target';$script:publicationFailed=$false
+        Mock Move-ProjectInstallEntry {
+            if(-not $script:publicationFailed){$script:publicationFailed=$true;throw 'synthetic publication interruption'}
+            if([IO.Directory]::Exists($Source)){[IO.Directory]::Move($Source,$Destination)}else{[IO.File]::Move($Source,$Destination)}
+        } -ParameterFilter {$Source -match '[\\/]staging[\\/]'}
+        Invoke-ProjectSourceInstall -ProjectRoot $target -SourceArchivePath $archive -SourcePinPath $pin -NoNetwork | Should Be 1
+        Remove-Item -LiteralPath $archive -Force
+        Invoke-ProjectSourceInstall -ProjectRoot $target -SourceArchivePath $archive -SourcePinPath $pin -NoNetwork | Should Be 0
+    }
     It 'installs the native PT archive without Git or runtime dependencies' {
         $archive = New-ProjectSourceFixture (Join-Path $TestDrive 'source.zip')
         $target = Join-Path $TestDrive 'clean-target'

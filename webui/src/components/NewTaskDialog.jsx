@@ -19,6 +19,8 @@ import { useI18n } from "../i18n.jsx";
 import { LoadingProgress } from "./ProgressFeedback.jsx";
 import { METrainingFields } from "./METrainingFields.jsx";
 import { METrainingReview } from "./METrainingReview.jsx";
+import { TAETrainingFields } from "./TAETrainingFields.jsx";
+import { faceModelFamily } from "../domain/tae-training-configuration.js";
 import { TrainingInputPicker } from "./TrainingInputPicker.jsx";
 import "./WorkflowGuidance.css";
 
@@ -81,11 +83,15 @@ export function NewTaskDialog({
   const parameterSchemas = selectedCommand?.parameters ?? [];
   const importingME = selectedCommand?.id === "model.import_me_tf";
   const configuringME = selectedCommand?.id === "train.me" || importingME;
-  const mergingME = ["merge.me", "merge.preview_me"].includes(selectedCommand?.id);
+  const configuringTAE = selectedCommand?.id === "train.tae";
+  const configuringFaceModel = configuringME || configuringTAE;
+  const mergingME = ["merge.me", "merge.tae", "merge.preview_me"].includes(selectedCommand?.id);
+  const runtimeLabel = commandModelFamily(selectedCommand) === "TAE" ? "TAEQI2.1 PyTorch"
+    : selectedCommand?.id === "train.me" ? "ME PyTorch" : "PyTorch 素材工具";
   const models = taskModels(selectedCommand, workspace?.models);
   const selectedModel = models.find(model => model.name === parameters.forceModelName);
   const modelIssue = modelNameIssue(parameters.forceModelName, newModel,
-    (workspace?.models ?? []).filter(model => model.type?.toUpperCase() === commandModelFamily(selectedCommand)));
+    (workspace?.models ?? []).filter(model => faceModelFamily(model) === commandModelFamily(selectedCommand)));
   const matchingCommands = searchTaskCommands(availableCommands, commandSearch);
   const outputLocations = taskOutputLocations(selectedCommand, workspace, parameters);
   const hasModelChoice = parameterSchemas.some(schema => schema.id === "forceModelName");
@@ -117,13 +123,17 @@ export function NewTaskDialog({
   useEffect(() => {
     if (!open) return;
     const panel = stepPanelRef.current;
-    if (step === 1) initialFocusRef.current?.focus();
-    else if (step === 2) (panel?.querySelector("input:not(:disabled), select:not(:disabled)") ?? panel?.querySelector("button:not(:disabled)"))?.focus();
-    else panel?.focus();
+    if (step === 1) initialFocusRef.current?.focus({ preventScroll: true });
+    else if (step === 2) (panel?.querySelector("input:not(:disabled), select:not(:disabled)") ?? panel?.querySelector("button:not(:disabled)"))?.focus({ preventScroll: true });
+    else panel?.focus({ preventScroll: true });
+    if (panel?.parentElement) panel.parentElement.scrollTop = 0;
   }, [open, step]);
 
   useEffect(() => {
-    if (open && launchError) stepPanelRef.current?.focus();
+    if (open && launchError) {
+      stepPanelRef.current?.focus({ preventScroll: true });
+      if (stepPanelRef.current?.parentElement) stepPanelRef.current.parentElement.scrollTop = 0;
+    }
   }, [open, launchError]);
 
   useEffect(() => {
@@ -301,7 +311,7 @@ export function NewTaskDialog({
                     <strong>{selectedCommand?.label}</strong>
                     <p>{selectedCommand?.description}</p>
                     <details className="command-tags"><summary>{t("技术详情")}</summary>
-                      <span>{selectedCommand?.id === "train.me" ? "ME PyTorch" : "PyTorch 素材工具"}</span>
+                      <span>{runtimeLabel}</span>
                       <span>{selectedCommand?.stage ?? "workflow"}</span>
                       <span>{selectedCommand?.side?.toUpperCase?.() ?? "LOCAL"}</span>
                     </details>
@@ -318,7 +328,7 @@ export function NewTaskDialog({
                     <p>{hasModelChoice || hasDeviceChoice ? t("先选择模型和设备，其余参数可按需调整。") : t("检查以下设置，再确认运行。")}</p>
                     <button type="button" className="text-button" onClick={() => { setPreflight({ state: "idle", data: null, error: null }); setStep(1); }}>{t("更换任务")}</button>
                   </div>
-                  {!configuringME && parameterSchemas.some((parameter) => parameter.advanced) && (
+                  {!configuringFaceModel && parameterSchemas.some((parameter) => parameter.advanced) && (
                     <button
                       className={`text-button ${showAdvanced ? "is-active" : ""}`}
                       type="button"
@@ -328,14 +338,14 @@ export function NewTaskDialog({
                     </button>
                   )}
                 </div>
-                {hasModelChoice ? <div className={`model-choice${configuringME ? " me-model-choice" : ""}`}>
+                {hasModelChoice ? <div className={`model-choice${configuringFaceModel ? " me-model-choice" : ""}`}>
                   {!importingME ? <label className="wizard-field"><span>{t("使用模型")}</span>
                     <select value={newModel ? "__new__" : parameters.forceModelName ?? ""} onChange={event => {
                       const next = selectTaskModel(selectedCommand, parameters, event.target.value, models);
                       setNewModel(next.newModel);
                       setMEParameters(next.parameters);
                     }}>
-                      <option value="">{selectedCommand.id === "train.me" || selectedCommand.category === "merge" || selectedCommand.category === "model" ? t("请选择模型") : t("由终端选择模型")}</option>
+                      <option value="">{configuringFaceModel || selectedCommand.category === "merge" || selectedCommand.category === "model" ? t("请选择模型") : t("由终端选择模型")}</option>
                       {models.map(model => <option key={model.name} value={model.name}>{model.name}</option>)}
                       {parameters.forceModelName && !newModel && !models.some(model => model.name === parameters.forceModelName) ? <option value={parameters.forceModelName}>{parameters.forceModelName}</option> : null}
                       {selectedCommand.category === "training" ? <option value="__new__">{t("新建模型")}</option> : null}
@@ -343,7 +353,7 @@ export function NewTaskDialog({
                   </label> : null}
                   {newModel ? <label className="wizard-field"><span>{t("新模型名称")}</span><input value={parameters.forceModelName ?? ""} maxLength={64} required aria-invalid={modelIssue && modelIssue !== "empty" ? true : undefined} aria-describedby="new-model-help" onChange={event => setParameters(current => ({...current,forceModelName:event.target.value}))} />
                     <small id="new-model-help" className={modelIssue && modelIssue !== "empty" ? "wizard-field-error" : ""}>
-                      {modelIssue === "duplicate" ? t("同名模型已存在；请选择已有模型继续训练，或使用新名称。") : modelIssue === "invalid" ? t("模型名称不能包含路径符号、首尾空格，且不能超过 64 个字符。") : importingME ? t("导入到新的 ME 模型；网络权重保留，训练进度从零开始。") : selectedCommand.id === "train.me" ? t("选择架构与训练配置，新模型会保存到独立目录。") : t("使用独立名称创建模型；首次配置会在终端继续。")}
+                      {modelIssue === "duplicate" ? t("同名模型已存在；请选择已有模型继续训练，或使用新名称。") : modelIssue === "invalid" ? t("模型名称不能包含路径符号、首尾空格，且不能超过 64 个字符。") : importingME ? t("导入到新的 ME 模型；网络权重保留，训练进度从零开始。") : configuringFaceModel ? t("选择架构与训练配置，新模型会保存到独立目录。") : t("使用独立名称创建模型；首次配置会在终端继续。")}
                     </small>
                   </label>
                     : selectedModel?.modifiedAt ? <p>{t("保存时间")} · {new Date(selectedModel.modifiedAt).toLocaleString()}</p> : null}
@@ -356,10 +366,10 @@ export function NewTaskDialog({
                     {parameters.gpuIndexes && !(telemetry?.gpus ?? []).some(gpu => String(gpu.index) === parameters.gpuIndexes) ? <option value={parameters.gpuIndexes}>GPU {parameters.gpuIndexes}</option> : null}
                     <option value="cpu">{t("CPU（较慢）")}</option>
                   </select>
-                  <small>{t("自动模式由 DFL 沿用或询问设备；指定 GPU 可避免设备选择问答。")}</small>
-                  {!parameters.cpuOnly && (showAdvanced || selectedCommand.id === "train.me") ? <details><summary>{t("选择多张 GPU")}</summary><input aria-label={t("多 GPU 索引")} placeholder="0,1" value={parameters.gpuIndexes ?? ""} onChange={event => setMEParameters(current => ({...current,gpuIndexes:event.target.value}))} /></details> : null}
+                  <small>{t(configuringTAE ? "TAE 使用单张设备；可指定 CUDA GPU，或选择 CPU。" : "自动模式由 DFL 沿用或询问设备；指定 GPU 可避免设备选择问答。")}</small>
+                  {!configuringTAE && !parameters.cpuOnly && (showAdvanced || selectedCommand.id === "train.me") ? <details><summary>{t("选择多张 GPU")}</summary><input aria-label={t("多 GPU 索引")} placeholder="0,1" value={parameters.gpuIndexes ?? ""} onChange={event => setMEParameters(current => ({...current,gpuIndexes:event.target.value}))} /></details> : null}
                 </label> : null}
-                {selectedCommand.id === "train.me" && projectKey ? <TrainingInputPicker
+                {["train.me", "train.tae"].includes(selectedCommand.id) && !(configuringTAE && parameters.pretraining) && projectKey ? <TrainingInputPicker
                   projectKey={projectKey} value={trainingInputs} onChange={onTrainingInputsChange}
                   configuration={parameters} onApply={inputs => setMEParameters(current => ({
                     ...current,
@@ -367,7 +377,9 @@ export function NewTaskDialog({
                     dstFaceset: inputs.dstFaceset ?? inputs.trainingDataDstPath ?? current.dstFaceset,
                   }))}
                 /> : null}
-                {configuringME ? <METrainingFields
+                {configuringTAE ? <TAETrainingFields schemas={parameterSchemas} parameters={parameters}
+                  selectedModel={selectedModel} newModel={newModel} onChange={setMEParameters}
+                /> : configuringME ? <METrainingFields
                   schemas={parameterSchemas}
                   parameters={parameters}
                   selectedModel={selectedModel}
@@ -502,10 +514,14 @@ export function NewTaskDialog({
                     </div>
                   </section>
                 ) : null}
+                {configuringTAE && preflight.state === "ready" && preflight.data?.training?.newOptimizationStage
+                  ? <p className="wizard-summary-note">{t("本次将开始新的优化阶段：保留权重、数据进度与累计迭代，重置 Adam 和学习率预热。")}</p> : null}
                 {configuringME ? <METrainingReview schemas={parameterSchemas} parameters={parameters} importing={importingME} preflight={preflight.data} /> : <dl className="wizard-review">
                   <div><dt>{t("任务")}</dt><dd>{selectedCommand?.label}</dd></div>
                   {hasDeviceChoice ? <div><dt>{t("运行设备")}</dt><dd>{parameters.cpuOnly ? t("CPU（较慢）") : parameters.gpuIndexes ? `GPU ${parameters.gpuIndexes}` : t("自动选择 GPU")}</dd></div> : null}
-                  {parameterSchemas.filter(schema => !["gpuIndexes","cpuOnly","silentStart"].includes(schema.id)).map((schema) => (
+                  {parameterSchemas.filter(schema => !["gpuIndexes","cpuOnly","silentStart"].includes(schema.id)
+                    && !(configuringTAE && parameters.pretraining && ["srcFaceset", "dstFaceset"].includes(schema.id))
+                    && !(configuringTAE && !parameters.pretraining && schema.id === "pretrainingDataDir")).map((schema) => (
                     <div key={schema.id}><dt>{schema.label}</dt><dd>{formatParameter(schema)}</dd></div>
                   ))}
                 </dl>}
@@ -523,9 +539,10 @@ export function NewTaskDialog({
             {outputLocations.note === "merge-back" ? <p className="wizard-summary-note">{t("先生成到此目录；处理完成后，终端会询问是否合并回原人脸集。")}</p> : null}
             {outputLocations.note === "independent-enhancement" ? <p className="wizard-summary-note">{t("保存完整独立副本，原件保留；本批增强结果需要复核。")}</p> : null}
             {outputLocations.note === "independent-merge-preview" ? <p className="wizard-summary-note">{t("仅用于复核当前参数的小样；不能作为全片导出的合成输入。")}</p> : null}
+            {outputLocations.note === "dfm-bundle" ? <p className="wizard-summary-note">{t("大模型会附带外置权重；极致量化还会生成本机 TensorRT 引擎。请按导出回执一并复制配套文件。")}</p> : null}
             {selectedCommand?.category === "encode" ? <p className="wizard-summary-note">{t("导出会更新同名成片和遮罩文件。请先备份需要保留的视频；生成记录会保留。")}</p> : null}
             <details><summary>{t("技术详情")}</summary><dl>
-              <div><dt>{t("运行时")}</dt><dd>{selectedCommand?.id === "train.me" ? "ME PyTorch" : "PyTorch 素材工具"}</dd></div>
+              <div><dt>{t("运行时")}</dt><dd>{runtimeLabel}</dd></div>
               <div>
                 <dt><IconLock size={13} />{t("资源锁")}</dt>
                 <dd>{selectedCommand?.locks?.length ? t("{count} 项", { count: selectedCommand.locks.length }) : t("无")}</dd>
@@ -554,7 +571,7 @@ export function NewTaskDialog({
                 className="button cli-button"
                 type="button"
                 onClick={() => void launch("cli")}
-                disabled={!serviceOnline || submitting || ["train.me", "model.import_me_tf", "merge.me", "merge.preview_me", "export.dfm_me"].includes(selectedCommand?.id)}
+                disabled={!serviceOnline || submitting || ["train.me", "train.tae", "model.import_me_tf", "merge.me", "merge.tae", "merge.preview_me", "export.dfm_me", "export.dfm_tae"].includes(selectedCommand?.id)}
               >
                 <IconCode size={16} />{t("保留 CLI 问答")}
               </button>

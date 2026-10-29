@@ -26,6 +26,7 @@ import {
   selectTerminalTabs,
 } from "../domain/terminal-sessions.js";
 import { LoadingProgress } from "./ProgressFeedback.jsx";
+import { useTerminalEvents } from "../runtime/useTerminalEvents.js";
 
 const TerminalSurface = lazy(() => import("./TerminalSurface.jsx"));
 const HIDDEN_TERMINAL_JOBS_STORAGE_KEY = "dfl-webui-hidden-terminal-jobs-v1";
@@ -152,8 +153,9 @@ function ConsoleDockComponent({
   socketState,
   commands,
   jobs,
-  selectedJob,
-  events,
+  selectedJob: job,
+  events: fallbackEvents,
+  eventStore,
   onSelectJob,
   onStart,
   onOpenCommand,
@@ -168,6 +170,11 @@ function ConsoleDockComponent({
   onError,
   onNotice = noop,
 }) {
+  const terminal = useTerminalEvents(eventStore, job?.id);
+  const events = eventStore ? terminal.events : fallbackEvents;
+  const selectedJob = useMemo(() => job && eventStore
+    ? { ...job, sequence: Math.max(job.sequence ?? 0, terminal.sequence) } : job,
+  [job, eventStore, terminal.sequence]);
   const { language, t } = useI18n();
   const [promptInput, setPromptInput] = useState("");
   const [now, setNow] = useState(Date.now());
@@ -472,9 +479,9 @@ function ConsoleDockComponent({
                     <button className="button secondary" type="button" onClick={() => run(() => onControl("save"), t("正在保存训练模型…"))} disabled={!canControlTrainer || Boolean(pendingConsoleAction)}>
                       <IconDeviceFloppy size={15} />{t("保存")}
                     </button>
-                    <button className="button secondary" type="button" onClick={() => run(() => onControl("backup"), t("正在创建训练备份…"))} disabled={!canControlTrainer || Boolean(pendingConsoleAction)}>
+                    {selectedJob.controls?.includes("backup") ? <button className="button secondary" type="button" onClick={() => run(() => onControl("backup"), t("正在创建训练备份…"))} disabled={!canControlTrainer || Boolean(pendingConsoleAction)}>
                       <IconArchive size={15} />{t("备份")}
-                    </button>
+                    </button> : null}
                     <button className="button secondary" type="button" onClick={() => run(() => onControl("preview"), t("正在刷新训练预览…"))} disabled={!canControlTrainer || Boolean(pendingConsoleAction)}>
                       <IconRefresh size={15} />{t("刷新预览")}
                     </button>

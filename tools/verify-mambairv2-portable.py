@@ -1,11 +1,8 @@
 """Compare the complete pinned network using portable vs official serial scan."""
-import hashlib
 import json
 from pathlib import Path
 import sys
 import time
-import cv2
-import numpy as np
 import torch
 
 ROOT = Path(__file__).resolve().parents[1]

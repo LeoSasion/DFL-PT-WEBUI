@@ -1,0 +1,2 @@
+# TAEQI2.1 support; PyTorch comes from the existing runtime.
+safetensors==0.8.0

@@ -113,7 +113,9 @@ function DialogLoading({ label, onClose, failed = false }) {
   );
 }
 
-export class DeferredDialog extends Component {
+// Keep a lazy panel's loading or failure inside its own layout. The same
+// boundary serves dialogs and optional content such as the training plot.
+export class DeferredContent extends Component {
   state = { failed: false };
 
   static getDerivedStateFromError() {
@@ -121,8 +123,15 @@ export class DeferredDialog extends Component {
   }
 
   render() {
-    const { children, label, onClose } = this.props;
-    if (this.state.failed) return <DialogLoading label={label} onClose={onClose} failed />;
-    return <Suspense fallback={<DialogLoading label={label} onClose={onClose} />}>{children}</Suspense>;
+    const { children, fallback, errorFallback } = this.props;
+    if (this.state.failed) return errorFallback;
+    return <Suspense fallback={fallback}>{children}</Suspense>;
   }
+}
+
+export function DeferredDialog({ children, label, onClose }) {
+  return <DeferredContent
+    fallback={<DialogLoading label={label} onClose={onClose} />}
+    errorFallback={<DialogLoading label={label} onClose={onClose} failed />}
+  >{children}</DeferredContent>;
 }

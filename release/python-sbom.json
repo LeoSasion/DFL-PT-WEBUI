@@ -50,6 +50,7 @@
       "python-dateutil",
       "pyyaml",
       "requests",
+      "safetensors",
       "scenedetect",
       "scikit-image",
       "scipy",
@@ -114,6 +115,7 @@
       "python-dateutil",
       "pyyaml",
       "requests",
+      "safetensors",
       "scikit-image",
       "scipy",
       "setuptools",
@@ -190,6 +192,7 @@
       "python-dateutil",
       "pyyaml",
       "requests",
+      "safetensors",
       "scikit-image",
       "scipy",
       "setuptools",
@@ -262,6 +265,7 @@
       "python-dateutil",
       "pyyaml",
       "requests",
+      "safetensors",
       "scikit-image",
       "scipy",
       "setuptools",
@@ -349,6 +353,7 @@
       "python-dateutil",
       "pyyaml",
       "requests",
+      "safetensors",
       "scikit-image",
       "scipy",
       "setuptools",
@@ -3294,6 +3299,66 @@
         "sizeBytes": 129647,
         "tags": [
           "py3-none-any"
+        ]
+      }
+    },
+    "safetensors": {
+      "name": "safetensors",
+      "version": "0.8.0",
+      "requires": [
+        "safetensors[torch] ; extra == 'all'",
+        "safetensors[numpy] ; extra == 'all'",
+        "safetensors[jax] ; extra == 'all'",
+        "safetensors[paddlepaddle] ; extra == 'all'",
+        "safetensors[convert] ; extra == 'all'",
+        "safetensors[quality] ; extra == 'all'",
+        "safetensors[testing] ; extra == 'all'",
+        "safetensors[torch] ; extra == 'convert'",
+        "huggingface-hub>=1.4 ; extra == 'convert'",
+        "safetensors[all] ; extra == 'dev'",
+        "safetensors[pinned-tf] ; extra == 'dev'",
+        "safetensors[numpy] ; extra == 'jax'",
+        "flax>=0.6.3 ; extra == 'jax'",
+        "jax>=0.3.25 ; extra == 'jax'",
+        "jaxlib>=0.3.25 ; extra == 'jax'",
+        "mlx>=0.0.9 ; extra == 'mlx'",
+        "numpy>=1.24.6 ; extra == 'numpy'",
+        "safetensors[numpy] ; extra == 'paddlepaddle'",
+        "paddlepaddle>=2.4.1 ; extra == 'paddlepaddle'",
+        "safetensors[numpy] ; extra == 'pinned-tf'",
+        "tensorflow==2.18.0 ; extra == 'pinned-tf'",
+        "ruff ; extra == 'quality'",
+        "safetensors[numpy] ; extra == 'tensorflow'",
+        "tensorflow>=2.11.0 ; extra == 'tensorflow'",
+        "safetensors[numpy] ; extra == 'testing'",
+        "h5py>=3.7.0 ; extra == 'testing'",
+        "setuptools-rust>=1.12.0 ; extra == 'testing'",
+        "pytest>=9.0 ; extra == 'testing'",
+        "pytest-benchmark>=5.2 ; extra == 'testing'",
+        "hypothesis>=6.70.2 ; extra == 'testing'",
+        "fsspec>=2024.6.0 ; extra == 'testing'",
+        "s3fs>=2024.6.0 ; extra == 'testing'",
+        "safetensors[numpy] ; extra == 'tf-nightly'",
+        "tf-nightly ; extra == 'tf-nightly'",
+        "safetensors[numpy] ; extra == 'torch'",
+        "torch>=2.4 ; extra == 'torch'"
+      ],
+      "license": "UNSPECIFIED",
+      "homepage": null,
+      "profiles": [
+        "scene",
+        "production",
+        "restoration",
+        "validation",
+        "evaluation"
+      ],
+      "wheel": {
+        "file": "safetensors-0.8.0-cp310-abi3-win_amd64.whl",
+        "version": "0.8.0",
+        "sha256": "096ec1a98435df7beb08853bb5aa9081a84f23d0adc67ed1a0a10550f608373f",
+        "sizeBytes": 355540,
+        "tags": [
+          "cp310-abi3-win_amd64"
         ]
       }
     }

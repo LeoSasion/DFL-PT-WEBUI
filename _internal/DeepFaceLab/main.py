@@ -5,10 +5,8 @@ if __name__ == "__main__":
 
     import os
     import sys
-    import time
     import argparse
 
-    from core import pathex
     from core import osex
     from pathlib import Path
     from core.interact import interact as io
@@ -21,6 +19,8 @@ if __name__ == "__main__":
             setattr(namespace, self.dest, os.path.abspath(os.path.expanduser(values)))
 
     def initialize_neural_runtime():
+        from core.torch_runtime_switch import assert_runtime_available
+        assert_runtime_available(Path(__file__).resolve().parents[2])
         from core.leras import nn
         nn.initialize_main_env()
 
@@ -154,6 +154,28 @@ if __name__ == "__main__":
     def process_train(arguments):
         initialize_neural_runtime()
         osex.set_process_lowest_prio()
+        if arguments.model_name == 'TAE':
+            from argparse import Namespace
+            import torch
+            from tae.train import train_web
+            from me_backend.web_bridge import validate_model_name
+            if any(getattr(arguments, key, None) not in (None, False) for key in
+                   ('allow_config_change', 'reset_optimizer', 'initialize_from', 'pretraining_data_dir',
+                    'pretrained_model_dir', 'archi', 'use_rg', 'use_fp16', 'use_bf16', 'optimizer_on_cpu', 'pretrain')):
+                raise ValueError('TAE uses its own JSON configuration and checkpoint; ME-only training flags are not supported')
+            torch.set_num_threads(arguments.threads)
+            name = validate_model_name(arguments.force_model_name or io.input_str('TAE 模型名称', 'TAE'))
+            directory = Path(arguments.model_dir) / name
+            device = 'cpu' if arguments.cpu_only else ('cuda:' + arguments.force_gpu_idxs if arguments.force_gpu_idxs else 'cuda')
+            train_web(Namespace(src=arguments.training_data_src_dir, dst=arguments.training_data_dst_dir,
+                model=directory, name=name, config=arguments.config, config_json=arguments.config_json,
+                resolution=arguments.resolution, batch_size=arguments.batch_size, device=device,
+                vae_weights=arguments.vae_weights, seed=arguments.seed, steps=arguments.steps,
+                max_minutes=arguments.max_minutes, target_iterations=arguments.target_iterations,
+                save_every=arguments.save_every, preview_every=arguments.preview_every,
+                resume=arguments.resume or (directory / 'tae.pt').exists(),
+                reset_data_state=arguments.reset_data_state, debug_samples=arguments.debug or arguments.debug_samples))
+            return
         if arguments.model_name == 'ME':
             from argparse import Namespace
             import torch
@@ -179,7 +201,7 @@ if __name__ == "__main__":
                 initialize_from=arguments.initialize_from or arguments.pretrained_model_dir,
                 pretraining_data_dir=arguments.pretraining_data_dir, target_iterations=arguments.target_iterations,
                 debug_samples=arguments.debug or arguments.debug_samples,
-                archi=arguments.archi, use_rg=arguments.use_rg, use_fp16=arguments.use_fp16,
+                archi=arguments.archi, use_rg=arguments.use_rg, use_fp16=arguments.use_fp16, use_bf16=arguments.use_bf16,
                 optimizer_on_cpu=arguments.optimizer_on_cpu, pretrain=arguments.pretrain))
             return
         kwargs = {'model_class_name'         : arguments.model_name,
@@ -204,7 +226,10 @@ if __name__ == "__main__":
     p.add_argument('--training-data-dst-dir', required=True, action=fixPathAction, dest="training_data_dst_dir", help="DST faceset（已提取并 aligned）的目录")
     p.add_argument('--pretrained-model-dir', action=fixPathAction, dest="pretrained_model_dir", default=None, help="ME 原生预训练模型目录；仅导入网络，优化器与迭代从零开始")
     p.add_argument('--model-dir', required=True, action=fixPathAction, dest="model_dir", help="模型保存目录（model_dir）")
-    p.add_argument('--model', required=True, dest="model_name", choices=('ME', 'XSeg'), help="ME 人脸模型 / XSeg 辅助遮罩模型")
+    p.add_argument('--model', required=True, dest="model_name",
+                   choices=('ME', 'TAE', 'XSeg'), help="ME / TAE 人脸模型 / XSeg 辅助遮罩模型")
+    p.add_argument('--vae-weights', default=None, action=fixPathAction, help="TAEQI2.1 基础权重文件（Encoder 始终冻结）")
+    p.add_argument('--max-minutes', type=float, default=60, help="TAE 本次训练分钟上限；完整更新后保存停止")
     p.add_argument('--debug', action="store_true", dest="debug", default=False, help="调试样本")
     p.add_argument('--no-preview', action="store_true", dest="no_preview", default=False, help="禁用预览窗口")
     p.add_argument('--force-model-name', dest="force_model_name", default=None, help="强制选择 model/ 目录中的模型实例名")
@@ -221,19 +246,39 @@ if __name__ == "__main__":
     def process_exportdfm(arguments):
         initialize_neural_runtime()
         osex.set_process_lowest_prio()
-        from me_backend.model_adapter import MEInferenceModel
         from me_backend.export import export_dfm
-        model = MEInferenceModel(saved_models_path=arguments.model_dir,
-            force_model_name=arguments.force_model_name, cpu_only=True)
-        export_dfm(model.directory, arguments.output_file)
+        from me_backend.web_bridge import validate_model_name
+        root = Path(arguments.model_dir)
+        checkpoint = 'tae.pt' if arguments.model_name == 'TAE' else 'me.pt'
+        if arguments.force_model_name:
+            directory = root / validate_model_name(arguments.force_model_name)
+        elif (root / checkpoint).is_file():
+            directory = root
+        else:
+            candidates = [p for p in root.iterdir() if p.is_dir() and (p / checkpoint).is_file()]
+            if len(candidates) != 1:
+                raise ValueError('Select an existing model explicitly')
+            directory = candidates[0]
+        indexes = arguments.force_gpu_idxs
+        if indexes and (not indexes.isdecimal()):
+            raise ValueError('DFM export uses one nonnegative GPU index')
+        export_dfm(directory, arguments.output_file, family=arguments.model_name,
+            mode=arguments.export_mode, calibration_dir=arguments.calibration_dir,
+            calibration_samples=arguments.calibration_samples, weights=arguments.vae_weights,
+            device='cpu' if arguments.cpu_only else 'cuda:' + (indexes or '0'), export_id=arguments.export_id)
 
-    p = subparsers.add_parser( "exportdfm", help="导出供 DeepFaceLive 使用的模型")
+    p = subparsers.add_parser( "exportdfm", help="导出正常 DFM 或 Blackwell TensorRT 极致量化 DFM")
     p.add_argument('--model-dir', required=True, action=fixPathAction, dest="model_dir", help="模型保存目录（model_dir）")
-    p.add_argument('--model', required=True, dest="model_name", choices=('ME',), help="模型类型")
+    p.add_argument('--model', required=True, dest="model_name", choices=('ME', 'TAE'), help="模型类型")
     p.add_argument('--force-model-name', default=None)
     p.add_argument('--output-file', default=None, action=fixPathAction)
     p.add_argument('--cpu-only', action='store_true')
     p.add_argument('--force-gpu-idxs', default=None)
+    p.add_argument('--export-mode', choices=('normal', 'extreme'), default='normal', help="正常导出 / 极致量化")
+    p.add_argument('--calibration-dir', default=None, action=fixPathAction, help="极致量化使用的 DST aligned 校准集")
+    p.add_argument('--calibration-samples', default=64, type=int)
+    p.add_argument('--vae-weights', default=None, action=fixPathAction)
+    p.add_argument('--export-id', default=None, help="导出任务回执 ID")
     p.set_defaults (func=process_exportdfm)
 
     def process_merge(arguments):
@@ -261,7 +306,8 @@ if __name__ == "__main__":
     p.add_argument('--output-mask-dir', required=True, action=fixPathAction, dest="output_mask_dir", help="输出 mask 目录：mask 文件会写入该目录")
     p.add_argument('--aligned-dir', action=fixPathAction, dest="aligned_dir", default=None, help="aligned 目录：用于读取提取的人脸对齐信息")
     p.add_argument('--model-dir', required=True, action=fixPathAction, dest="model_dir", help="模型目录（model_dir）")
-    p.add_argument('--model', required=True, dest="model_name", choices=('ME',), help="模型类型")
+    p.add_argument('--model', required=True, dest="model_name",
+                   choices=('ME', 'TAE'), help="模型类型")
     p.add_argument('--xseg-dir', default=None, action=fixPathAction)
     p.add_argument('--force-model-name', dest="force_model_name", default=None, help="强制选择 model/ 目录中的模型实例名")
     p.add_argument('--cpu-only', action="store_true", dest="cpu_only", default=False, help="仅使用 CPU 进行合成")

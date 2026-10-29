@@ -37,7 +37,7 @@ export function buildDflEnvironment(profile, additions = {}) {
     DFL_WORKSPACE: PATHS.workspaceRoot,
     DFL_ACTIVE_PROJECT_WORKSPACE: PATHS.workspaceRoot,
     DFL_ACTIVE_PROJECT_ID: PATHS.activeProject.id,
-    DFL_ROOT: profile === "legacy" ? PATHS.legacyDflRoot : PATHS.currentDflRoot,
+    DFL_ROOT: PATHS.dflRoot,
     PYTHONIOENCODING: "utf-8",
     PATH: runtimePaths.filter(Boolean).join(delimiter),
     ...additions,

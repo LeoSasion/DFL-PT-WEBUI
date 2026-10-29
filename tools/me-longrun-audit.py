@@ -10,7 +10,6 @@ import argparse
 from collections import deque
 from contextlib import redirect_stdout
 from datetime import datetime
-import hashlib
 import io
 import json
 import math

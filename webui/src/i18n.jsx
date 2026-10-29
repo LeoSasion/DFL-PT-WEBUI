@@ -6,6 +6,8 @@ const supportedLanguages = new Set(["zh", "en"]);
 
 const EN = {
   ...UX_EN,
+  "正在加载训练损失曲线…": "Loading training loss chart…",
+  "曲线暂时无法加载；后台训练会继续运行。": "The chart could not load. Training continues in the background.",
   "预处理": "Preprocess",
   "后处理": "Postprocess",
   "素材与人脸集": "Media and face datasets",

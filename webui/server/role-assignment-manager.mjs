@@ -216,7 +216,7 @@ async function assignRoleUnlocked(sourceSide, { targetSide = sourceSide, names, 
     const cleanup = assertWithin(root,staging);
     await plain(cleanup,true);
     if (operationError?.code !== "ROLE_RECOVERY_REQUIRED") await rm(cleanup,{recursive:true,force:true});
-  } catch (error) {
+  } catch {
     // A cleanup failure must not turn a committed assignment into a reported failure,
     // or hide the original reason a copy failed. The retained directory contains copies only.
     if (operationError) operationError.details = { ...operationError.details, cleanupPending:true };

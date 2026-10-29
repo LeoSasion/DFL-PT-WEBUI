@@ -25,6 +25,7 @@ const SNAPSHOT_VARIANTS = new Set([
 ]);
 const MAX_JSON_BYTES = 4 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 16 * 1024 * 1024;
+const MAX_CACHED_SNAPSHOT_ROWS = 2048;
 const SNAPSHOT_CONTENT_PREFIX = "ME-evaluation-snapshot-v1\0";
 
 export class TrainingEvaluationError extends Error {
@@ -211,6 +212,8 @@ export class TrainingEvaluationManager {
     this.probeBuilder = probeBuilder;
     this.now = now;
     this.initialization = null;
+    // Keep only compact listing rows, never the potentially large sample arrays.
+    this.snapshotRows = new Map();
   }
 
   async initialize() {
@@ -445,7 +448,7 @@ export class TrainingEvaluationManager {
     return index;
   }
 
-  async getSnapshot(modelKey, snapshotId) {
+  async getSnapshot(modelKey, snapshotId, { loadManifest } = {}) {
     const summary = await this.readJsonLimited(
       path.join(this.snapshotDirectory(modelKey, snapshotId), "summary.json"),
       "SNAPSHOT_NOT_FOUND",
@@ -470,7 +473,8 @@ export class TrainingEvaluationManager {
     ) {
       throw new TrainingEvaluationError("评测快照摘要无效", "SNAPSHOT_INVALID", 422);
     }
-    const manifest = await this.getManifest(modelKey, summary.manifestId);
+    const manifest = await (loadManifest ? loadManifest(summary.manifestId)
+      : this.getManifest(modelKey, summary.manifestId));
     const suffix = snapshotId.split("-").at(-1);
     if (suffix.length === 24) {
       if (!Array.isArray(manifest.samples)
@@ -526,28 +530,80 @@ export class TrainingEvaluationManager {
     const index = await this.refreshSnapshotIndex(modelKey, await this.readIndex(modelKey));
     const snapshots = [];
     const invalidSnapshots = [];
+    const manifests = new Map();
+    let loadedManifest;
+    const manifestState = id => {
+      assertManifestId(id);
+      if (!manifests.has(id)) manifests.set(id, this.jsonFingerprint(this.manifestPath(modelKey, id), "MANIFEST_NOT_FOUND")
+        .then(stamp => ({ stamp })));
+      return manifests.get(id);
+    };
+    const loadManifest = async id => {
+      const state = await manifestState(id);
+      // Retain only one full manifest; the per-poll map holds small fingerprints.
+      if (loadedManifest?.id !== id) loadedManifest = { id, value: this.getManifest(modelKey, id).then(async value => {
+        if (state.stamp !== await this.jsonFingerprint(this.manifestPath(modelKey, id), "MANIFEST_NOT_FOUND")) {
+          throw new TrainingEvaluationError("评测集读取期间发生变化，请重试", "MANIFEST_INVALID", 422);
+        }
+        return value;
+      }) };
+      return loadedManifest.value;
+    };
     for (const snapshotId of index.snapshotIds) {
+      let key;
       try {
-        snapshots.push(await this.getSnapshot(modelKey, snapshotId));
+        key = this.snapshotDirectory(modelKey, snapshotId);
+        const summaryPath = path.join(key, "summary.json");
+        const stamp = await this.jsonFingerprint(summaryPath, "SNAPSHOT_NOT_FOUND");
+        const cached = this.snapshotRows.get(key);
+        let row;
+        if (cached?.stamp === stamp
+            && cached.manifestStamp === (await manifestState(cached.row.manifestId)).stamp) {
+          row = { ...cached.row };
+          this.snapshotRows.delete(key);
+          this.snapshotRows.set(key, cached);
+        } else {
+          const snapshot = await this.getSnapshot(modelKey, snapshotId, { loadManifest });
+          row = {
+            snapshotId: snapshot.snapshotId, iteration: snapshot.iteration,
+            manifestId: snapshot.manifestId, metricSchemaVersion: snapshot.metricSchemaVersion,
+            createdAt: snapshot.createdAt, sampleCount: snapshot.samples.length,
+            integrityStatus: snapshot.integrityStatus,
+          };
+          if (stamp === await this.jsonFingerprint(summaryPath, "SNAPSHOT_NOT_FOUND")) {
+            this.snapshotRows.delete(key);
+            this.snapshotRows.set(key, { modelKey, stamp, manifestStamp: (await manifestState(row.manifestId)).stamp, row: { ...row } });
+            if (this.snapshotRows.size > MAX_CACHED_SNAPSHOT_ROWS) this.snapshotRows.delete(this.snapshotRows.keys().next().value);
+          }
+        }
+        snapshots.push(row);
       } catch (error) {
+        this.snapshotRows.delete(key);
         if (!(error instanceof TrainingEvaluationError)) throw error;
         invalidSnapshots.push({ snapshotId, code: error.code });
       }
     }
+    const present = new Set(index.snapshotIds);
+    for (const [key, cached] of this.snapshotRows) {
+      if (cached.modelKey === modelKey && !present.has(cached.row.snapshotId)) this.snapshotRows.delete(key);
+    }
     snapshots.sort((left, right) => right.iteration - left.iteration || right.createdAt.localeCompare(left.createdAt));
     return {
       modelKey,
-      snapshots: snapshots.map((snapshot) => ({
-        snapshotId: snapshot.snapshotId,
-        iteration: snapshot.iteration,
-        manifestId: snapshot.manifestId,
-        metricSchemaVersion: snapshot.metricSchemaVersion,
-        createdAt: snapshot.createdAt,
-        sampleCount: snapshot.samples.length,
-        integrityStatus: snapshot.integrityStatus,
-      })),
+      snapshots,
       invalidSnapshots,
     };
+  }
+
+  async jsonFingerprint(target, missingCode) {
+    try {
+      const info = await stat(target, { bigint: true });
+      if (info.size > BigInt(MAX_JSON_BYTES)) throw new TrainingEvaluationError("评测 JSON 超过 4 MiB", "EVALUATION_JSON_TOO_LARGE", 422);
+      return [info.dev, info.ino, info.size, info.mtimeNs, info.ctimeNs, info.birthtimeNs].join(":");
+    } catch (error) {
+      if (error.code === "ENOENT") throw new TrainingEvaluationError("评测数据不存在", missingCode, 404);
+      throw error;
+    }
   }
 
   async resolveSnapshotImage(modelKey, snapshotId, sampleId, variant) {
@@ -621,6 +677,7 @@ export class TrainingEvaluationManager {
     try {
       for (const target of targets) {
         await rename(target.source, target.destination);
+        this.snapshotRows.delete(target.source);
         moved.push(target);
       }
     } catch (error) {
@@ -655,6 +712,7 @@ export class TrainingEvaluationManager {
     try {
       for (const target of targets) {
         await rename(target.source, target.destination);
+        this.snapshotRows.delete(target.destination);
         moved.push(target);
       }
       for (const snapshotId of selected) {

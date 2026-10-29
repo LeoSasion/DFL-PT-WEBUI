@@ -32,6 +32,7 @@ class MEConfig:
     random_hsv_power: float = 0.0
     use_rg: bool = False
     use_fp16: bool = False
+    use_bf16: bool = False
     optimizer_on_cpu: bool = False
     gan_power: float = 0.0
     gan_patch_size: int = 16
@@ -53,6 +54,8 @@ class MEConfig:
     retraining_every: int = 16
 
     def __post_init__(self):
+        if self.use_fp16 and self.use_bf16:
+            raise ValueError('FP16 and BF16 are mutually exclusive')
         if not isinstance(self.archi, str) or not re.fullmatch(r'(df|liae)(-[udtc]+)?', self.archi):
             raise ValueError('archi must be df or liae with explicit u/d/t/c options')
         options = self.archi.partition('-')[2]

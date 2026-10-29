@@ -18,7 +18,7 @@ from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "webui/python"))
-from vision_landmarks import DEFAULT_ASSETS, MODEL_IDS, LandmarkPredictor, file_sha256, point_definition, validate_box
+from vision_landmarks import DEFAULT_ASSETS, MODEL_IDS, LandmarkPredictor, file_sha256, validate_box
 from vision_assets import prepare_evaluation_output
 
 

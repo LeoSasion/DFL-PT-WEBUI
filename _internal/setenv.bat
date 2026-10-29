@@ -15,8 +15,7 @@ set "PYTHON_BIN_PATH=%PYTHON_EXECUTABLE%"
 set "PYTHON_LIB_PATH=%DFL_PT_ROOT%\.venv\Lib\site-packages"
 set "NODE_BIN_PATH=%INTERNAL%\node\bin"
 set "FFMPEG_PATH=%INTERNAL%\ffmpeg"
-set "XNVIEWMP_PATH=%INTERNAL%\XnViewMP"
-set "PATH=%PYTHON_PATH%;%NODE_BIN_PATH%;%FFMPEG_PATH%;%XNVIEWMP_PATH%;%PATH%"
+set "PATH=%PYTHON_PATH%;%NODE_BIN_PATH%;%FFMPEG_PATH%;%PATH%"
 rem Re-read the active selection on every call. Fail closed rather than target
 rem the wrong project's images after WebUI has switched projects.
 set "WORKSPACE="

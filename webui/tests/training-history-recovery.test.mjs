@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { jobPresentation, mergeMetricHistory } from "../src/domain/job-presentation.js";
-import { selectTrainingJob, resolveSavedTrainingModel, getSavedTrainingModelState } from "../src/domain/training-context.js";
+import { selectTrainingJob, resolveSavedTrainingModel, getSavedTrainingModelState, getSavedTrainingContext } from "../src/domain/training-context.js";
 import { createTrainingHistoryReader } from "../src/runtime/training-history-reader.js";
 
 function clock() {
@@ -63,6 +63,40 @@ test("resume never substitutes an unrelated checkpoint for a missing named model
   assert.equal(getSavedTrainingModelState([first, second]), "ambiguous");
   assert.equal(getSavedTrainingModelState([second], { parameters: { forceModelName: "first" } }), "missing");
   assert.equal(getSavedTrainingModelState([quick]), "empty");
+});
+
+test("saved training context resolves family, selection and availability together", () => {
+  const me = { name: "same-name", type: "me" };
+  const tae = { name: "same-name", type: "TAE" };
+  const unrelated = { name: "unused", type: "XSEG" };
+  const models = [unrelated, me, tae];
+  for (const [commandId, expected] of [["train.me", me], ["train.tae", tae]]) {
+    assert.deepEqual(getSavedTrainingContext(models, { commandId, parameters: { forceModelName: "same-name" } }), {
+      model: expected, state: "available",
+    });
+    assert.deepEqual(getSavedTrainingContext(models, { commandId, parameters: { forceModelName: "missing" } }), {
+      model: null, state: "missing",
+    });
+  }
+  assert.deepEqual(getSavedTrainingContext(models), { model: null, state: "ambiguous" });
+  assert.deepEqual(getSavedTrainingContext([unrelated]), { model: null, state: "empty" });
+  assert.deepEqual(getSavedTrainingContext([unrelated, me]), { model: me, state: "available" });
+  assert.deepEqual(getSavedTrainingContext([], { commandId: "train.tae", parameters: { forceModelName: "required" } }), {
+    model: null, state: "missing",
+  });
+});
+
+test("trainer selection keeps first-live, first-queued and selected-history priorities across families", () => {
+  const stopped = { id: "stopped", commandId: "train.me", state: "cancelled" };
+  const selected = { id: "selected", commandId: "train.tae", state: "succeeded" };
+  const queued = { id: "queued", commandId: "train.tae", state: "queued" };
+  const stopping = { id: "stopping", commandId: "train.tae", state: "stopping" };
+  const running = { id: "running", commandId: "train.me", state: "running" };
+  assert.equal(selectTrainingJob([stopped, selected], selected), selected);
+  assert.equal(selectTrainingJob([stopped, selected]), stopped);
+  assert.equal(selectTrainingJob([stopped, queued, selected], selected), queued);
+  assert.equal(selectTrainingJob([stopped, queued, stopping, running], stopped), stopping);
+  assert.equal(selectTrainingJob([]), null);
 });
 
 test("completed history retries a temporary outage and retains the loaded metric tail", async () => {

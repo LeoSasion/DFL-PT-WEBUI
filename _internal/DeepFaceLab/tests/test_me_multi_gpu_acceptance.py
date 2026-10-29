@@ -262,6 +262,9 @@ def test_partial_report_rejects_invalid_single_gpu_measurement(
     monkeypatch.setattr(torch.cuda, 'is_available', lambda: True)
     monkeypatch.setattr(torch.cuda, 'device_count', lambda: 1)
     monkeypatch.setattr(torch.cuda, 'get_device_name', lambda index: 'test GPU')
+    monkeypatch.setattr(torch.cuda, 'get_device_capability', lambda index: (12, 0))
+    monkeypatch.setattr(torch.cuda, 'get_arch_list', lambda: ['sm_120'])
+    monkeypatch.setattr(torch._C, '_cuda_getArchFlags', lambda: 'sm_120', raising=False)
     monkeypatch.setattr(torch.cuda, 'get_device_properties',
                         lambda index: type('GPU', (), {'total_memory': 1000})())
     monkeypatch.setattr(acceptance, '_fixed_batch',

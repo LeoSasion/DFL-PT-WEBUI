@@ -151,16 +151,6 @@ def apply_random_overlay_triangle( img, max_alpha, mask=None, rnd_state=None ):
 
     return result
 
-def _min_resize(x, m):
-    if x.shape[0] < x.shape[1]:
-        s0 = m
-        s1 = int(float(m) / float(x.shape[0]) * float(x.shape[1]))
-    else:
-        s0 = int(float(m) / float(x.shape[1]) * float(x.shape[0]))
-        s1 = m
-    new_max = min(s1, s0)
-    raw_max = min(x.shape[0], x.shape[1])
-    return cv2.resize(x, (s1, s0), interpolation=cv2.INTER_LANCZOS4)
 
 def _d_resize(x, d, fac=1.0):
     new_min = min(int(d[1] * fac), int(d[0] * fac))

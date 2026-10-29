@@ -1,5 +1,7 @@
 import { randomBytes, createHash } from "node:crypto";
-import { lstat, mkdir, open, readFile, readdir, realpath, rename, writeFile } from "node:fs/promises";
+import { lstat, mkdir, open, readFile, readdir, realpath } from "node:fs/promises";
+import { writeJsonFileAtomic as atomicJson } from "./atomic-json.mjs";
+import { createJsonProgressReader } from "./progress-reader.mjs";
 import path from "node:path";
 import { PATHS } from "./paths.mjs";
 import { terminateChildProcessTree } from "./process-tree.mjs";
@@ -25,12 +27,6 @@ export class RestorationError extends Error {
   constructor(message, code = "RESTORATION_INVALID", status = 400) {
     super(message); this.name = "RestorationError"; this.code = code; this.status = status;
   }
-}
-
-async function atomicJson(target, value) {
-  const temporary = `${target}.${randomBytes(6).toString("hex")}.tmp`;
-  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { flag: "wx" });
-  await rename(temporary, target);
 }
 
 export class RestorationManager {
@@ -215,7 +211,7 @@ export class RestorationManager {
   }
 
   async runPython(requestFile, { signal, onProgress }) {
-    let remainder = "";
+    const progress = createJsonProgressReader(onProgress, { prefix: "RESTORATION_PROGRESS ", maxLineLength: 16_000 });
     let result;
     try {
       result = await this.runProcess(this.pythonPath, ["-B", path.join(this.projectRoot, "webui", "python", "restoration_task.py"),
@@ -223,12 +219,7 @@ export class RestorationManager {
       { cwd: this.projectRoot, env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONDONTWRITEBYTECODE: "1" },
         signal, label: "源帧修复", timeoutMs: 90 * 60_000, maxBytes: 4 * 1024 * 1024,
         terminateProcessTree: this.terminateProcessTree,
-        onStderr: chunk => {
-          remainder += chunk; const lines = remainder.split(/\r?\n/); remainder = lines.pop().slice(-16000);
-          for (const line of lines) if (line.startsWith("RESTORATION_PROGRESS ")) {
-            try { onProgress(JSON.parse(line.slice(21))); } catch {}
-          }
-        },
+        onStderr: progress.write,
       });
     } catch (error) {
       // The shared runner reports a failed stop even when the child never closes,
@@ -238,6 +229,7 @@ export class RestorationManager {
       if (error.code === "HELPER_OUTPUT_TOO_LARGE") throw new RestorationError("修复响应过大", "RESTORATION_FAILED", 422);
       throw error;
     }
+    progress.end();
     if (result.code !== 0) throw new RestorationError(result.stderr.trim().slice(-16000) || "修复执行失败", "RESTORATION_FAILED", 422);
     try { return JSON.parse(result.stdout); } catch { throw new RestorationError("修复结果不是有效 JSON", "RESTORATION_FAILED", 422); }
   }

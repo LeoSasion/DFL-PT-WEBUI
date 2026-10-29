@@ -25,12 +25,12 @@ ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = "https://github.com/LeoSasion/DFL-PT-WEBUI"
 PRODUCT = "DFL-PT-WEBUI Launcher"
 FILE_NAME = "DFL-PT-WEBUI.Launcher.exe"
-MANIFEST_RESOURCE = "DflPtWebUi.Launcher.Payload.Manifest"
 RESOURCE_PREFIX = "DflPtWebUi.Launcher.Payload.File."
 FIXED_PAYLOAD = {
     "bootstrap/bootstrap.ps1": "launcher/bootstrap.ps1",
     "bootstrap/runtime-manifest.json": "launcher/runtime-manifest.json",
     "bootstrap/setup-runtime.ps1": "launcher/setup-runtime.ps1",
+    "bootstrap/runtime-install.py": "tools/runtime-install.py",
     "bootstrap/install-project.ps1": "launcher/install-project.ps1",
     "bootstrap/install-source.ps1": "launcher/install-source.ps1",
     "bootstrap/upgrade-project.ps1": "launcher/upgrade-project.ps1",
@@ -421,7 +421,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-revision", required=True,
                         help="Reviewed sanitized public commit whose tree matches this checkout.")
-    parser.add_argument("--version", default="0.1.3-preview")
+    parser.add_argument("--version", default="0.1.4-preview")
     parser.add_argument("--output", type=Path)
     arguments = parser.parse_args()
     output = arguments.output or ROOT / "release-output" / ("launcher-v" + arguments.version)

@@ -12,3 +12,5 @@ onnx==1.20.0
 onnxscript==0.5.7
 # Default WebUI extraction and native mask assistance need this production layer.
 -r requirements-production-vision.txt
+# TAE is an explicitly selected architecture in the same WebUI runtime.
+-r requirements-tae.txt

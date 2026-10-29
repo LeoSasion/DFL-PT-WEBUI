@@ -1,51 +1,89 @@
 [CmdletBinding()]
 param([string]$ProjectRoot = '', [switch]$InstallDependencies, [switch]$NoNetwork,
-    [string]$WheelhousePath = '', [ValidateSet('production','restoration','validation','evaluation','scene')][string]$RuntimeProfile = 'production')
+    [string]$WheelhousePath = '', [ValidateSet('production','restoration','validation','evaluation','scene')][string]$RuntimeProfile = 'production',
+    [ValidateSet('auto','cu126','cu128')][string]$CudaRuntime = 'auto',
+    [Parameter(DontShow=$true)][IO.FileStream]$SourceInstallLock,
+    [Parameter(DontShow=$true)][string]$SourceInstallToken = '',
+    [Parameter(DontShow=$true)][switch]$PreserveVenvConfiguration)
 $ErrorActionPreference = 'Stop'
 if ([string]::IsNullOrWhiteSpace($ProjectRoot)) { $ProjectRoot = Split-Path -Parent $PSScriptRoot }
-$root = [IO.Path]::GetFullPath($ProjectRoot).TrimEnd('\', '/')
-$basePython = Join-Path $root '_internal\python_base\python.exe'
-$venv = Join-Path $root '.venv'
-$python = Join-Path $venv 'Scripts\python.exe'
-$requirements = Join-Path $root ('release\python-locks\' + $RuntimeProfile + '-win-cp312.txt')
-if (-not (Test-Path -LiteralPath (Join-Path $root '_internal\DeepFaceLab\me.py'))) { throw "Not a DFL-PT-WEBUI project: $root" }
-if (-not (Test-Path -LiteralPath $basePython)) { throw 'The independent _internal/python_base interpreter is missing.' }
-if (-not (Test-Path -LiteralPath $python)) {
-    if (-not (Test-Path -LiteralPath $basePython)) { throw 'Place the standalone Python 3.12 distribution in _internal/python_base first.' }
-    & $basePython -c 'import sys; assert sys.version_info[:2] == (3,12), sys.version'
-    if ($LASTEXITCODE -ne 0) { throw 'The project-local base interpreter must be Python 3.12.' }
-    & $basePython -m venv $venv
-    if ($LASTEXITCODE -ne 0) { throw 'Could not create the project-local .venv.' }
-}
-# Windows venv records an absolute base path. Rebase it to the packaged local
-# interpreter after this project directory is copied or moved.
-$configurationPath = Join-Path $venv 'pyvenv.cfg'
-if (Test-Path -LiteralPath $configurationPath) {
-    $configuration = [IO.File]::ReadAllText($configurationPath)
-    $baseDirectory = Split-Path -Parent $basePython
-    $configuration = [Regex]::Replace($configuration,'(?m)^home\s*=.*$',('home = ' + $baseDirectory))
-    $configuration = [Regex]::Replace($configuration,'(?m)^executable\s*=.*$',('executable = ' + $basePython))
-    $configuration = [Regex]::Replace($configuration,'(?m)^command\s*=.*$',('command = ' + $basePython + ' -m venv ' + $venv))
-    [IO.File]::WriteAllText($configurationPath,$configuration,(New-Object Text.UTF8Encoding($false)))
-}
-if ($InstallDependencies) {
-    if ($NoNetwork -and -not $WheelhousePath) { throw 'Offline dependency installation requires a verified wheelhouse.' }
-    if (-not (Test-Path -LiteralPath $requirements)) { throw "Missing runtime requirements: $requirements" }
-    # Production portable archives carry only the locked inference packages.
-    # Explicit installation can restore pip from this local Python's bundled
-    # wheel without networking or touching another interpreter/environment.
-    & $python -I -c "import importlib.util,sys; sys.exit(0 if importlib.util.find_spec('pip') is not None else 1)"
-    if ($LASTEXITCODE -ne 0) {
-        & $python -I -m ensurepip --upgrade
-        if ($LASTEXITCODE -ne 0) { throw 'Could not restore pip from the project-local Python bundled wheel.' }
+$root = [IO.Path]::GetFullPath($ProjectRoot).TrimEnd('\','/')
+if ($root -eq [IO.Path]::GetPathRoot($root).TrimEnd('\','/')) { throw 'ProjectRoot must be an independent project directory.' }
+$rootPrefix = $root + [IO.Path]::DirectorySeparatorChar
+function Assert-SetupPath([string]$Path) {
+    $absolute = [IO.Path]::GetFullPath($Path)
+    if (-not $absolute.StartsWith($rootPrefix,[StringComparison]::OrdinalIgnoreCase)) { throw 'Runtime path escapes the project.' }
+    $ancestor = $absolute
+    while ($ancestor -and ($ancestor -eq $root -or $ancestor.StartsWith($rootPrefix,[StringComparison]::OrdinalIgnoreCase))) {
+        try {
+            if (([IO.File]::GetAttributes($ancestor) -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "Linked runtime path is not supported: $ancestor" }
+        } catch [IO.FileNotFoundException] {} catch [IO.DirectoryNotFoundException] {}
+        if ($ancestor -eq $root) { break }
+        $ancestor = Split-Path -Parent $ancestor
     }
-    $pipOptions = @('--disable-pip-version-check','--require-hashes','--only-binary=:all:','-r',$requirements)
-    if ($WheelhousePath) { $pipOptions += @('--no-index','--find-links',$WheelhousePath) }
-    else { $pipOptions += @('--index-url','https://pypi.org/simple','--extra-index-url','https://download.pytorch.org/whl/cu128') }
-    & $python -I -m pip --isolated install @pipOptions
-    if ($LASTEXITCODE -ne 0) { throw 'Installing the ME and tool requirements failed.' }
-    & $python -I -m pip --isolated check
-    if ($LASTEXITCODE -ne 0) { throw 'Locked runtime dependency graph is inconsistent.' }
+    return $absolute
 }
-& $python -I -c "import sys,torch,cv2,numpy,scipy,pathlib; root=pathlib.Path(sys.executable).resolve().parents[2]; assert pathlib.Path(sys.base_prefix).resolve() == root/'_internal'/'python_base', sys.base_prefix; assert pathlib.Path(torch.__file__).resolve().is_relative_to(root/'.venv'); assert sys.version_info[:2] == (3,12), sys.version; assert torch.__version__ == '2.9.1+cu128', torch.__version__; assert torch.version.cuda == '12.8', torch.version.cuda; print('DFL_PT_RUNTIME_OK|'+sys.version.split()[0]+'|'+torch.__version__)"
-if ($LASTEXITCODE -ne 0) { throw 'The project-local Python / PyTorch runtime validation failed.' }
+$cache = Assert-SetupPath (Join-Path $root '.launcher-install\source')
+$lockPath = Assert-SetupPath (Join-Path $cache 'source-install.lock')
+$ownerPath = Assert-SetupPath (Join-Path $cache 'source-install-owner.json')
+$basePython = Assert-SetupPath (Join-Path $root '_internal\python_base\python.exe')
+$helper = Join-Path $PSScriptRoot 'runtime-install.py'
+if (-not (Test-Path -LiteralPath $helper -PathType Leaf)) { $helper = Join-Path $root 'tools\runtime-install.py' }
+$runtimeApiPath = Assert-SetupPath (Join-Path $root '_internal\DeepFaceLab\core\gpu_runtime.py')
+$guardApiPath = Assert-SetupPath (Join-Path $root '_internal\DeepFaceLab\core\torch_runtime_switch.py')
+if (-not (Test-Path -LiteralPath $runtimeApiPath -PathType Leaf) -or -not (Test-Path -LiteralPath $guardApiPath -PathType Leaf) -or
+    (Get-Content -LiteralPath $runtimeApiPath -Raw -Encoding UTF8) -notmatch '(?m)^def validate_runtime\([^\r\n]*maintenance_transaction' -or
+    -not (Get-Content -LiteralPath $runtimeApiPath -Raw -Encoding UTF8).Contains('--maintenance-transaction') -or
+    (Get-Content -LiteralPath $guardApiPath -Raw -Encoding UTF8) -notmatch '(?m)^def assert_runtime_available\([^\r\n]*maintenance_transaction') {
+    throw 'This source package predates transactional runtime repair. Update the verified source package before setup or repair.'
+}
+if (-not (Test-Path -LiteralPath (Join-Path $root '_internal\DeepFaceLab\me.py') -PathType Leaf) -or
+    -not (Test-Path -LiteralPath $basePython -PathType Leaf) -or -not (Test-Path -LiteralPath $helper -PathType Leaf)) {
+    throw 'The complete source, independent Python base and runtime installer helper are required.'
+}
+Assert-SetupPath (Join-Path $root '.venv') | Out-Null
+if ($WheelhousePath) {
+    $WheelhousePath = [IO.Path]::GetFullPath($WheelhousePath)
+    if (-not (Test-Path -LiteralPath $WheelhousePath -PathType Container)) { throw 'The read-only wheelhouse directory is missing.' }
+}
+$lock = $null; $ownsLock = $false; $token = $SourceInstallToken; $savedEnvironment = @{}
+try {
+    if ($null -ne $SourceInstallLock) {
+        if (-not $SourceInstallLock.CanWrite -or [IO.Path]::GetFullPath($SourceInstallLock.Name) -ne $lockPath -or $token -notmatch '^[0-9a-f]{32}$') { throw 'Invalid source installer lock handoff.' }
+        $owner = Get-Content -LiteralPath $ownerPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($owner.token -ne $token -or $owner.pid -ne $PID) { throw 'The source installer lock owner changed.' }
+    } else {
+        Import-Module (Join-Path $PSHOME 'Modules\CimCmdlets\CimCmdlets.psd1') -Force
+        New-Item -ItemType Directory -Path $cache -Force | Out-Null
+        try { $lock = [IO.File]::Open($lockPath,[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None) }
+        catch { throw 'Another source/runtime installation is active.' }
+        $ownsLock = $true; $token = [Guid]::NewGuid().ToString('N')
+        [IO.File]::WriteAllText($ownerPath,(@{schemaVersion=1;token=$token;pid=$PID}|ConvertTo-Json -Compress),(New-Object Text.UTF8Encoding($false)))
+        $commandPath = '(?i)(?:^|[\s"''=])' + [regex]::Escape($root) + '(?:[\\/]|(?=[\s"'']|$))'
+        $busy = @(Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='pythonw.exe' OR Name='node.exe' OR Name='ffmpeg.exe' OR Name='ffprobe.exe'" | Where-Object {
+            ($_.ExecutablePath -and $_.ExecutablePath.StartsWith($rootPrefix,[StringComparison]::OrdinalIgnoreCase)) -or ($_.CommandLine -and $_.CommandLine -match $commandPath)
+        })
+        if ($busy.Count) { throw 'Stop WebUI and project tasks before preparing or repairing the Python runtime.' }
+    }
+    foreach ($entry in @{PYTHONDONTWRITEBYTECODE='1';PYTHONUTF8='1';NN_PROCESS_COUNT='0'}.GetEnumerator()) {
+        $savedEnvironment[$entry.Key] = [Environment]::GetEnvironmentVariable($entry.Key,'Process')
+        [Environment]::SetEnvironmentVariable($entry.Key,$entry.Value,'Process')
+    }
+    $arguments = @('-I','-B',$helper,'--project-root',$root,'--source-lock-token',$token,'--profile',$RuntimeProfile,'--cuda-runtime',$CudaRuntime)
+    if ($InstallDependencies) { $arguments += '--install-dependencies' }
+    if ($NoNetwork) { $arguments += '--no-network' }
+    if ($WheelhousePath) { $arguments += @('--wheelhouse',$WheelhousePath) }
+    if ($PreserveVenvConfiguration) { $arguments += '--preserve-configuration' }
+    & $basePython @arguments
+    if ($LASTEXITCODE -ne 0) { throw 'Python runtime setup failed. Existing environment recovery evidence is retained for retry.' }
+} finally {
+    foreach ($name in $savedEnvironment.Keys) { [Environment]::SetEnvironmentVariable($name,$savedEnvironment[$name],'Process') }
+    if ($ownsLock) {
+        try {
+            if (Test-Path -LiteralPath $ownerPath -PathType Leaf) {
+                $owner = Get-Content -LiteralPath $ownerPath -Raw -Encoding UTF8 | ConvertFrom-Json
+                if ($owner.token -eq $token) { Remove-Item -LiteralPath (Assert-SetupPath $ownerPath) -Force }
+            }
+        } finally { if ($null -ne $lock) { $lock.Dispose() } }
+    }
+}

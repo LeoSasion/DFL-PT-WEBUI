@@ -57,9 +57,9 @@ export const pipelineTasks = [
   { id: "dst", index: 3, label: "提取 DST 人脸", time: "未运行", state: "waiting", tone: "default", supported: true },
   { id: "sort", index: 4, label: "SRC / DST aligned 排序", time: "未运行", state: "waiting", tone: "default", supported: true },
   { id: "xseg", index: 5, label: "XSeg 训练与应用", time: "未运行", state: "waiting", tone: "violet", supported: true },
-  { id: "me", index: 6, label: "训练 ME", time: "未运行", state: "waiting", tone: "green", supported: true },
+  { id: "me", index: 6, label: "训练 ME / TAEQI2.1", time: "未运行", state: "waiting", tone: "green", supported: true },
   { id: "diagnose", index: 7, label: "质量诊断", time: "等待评估快照", state: "waiting", tone: "green", supported: true },
-  { id: "merge", index: 8, label: "合成 ME 人脸", time: "未运行", state: "waiting", tone: "default", supported: true },
+  { id: "merge", index: 8, label: "合成人脸", time: "未运行", state: "waiting", tone: "default", supported: true },
   { id: "export", index: 9, label: "导出母版与播放版", time: "未运行", state: "waiting", tone: "default", supported: true },
 ];
 
@@ -76,11 +76,13 @@ export const taskTypes = [
   { id: "xseg.apply_src", label: "应用 XSeg 到 SRC" },
   { id: "xseg.apply_dst", label: "应用 XSeg 到 DST" },
   { id: "train.me", label: "训练 ME" },
+  { id: "train.tae", label: "训练 TAEQI2.1" },
   { id: "merge.me", label: "合成 ME 人脸" },
+  { id: "merge.tae", label: "合成 TAEQI2.1 人脸" },
   { id: "encode.mp4", label: "导出 MP4" },
   { id: "encode.mp4_lossless", label: "导出 MP4（YUV 编码无损）" },
   { id: "encode.master", label: "导出 RGB 母版" },
   { id: "encode.quality", label: "导出母版与播放版" },
 ];
 
-export const modelOptions = ["ME"];
+export const modelOptions = ["ME", "TAE"];

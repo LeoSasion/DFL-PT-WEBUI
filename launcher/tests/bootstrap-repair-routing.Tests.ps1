@@ -44,16 +44,16 @@ function New-RepairBootstrapFixture([string]$Base, [bool]$Ready=$false, [bool]$S
     [IO.File]::WriteAllText((Join-Path $hostLauncher 'runtime-manifest.json'),
         (@{schemaVersion=3;components=$components} | ConvertTo-Json -Depth 8))
     $setup = @'
-param([string]$ProjectRoot, [switch]$NoNetwork)
-$entry = @{operation='rebase';noNetwork=[bool]$NoNetwork} | ConvertTo-Json -Compress
+param([string]$ProjectRoot, [switch]$NoNetwork, [switch]$InstallDependencies)
+$entry = @{operation='rebase';noNetwork=[bool]$NoNetwork;installDependencies=[bool]$InstallDependencies} | ConvertTo-Json -Compress
 [IO.File]::AppendAllText((Join-Path $ProjectRoot 'calls.jsonl'), $entry + [Environment]::NewLine)
 $global:LASTEXITCODE = 0
 '@
     [IO.File]::WriteAllText((Join-Path $hostLauncher 'setup-runtime.ps1'), $setup)
     $installer = @'
-param([string]$ProjectRoot, [switch]$SkipWebuiPreparation, [switch]$NoNetwork, [switch]$SkipVisionAssets)
+param([string]$ProjectRoot, [switch]$SkipWebuiPreparation, [switch]$NoNetwork, [switch]$SkipVisionAssets, [switch]$RepairDependencies)
 $entry = @{operation='install';skipWebuiPreparation=[bool]$SkipWebuiPreparation;
-    noNetwork=[bool]$NoNetwork;skipVisionAssets=[bool]$SkipVisionAssets;installer=$PSCommandPath} | ConvertTo-Json -Compress
+    noNetwork=[bool]$NoNetwork;skipVisionAssets=[bool]$SkipVisionAssets;repairDependencies=[bool]$RepairDependencies;installer=$PSCommandPath} | ConvertTo-Json -Compress
 [IO.File]::AppendAllText((Join-Path $ProjectRoot 'calls.jsonl'), $entry + [Environment]::NewLine)
 foreach ($relative in @('_internal/python_base/python.exe', '.venv/Scripts/python.exe',
     '_internal/node/bin/node.exe', '_internal/ffmpeg/ffmpeg.exe')) {
@@ -158,7 +158,8 @@ Describe 'launcher runtime repair routing' {
         $result.errors | Should Be ''
         $result.calls.Count | Should Be 1
         $result.calls[0].operation | Should Be 'install'
-        $result.calls[0].skipWebuiPreparation | Should Be $false
+        $result.calls[0].skipWebuiPreparation | Should Be $true
+        $result.calls[0].repairDependencies | Should Be $false
         $result.calls[0].skipVisionAssets | Should Be $false
         Test-Path -LiteralPath (Join-Path $fixture.root 'weights-checked.txt') | Should Be $true
     }
@@ -171,8 +172,10 @@ Describe 'launcher runtime repair routing' {
         $result.calls.Count | Should Be 2
         $result.calls[0].operation | Should Be 'rebase'
         $result.calls[0].noNetwork | Should Be $true
+        $result.calls[0].installDependencies | Should Be $false
         $result.calls[1].operation | Should Be 'install'
         $result.calls[1].skipWebuiPreparation | Should Be $true
+        $result.calls[1].repairDependencies | Should Be $true
         $result.calls[1].skipVisionAssets | Should Be $false
         Test-Path -LiteralPath (Join-Path $fixture.root 'weights-checked.txt') | Should Be $true
         [IO.File]::ReadAllText((Join-Path $fixture.root 'webui/node_modules')) | Should Be 'broken fixture'
@@ -202,6 +205,7 @@ Describe 'launcher runtime repair routing' {
         $result.calls.Count | Should Be 1
         $result.calls[0].operation | Should Be 'rebase'
         $result.calls[0].noNetwork | Should Be $true
+        $result.calls[0].installDependencies | Should Be $true
         Test-Path -LiteralPath (Join-Path $fixture.root 'weights-checked.txt') | Should Be $false
     }
 
@@ -213,7 +217,7 @@ Describe 'launcher runtime repair routing' {
         $result.calls.Count | Should Be 2
         $result.calls[0].operation | Should Be 'rebase'
         $result.calls[1].operation | Should Be 'install'
-        $result.calls[1].skipWebuiPreparation | Should Be $false
+        $result.calls[1].skipWebuiPreparation | Should Be $true
     }
 
     It 'skips all WebUI install, validation, environment preparation and build when delegated' {

@@ -17,9 +17,15 @@ namespace DflPtWebUi.Launcher
         private readonly ProcessRunner runner;
         private readonly GitService git;
         private readonly TerminalBridgeService terminal;
+        private readonly CudaRuntimeService cudaRuntime;
         private readonly SemaphoreSlim operationGate = new SemaphoreSlim(1, 1);
+        private readonly SemaphoreSlim runtimeInspectionGate = new SemaphoreSlim(1, 1);
+        private readonly object stateGate = new object();
+        private volatile bool maintenanceInProgress;
+        private Dictionary<string, object> lastCompleteState;
 
         public event Action<object> ProgressChanged;
+        public event Action<object> CudaRuntimeChanged;
 
         public HostController(SettingsStore settings, LogBuffer logs)
         {
@@ -31,6 +37,10 @@ namespace DflPtWebUi.Launcher
             runner = new ProcessRunner(logs);
             git = new GitService(settings, runner, logs);
             terminal = new TerminalBridgeService(logs);
+            cudaRuntime = new CudaRuntimeService(runner, delegate(object value) {
+                Action<object> handler = CudaRuntimeChanged;
+                if (handler != null) handler(value);
+            });
         }
 
         public LogBuffer Logs
@@ -38,11 +48,48 @@ namespace DflPtWebUi.Launcher
             get { return logs; }
         }
 
-        public async Task<object> GetStateAsync()
+        public Task<object> GetStateAsync() { return ReadStateAsync(false); }
+
+        private async Task<object> ReadStateAsync(bool allowPendingUpgrade)
+        {
+            if (maintenanceInProgress) return MaintenanceState();
+            if (cudaRuntime.IsChanging) {
+                LauncherSettings snapshot = settings.Current;
+                string root = ProjectLocator.Resolve(snapshot);
+                return RuntimeTransitionState(root, ProjectLocator.IsProject(root), snapshot, await cudaRuntime.GetStatusAsync(root, false));
+            }
+            await runtimeInspectionGate.WaitAsync();
+            try {
+                if (maintenanceInProgress) return MaintenanceState();
+                return await GetStateCoreAsync(allowPendingUpgrade);
+            }
+            finally { runtimeInspectionGate.Release(); }
+        }
+
+        private object MaintenanceState()
+        {
+            LauncherSettings snapshot = settings.Current;
+            string root = ProjectLocator.Resolve(snapshot);
+            Dictionary<string, object> result = (Dictionary<string, object>)RuntimeTransitionState(root,
+                ProjectLocator.IsProject(root), snapshot, CudaRuntimeService.Unavailable("正在维护项目运行环境，请等待完成。"));
+            result["environmentStatus"] = "changing";
+            return result;
+        }
+
+        private async Task<object> GetStateCoreAsync(bool allowPendingUpgrade)
         {
             LauncherSettings snapshot = settings.Current;
             string projectRoot = ProjectLocator.Resolve(snapshot);
             bool projectReady = ProjectLocator.IsProject(projectRoot);
+            if (!allowPendingUpgrade && File.Exists(Path.Combine(projectRoot, ".launcher-install", "upgrade-current", "journal.json")))
+                return await UpgradeRecoveryStateAsync(projectRoot, projectReady, snapshot);
+            if (PythonRepairPending(projectRoot)) {
+                Dictionary<string, object> pending = (Dictionary<string, object>)RuntimeTransitionState(projectRoot, projectReady,
+                    snapshot, CudaRuntimeService.Unavailable("上次 Python 环境维护未完成，请先恢复运行环境。"));
+                pending["mode"] = "install"; pending["environmentStatus"] = "incomplete";
+                pending["runtimeRepairPending"] = true;
+                return pending;
+            }
             if (projectReady)
             {
                 try
@@ -62,15 +109,20 @@ namespace DflPtWebUi.Launcher
                 }
             }
             string runtimeRoot = projectReady ? projectRoot : PreparedRuntimeStore.GetRoot(projectRoot);
+            Dictionary<string, object> cudaStatus = projectReady
+                ? await cudaRuntime.GetStatusAsync(projectRoot, false)
+                : CudaRuntimeService.Unavailable("等待项目运行环境就绪。");
+            if (cudaRuntime.IsChanging || CudaRuntimeNeedsRecovery(cudaStatus))
+                return RuntimeTransitionState(projectRoot, projectReady, snapshot, cudaStatus);
 
             RuntimeBootstrapResources bootstrapResources = RuntimeBootstrapLocator.Resolve(
                 projectReady ? projectRoot : null,
                 LauncherPayload.GetPath("bootstrap"));
             string manifestPath = bootstrapResources.ManifestPath;
-            RuntimeManifestValidation runtimeValidation = await Task.Run(delegate
-            {
-                return RuntimeManifestValidator.Validate(runtimeRoot, manifestPath);
-            });
+            RuntimeManifestValidation runtimeValidation;
+            if (cudaRuntime.IsChanging)
+                return RuntimeTransitionState(projectRoot, projectReady, snapshot, await cudaRuntime.GetStatusAsync(projectRoot, false));
+            runtimeValidation = await Task.Run(delegate { return RuntimeManifestValidator.Validate(runtimeRoot, manifestPath); });
 
             RuntimeComponentValidation nodeRuntime = runtimeValidation.Get("node");
             RuntimeComponentValidation pythonRuntime = runtimeValidation.Get("python");
@@ -121,6 +173,7 @@ namespace DflPtWebUi.Launcher
             result["steps"] = steps;
             result["runtimeItems"] = runtimeItems;
             result["runtimeManifest"] = runtimeValidation.Loaded ? "validated" : runtimeValidation.Error;
+            result["cudaRuntime"] = cudaStatus;
             result["projectDir"] = projectRoot;
             result["projectReady"] = projectReady;
             result["onlineInstallationEnabled"] = LauncherConstants.OnlineInstallationEnabled;
@@ -137,6 +190,214 @@ namespace DflPtWebUi.Launcher
             result["release"] = await GetReleaseIdentityAsync(projectRoot);
             result["upgradeTarget"] = ReleaseIdentity.UpgradeTarget();
             result["upgradePending"] = File.Exists(Path.Combine(projectRoot, ".launcher-install", "upgrade-current", "journal.json"));
+            lock (stateGate) { lastCompleteState = new Dictionary<string, object>(result); }
+            return result;
+        }
+
+        public async Task<object> CheckCudaRuntimeAsync(bool force)
+        {
+            string root = ProjectLocator.Resolve(settings.Current);
+            Dictionary<string, object> state = ProjectLocator.IsProject(root)
+                ? await cudaRuntime.GetStatusAsync(root, force)
+                : CudaRuntimeService.Unavailable("等待项目运行环境就绪。");
+            return new Dictionary<string, object> { { "projectDir", root }, { "cudaRuntime", state } };
+        }
+
+        public Task<object> PrepareCudaRuntimeAsync(string targetRuntime, string expectedProjectDir)
+        {
+            CudaRuntimeService.ValidateTarget(targetRuntime);
+            return RunCudaRuntimeOperationAsync("prepare", targetRuntime, null, false, expectedProjectDir);
+        }
+
+        public Task<object> KeepCudaRuntimeAsync(string transactionId, string expectedProjectDir)
+        {
+            CudaRuntimeService.ValidateTransactionId(transactionId);
+            return RunCudaRuntimeOperationAsync("keep", null, transactionId, false, expectedProjectDir);
+        }
+
+        public Task<object> DeleteCudaRuntimeAsync(string transactionId, bool confirmed, string expectedProjectDir)
+        {
+            CudaRuntimeService.ValidateTransactionId(transactionId);
+            if (!confirmed) throw new InvalidOperationException("请先明确确认删除旧 GPU 运行环境。");
+            return RunCudaRuntimeOperationAsync("delete", null, transactionId, true, expectedProjectDir);
+        }
+
+        public Task<object> RecoverCudaRuntimeAsync(string transactionId, string expectedProjectDir)
+        {
+            CudaRuntimeService.ValidateTransactionId(transactionId);
+            return RunCudaRuntimeOperationAsync("recover", null, transactionId, false, expectedProjectDir);
+        }
+
+        private async Task<object> RunCudaRuntimeOperationAsync(string action, string target, string transactionId, bool confirmed, string expectedProjectDir)
+        {
+            if (!await operationGate.WaitAsync(0))
+                throw new InvalidOperationException("启动器正在执行其他操作，请等待完成后再处理 GPU 环境。");
+            try
+            {
+                string root = RequireProjectRoot();
+                AssertExpectedProject(root, expectedProjectDir);
+                ProjectLocator.AssertWritableChildPath(root, ".runtime");
+                await runtimeInspectionGate.WaitAsync();
+                try
+                {
+                    AssertExpectedProject(RequireProjectRoot(), root);
+                    // Refresh before pausing so the safety decision is not the
+                    // twenty-second hardware cache from before another process.
+                    await cudaRuntime.GetStatusAsync(root, true);
+                    await cudaRuntime.PauseChecksAsync();
+                    if (action != "recover") await AssertCudaRuntimeUsableAsync(root);
+                    if (action != "keep") await AssertMaintenanceIdleAsync(root);
+                    AssertExpectedProject(RequireProjectRoot(), root);
+                    if (action == "prepare") await cudaRuntime.PrepareAsync(root, target);
+                    else if (action == "delete") await cudaRuntime.DeleteAsync(root, transactionId, confirmed);
+                    else if (action == "recover") await cudaRuntime.RecoverAsync(root, transactionId);
+                    else await cudaRuntime.KeepAsync(root, transactionId);
+                }
+                finally { cudaRuntime.ResumeChecks(); runtimeInspectionGate.Release(); }
+                return new Dictionary<string, object> { { "state", await GetStateAsync() } };
+            }
+            finally { operationGate.Release(); }
+        }
+
+        private static void AssertExpectedProject(string selectedRoot, string expectedRoot)
+        {
+            if (String.IsNullOrWhiteSpace(expectedRoot) || !Path.IsPathRooted(expectedRoot)
+                || !String.Equals(Path.GetFullPath(selectedRoot).TrimEnd('\\', '/'), Path.GetFullPath(expectedRoot).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("项目已经变化，请在当前项目重新检测后再处理 GPU 环境。");
+        }
+
+        private async Task AssertCudaRuntimeUsableAsync(string root)
+        {
+            Dictionary<string, object> state = await cudaRuntime.GetStatusAsync(root, true);
+            if (CudaRuntimeNeedsRecovery(state))
+                throw new InvalidOperationException("GPU 环境切换尚未完成，请先恢复原环境，再启动任务、修复依赖或升级。");
+        }
+
+        private static bool PythonRepairPending(string root)
+        {
+            string path = ProjectLocator.AssertWritableChildPath(root, ".launcher-install/source/python-repair.json");
+            if (!File.Exists(path)) return false;
+            try {
+                if (new FileInfo(path).Length > 1024 * 1024) return true;
+                Dictionary<string, object> state = new JavaScriptSerializer().DeserializeObject(File.ReadAllText(path)) as Dictionary<string, object>;
+                if (state == null || !state.ContainsKey("phase")) return true;
+                string phase = Convert.ToString(state["phase"]);
+                return phase != "committed" && phase != "rolled-back";
+            }
+            catch { return true; }
+        }
+
+        private static bool RecoverableSourceInstallation(string root)
+        {
+            try {
+                string state = ProjectLocator.AssertWritableChildPath(root, ".launcher-install");
+                string owner = ProjectLocator.AssertWritableChildPath(root, ".launcher-install/owner.txt");
+                string pointer = ProjectLocator.AssertWritableChildPath(root, ".launcher-install/source-publication.json");
+                if (!File.Exists(owner) || File.ReadAllText(owner) != "DFL-PT-WEBUI install workspace v1"
+                    || !File.Exists(pointer) || new FileInfo(pointer).Length > 65536) return false;
+                JavaScriptSerializer json = new JavaScriptSerializer { MaxJsonLength = 32 * 1024 * 1024 };
+                Dictionary<string, object> entry = json.DeserializeObject(File.ReadAllText(pointer)) as Dictionary<string, object>;
+                if (entry == null || !entry.ContainsKey("session") || !entry.ContainsKey("schemaVersion") || !(entry["schemaVersion"] is int)
+                    || (int)entry["schemaVersion"] != 1 || Convert.ToString(entry["product"]) != "DFL-PT-WEBUI") return false;
+                string session = Convert.ToString(entry["session"]);
+                if (!System.Text.RegularExpressions.Regex.IsMatch(session, "^source-[0-9a-f]{32}$")) return false;
+                string receipt = ProjectLocator.AssertWritableChildPath(root, ".launcher-install/" + session + "/publication.json");
+                if (!File.Exists(receipt) || new FileInfo(receipt).Length > 32 * 1024 * 1024) return false;
+                Dictionary<string, object> record = json.DeserializeObject(File.ReadAllText(receipt)) as Dictionary<string, object>;
+                return record != null && record.ContainsKey("schemaVersion") && record["schemaVersion"] is int && (int)record["schemaVersion"] == 1
+                    && Convert.ToString(record["product"]) == "DFL-PT-WEBUI"
+                    && String.Equals(Path.GetFullPath(Convert.ToString(record["source"])), Path.Combine(state, session, "staging"), StringComparison.OrdinalIgnoreCase)
+                    && String.Equals(Path.GetFullPath(Convert.ToString(record["target"])).TrimEnd('\\', '/'), Path.GetFullPath(root).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
+            }
+            catch { return false; }
+        }
+
+        private async Task WithPausedRuntimeChecksAsync(string root, Func<Task> action)
+        {
+            maintenanceInProgress = true;
+            await runtimeInspectionGate.WaitAsync();
+            try {
+                await cudaRuntime.GetStatusAsync(root, true);
+                await cudaRuntime.PauseChecksAsync();
+                await AssertCudaRuntimeUsableAsync(root);
+                await AssertMaintenanceIdleAsync(root);
+                await action();
+            }
+            finally {
+                cudaRuntime.ResumeChecks();
+                maintenanceInProgress = false;
+                runtimeInspectionGate.Release();
+            }
+        }
+
+        private async Task<object> UpgradeRecoveryStateAsync(string root, bool projectReady, LauncherSettings snapshot)
+        {
+            string bootstrap = LauncherPayload.GetPath("bootstrap");
+            string script = Path.Combine(bootstrap, "upgrade-project.ps1");
+            string arguments = "-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File " + ProcessRunner.Quote(script)
+                + " -ProjectRoot " + ProcessRunner.Quote(root) + " -Action status";
+            Dictionary<string, object> status = null;
+            try {
+                CommandResult checkedState = await runner.RunAsync("powershell.exe", arguments, bootstrap, null, "updates");
+                if (checkedState.Success) status = new JavaScriptSerializer().DeserializeObject(checkedState.StandardOutput.Trim()) as Dictionary<string, object>;
+            }
+            catch { }
+            Dictionary<string, object> result = (Dictionary<string, object>)RuntimeTransitionState(root, projectReady, snapshot,
+                CudaRuntimeService.Unavailable("上次源码升级尚未完成，请先恢复原源码和构建。"));
+            result["mode"] = "install"; result["environmentStatus"] = "incomplete";
+            result["upgradePending"] = true;
+            result["upgradeCanRollback"] = CudaRuntimeService.Flag(status, "canRollback");
+            result["upgradeStatus"] = status != null && status.ContainsKey("status") ? status["status"] : "error";
+            result["upgradeMessage"] = status != null && status.ContainsKey("message") ? status["message"] : "无法验证升级记录，请保留安装缓存并检查日志。";
+            return result;
+        }
+
+        private static bool CudaRuntimeNeedsRecovery(IDictionary<string, object> state)
+        {
+            object status;
+            string value = state != null && state.TryGetValue("status", out status) ? Convert.ToString(status) : String.Empty;
+            return CudaRuntimeService.Flag(state, "canRecover") || value == "switching" || value == "downloading";
+        }
+
+        // A partial Torch tree must never be imported by the normal health check.
+        // Keep the launcher usable so an interrupted transaction can be recovered.
+        private object RuntimeTransitionState(string root, bool projectReady, LauncherSettings snapshot, Dictionary<string, object> cudaStatus)
+        {
+            Dictionary<string, object> result;
+            lock (stateGate)
+            {
+                result = lastCompleteState != null && String.Equals(Convert.ToString(lastCompleteState["projectDir"]), root, StringComparison.OrdinalIgnoreCase)
+                    ? new Dictionary<string, object>(lastCompleteState) : new Dictionary<string, object>();
+            }
+            bool recovery = CudaRuntimeService.Flag(cudaStatus, "canRecover");
+            if (!result.ContainsKey("mode") || recovery) result["mode"] = "install";
+            result["environmentStatus"] = recovery ? "incomplete" : "changing";
+            result["projectDir"] = result["installPath"] = root;
+            result["projectReady"] = projectReady;
+            result["cudaRuntime"] = cudaStatus;
+            result["mirror"] = snapshot.Mirror;
+            result["mirrorLabel"] = "官方固定来源";
+            result["gitProxyMode"] = snapshot.GitProxyMode;
+            result["gitProxy"] = snapshot.GitProxy ?? String.Empty;
+            result["gitMirror"] = snapshot.GitMirror ?? String.Empty;
+            result["gitNetworkLabel"] = GitNetworkOptions.Describe(snapshot);
+            result["onlineInstallationEnabled"] = LauncherConstants.OnlineInstallationEnabled;
+            result["lastCheck"] = snapshot.LastCheck;
+            result["runtimeManifest"] = "GPU 运行环境切换完成后重新校验。";
+            result["steps"] = new object[] { Step("environment", "环境检测", "complete"), Step("project", "本地项目", "complete"),
+                Step("dependencies", "运行环境", "active"), Step("finish", "准备完成", "upcoming") };
+            result["runtimeItems"] = new object[] { RuntimeItem("project", "PT 项目源码", projectReady, "本地项目", root, "本地", null),
+                RuntimeItem("python", "Python / PyTorch", false, recovery ? "请先恢复未完成的 GPU 环境切换。" : "正在准备 GPU 运行环境。", Path.Combine(root, ".venv"), "项目运行环境", null) };
+            result["terminalUrl"] = terminal.CurrentUrl;
+            result["terminalRunning"] = terminal.IsRunning;
+            result["webuiRunning"] = false;
+            result["webuiPid"] = null;
+            result["webuiUrl"] = LauncherConstants.WebUiUrl;
+            result["settingsPath"] = settings.SettingsPath;
+            result["logs"] = GetUiLogs();
+            if (!result.ContainsKey("release")) result["release"] = ReleaseIdentity.Get(root);
+            result["upgradeTarget"] = ReleaseIdentity.UpgradeTarget();
+            result["upgradePending"] = File.Exists(Path.Combine(root, ".launcher-install", "upgrade-current", "journal.json"));
             return result;
         }
 
@@ -168,16 +429,20 @@ namespace DflPtWebUi.Launcher
                 }
             }
 
-            string fullPath = ProjectLocator.SelectInstallPath(selected);
-            settings.Update(delegate(LauncherSettings value) { value.ProjectRoot = fullPath; });
-            logs.Add("launcher", "最终安装目录：" + fullPath + "。", "info");
-            return new Dictionary<string, object>
+            if (!operationGate.Wait(0))
+                throw new InvalidOperationException("启动器正在执行操作，请等待完成后再选择其他项目。");
+            try
             {
-                { "cancelled", false },
-                { "path", fullPath },
-                { "installPath", fullPath },
-                { "projectDir", fullPath }
-            };
+                string fullPath = ProjectLocator.SelectInstallPath(selected);
+                settings.Update(delegate(LauncherSettings value) { value.ProjectRoot = fullPath; });
+                logs.Add("launcher", "最终安装目录：" + fullPath + "。", "info");
+                return new Dictionary<string, object>
+                {
+                    { "cancelled", false }, { "path", fullPath },
+                    { "installPath", fullPath }, { "projectDir", fullPath }
+                };
+            }
+            finally { operationGate.Release(); }
         }
 
         public object SetMirror(string mirror)
@@ -234,14 +499,19 @@ namespace DflPtWebUi.Launcher
 
         public async Task<object> RunBootstrapAsync(bool repair)
         {
-            await operationGate.WaitAsync();
+            if (!await operationGate.WaitAsync(0)) throw new InvalidOperationException("启动器正在执行其他操作，请等待完成后再安装或修复。");
             try
             {
                 string projectRoot = ProjectLocator.Resolve(settings.Current);
-                ProjectLocator.AssertInstallTarget(projectRoot);
+                bool resumeSource = RecoverableSourceInstallation(projectRoot);
+                if (!resumeSource) ProjectLocator.AssertInstallTarget(projectRoot);
                 ProjectLocator.AssertWritableChildPath(projectRoot, ".launcher-install");
-                await AssertMaintenanceIdleAsync(projectRoot);
-                logs.SetDirectory(Path.Combine(ProjectLocator.PrepareInstallWorkspace(projectRoot), "logs"));
+                if (File.Exists(Path.Combine(projectRoot, ".launcher-install", "upgrade-current", "journal.json")))
+                    throw new InvalidOperationException("源码升级尚未完成，请先恢复原源码和构建。");
+                repair = repair || PythonRepairPending(projectRoot);
+                await WithPausedRuntimeChecksAsync(projectRoot, async delegate {
+                logs.SetDirectory(resumeSource ? ProjectLocator.AssertWritableChildPath(projectRoot, ".launcher-install/logs")
+                    : Path.Combine(ProjectLocator.PrepareInstallWorkspace(projectRoot), "logs"));
                 if (!ProjectLocator.IsProject(projectRoot))
                 {
                     if (!LauncherConstants.OnlineInstallationEnabled)
@@ -259,6 +529,7 @@ namespace DflPtWebUi.Launcher
                 await RunBootstrapScriptAsync(projectRoot, resources, repair);
                 ReportProgress("finish", "正在检查 WebUI 构建…", "active", 3, 4);
                 await BuildWebUiIfPossibleAsync(projectRoot, repair);
+                });
                 object state = await GetStateAsync();
                 if (!String.Equals(Convert.ToString(((Dictionary<string, object>)state)["environmentStatus"]), "ready", StringComparison.Ordinal))
                     throw new InvalidOperationException("本地健康检查未通过，请查看组件检测结果。");
@@ -297,24 +568,25 @@ namespace DflPtWebUi.Launcher
 
         public async Task<object> ApplyUpdateAsync()
         {
-            await operationGate.WaitAsync();
+            if (!await operationGate.WaitAsync(0)) throw new InvalidOperationException("启动器正在执行其他操作，请等待完成后再升级。");
             try
             {
                 string root = RequireProjectRoot();
-                await AssertMaintenanceIdleAsync(root);
                 ReportProgress("updates", "正在备份并升级到此启动器固定的应用版本…", "running", 0, 2);
                 Exception updateFailure = null;
                 try {
-                    await RunUpgradeScriptAsync(root, "apply");
-                    await BuildWebUiIfPossibleAsync(root, true);
-                    object state = await GetStateAsync();
+                    await WithPausedRuntimeChecksAsync(root, async delegate {
+                        await RunUpgradeScriptAsync(root, "apply");
+                        await BuildWebUiIfPossibleAsync(root, true);
+                    });
+                    object state = await ReadStateAsync(true);
                     if (!String.Equals(Convert.ToString(((Dictionary<string, object>)state)["environmentStatus"]), "ready", StringComparison.Ordinal))
                         throw new InvalidOperationException("升级后的环境检查未通过。");
                     await RunUpgradeScriptAsync(root, "complete");
                 } catch (Exception error) { updateFailure = error; }
                 if (updateFailure != null) {
                     if (File.Exists(Path.Combine(root, ".launcher-install", "upgrade-current", "journal.json"))) {
-                        await RunUpgradeScriptAsync(root, "rollback");
+                        await WithPausedRuntimeChecksAsync(root, async delegate { await RunUpgradeScriptAsync(root, "rollback"); });
                         logs.Add("updates", "升级失败，已经恢复升级前的源码和构建。", "warning");
                     }
                     throw updateFailure;
@@ -334,6 +606,7 @@ namespace DflPtWebUi.Launcher
             try
             {
                 string root = RequireProjectRoot();
+                await AssertCudaRuntimeUsableAsync(root);
                 string node = Path.Combine(root, "_internal", "node", "bin", "node.exe");
                 string manager = Path.Combine(root, "webui", "scripts", "local-manager.mjs");
                 if (!File.Exists(node) || !File.Exists(manager))
@@ -446,8 +719,13 @@ namespace DflPtWebUi.Launcher
 
         public async Task<object> RollbackUpdateAsync()
         {
-            await operationGate.WaitAsync();
-            try { string root = RequireProjectRoot(); await AssertMaintenanceIdleAsync(root); await RunUpgradeScriptAsync(root, "rollback"); return await GetStateAsync(); }
+            if (!await operationGate.WaitAsync(0)) throw new InvalidOperationException("启动器正在执行其他操作，请等待完成后再恢复升级。");
+            try {
+                string root = ProjectLocator.Resolve(settings.Current);
+                ProjectLocator.AssertWritableChildPath(root, ".launcher-install/upgrade-current/journal.json");
+                await WithPausedRuntimeChecksAsync(root, async delegate { await RunUpgradeScriptAsync(root, "rollback"); });
+                return await GetStateAsync();
+            }
             finally { operationGate.Release(); }
         }
 
@@ -472,13 +750,16 @@ namespace DflPtWebUi.Launcher
 
         public async Task<object> StartTerminalAsync()
         {
-            string url = await terminal.StartAsync(RequireProjectRoot());
-
-            return new Dictionary<string, object>
+            if (!await operationGate.WaitAsync(0))
+                throw new InvalidOperationException("启动器正在执行其他操作，请等待完成后再启动终端。");
+            try
             {
-                { "terminalUrl", url },
-                { "protocol", "dflsn-terminal-v1" }
-            };
+                string root = RequireProjectRoot();
+                await AssertCudaRuntimeUsableAsync(root);
+                string url = await terminal.StartAsync(root);
+                return new Dictionary<string, object> { { "terminalUrl", url }, { "protocol", "dflsn-terminal-v1" } };
+            }
+            finally { operationGate.Release(); }
         }
 
         public Task<object> OpenLegacyAsync()
@@ -501,6 +782,7 @@ namespace DflPtWebUi.Launcher
         {
             terminal.Dispose();
             operationGate.Dispose();
+            runtimeInspectionGate.Dispose();
         }
 
         private async Task<Exception> CloneProjectWithRetryAsync(string projectRoot, CancellationToken cancellationToken)
@@ -636,72 +918,67 @@ namespace DflPtWebUi.Launcher
         {
             ProjectLocator.AssertWritableChildPath(projectRoot, "webui/node_modules");
             ProjectLocator.AssertWritableChildPath(projectRoot, "webui/dist");
-            string corepackCache = ProjectLocator.AssertWritableChildPath(projectRoot, ".launcher-install/source/corepack");
+            WebUiDependencies.RecoverPreparation(projectRoot);
+            string cache = ProjectLocator.AssertWritableChildPath(projectRoot, ".launcher-install/source");
             string node = Path.Combine(projectRoot, "_internal", "node", "bin", "node.exe");
             string corepack = Path.Combine(projectRoot, "_internal", "node", "bin", "node_modules", "corepack", "dist", "corepack.js");
             string webuiRoot = Path.Combine(projectRoot, "webui");
             string vite = Path.Combine(webuiRoot, "node_modules", "vite", "bin", "vite.js");
             string index = Path.Combine(webuiRoot, "dist", "client", "index.html");
-            if (!File.Exists(node))
-            {
-                throw new FileNotFoundException("WebUI 构建需要项目内的便携 Node.js。", node);
-            }
-
-            IDictionary<string, string> environment = PortableNodeEnvironment.Ensure(
-                DflEnvironment.Load(projectRoot, logs),
-                node);
-            environment = MirrorEnvironment(environment);
-            environment["COREPACK_HOME"] = corepackCache;
+            if (!File.Exists(node)) throw new FileNotFoundException("WebUI 构建需要项目内的便携 Node.js。", node);
+            IDictionary<string, string> environment = MirrorEnvironment(PortableNodeEnvironment.Ensure(DflEnvironment.Load(projectRoot, logs), node));
+            environment["COREPACK_HOME"] = Path.Combine(cache, "corepack");
             environment["COREPACK_ENABLE_DOWNLOAD_PROMPT"] = "0";
-            bool dependencyTreePresent = Directory.Exists(Path.Combine(webuiRoot, "node_modules"));
-            bool dependencyFilesPresent = WebUiDependencies.EntryPointsPresent(projectRoot);
-            bool dependenciesLoad = dependencyFilesPresent
+            bool dependenciesLoad = WebUiDependencies.EntryPointsPresent(projectRoot)
                 && await CanLoadWebUiDependenciesAsync(webuiRoot, environment);
-            if (!force && dependenciesLoad && File.Exists(index))
-            {
-                logs.Add("bootstrap", "WebUI 依赖加载通过且构建已存在，无需重复安装。", "success");
+            bool installRequired = !dependenciesLoad || !WebUiDependencies.DependencyInputsMatch(projectRoot);
+            string provenance = Path.Combine(projectRoot, "tools", "dist-provenance.mjs");
+            bool buildCurrent = File.Exists(index);
+            if (!force && !installRequired && buildCurrent && File.Exists(provenance)) {
+                CommandResult current = await runner.RunAsync(node, ProcessRunner.Quote(provenance) + " check", projectRoot, environment, "bootstrap");
+                buildCurrent = current.Success;
+            }
+            if (!force && !installRequired && buildCurrent) {
+                logs.Add("bootstrap", "WebUI 依赖及输入校验通过，构建已存在，无需重复安装。", "success");
                 return;
             }
-
-            if (force || !dependenciesLoad)
-            {
-                if (!File.Exists(corepack))
-                {
-                    throw new FileNotFoundException("缺少 Node.js Corepack，无法安装 WebUI 依赖。", corepack);
+            if (installRequired && !File.Exists(corepack)) throw new FileNotFoundException("缺少 Node.js Corepack，无法安装 WebUI 依赖。", corepack);
+            using (WebUiPreparation transaction = WebUiDependencies.BeginPreparation(projectRoot, installRequired, true)) {
+                try {
+                if (installRequired) {
+                    logs.Add("bootstrap", "正在按固定锁文件准备 WebUI 依赖，原目录已暂存以便失败恢复。", "info");
+                    CommandResult installed = await runner.RunAsync(node, ProcessRunner.Quote(corepack)
+                        + " pnpm install --frozen-lockfile --prefer-offline --store-dir " + ProcessRunner.Quote(Path.Combine(cache, "pnpm-store")),
+                        webuiRoot, environment, "bootstrap");
+                    EnsureSuccess(installed, "WebUI 依赖安装失败");
+                    if (!await CanLoadWebUiDependenciesAsync(webuiRoot, environment))
+                        throw new InvalidOperationException("WebUI 依赖安装后加载验证失败，原目录将恢复。");
                 }
-                logs.Add("bootstrap", "正在按 pnpm 锁文件安装 WebUI 依赖…", "info");
-                string installArguments = ProcessRunner.Quote(corepack)
-                    + " pnpm install --frozen-lockfile --prefer-offline";
-                if (dependencyTreePresent && !dependenciesLoad)
-                {
-                    installArguments += " --force";
-                    logs.Add("bootstrap", "检测到依赖残留或正在修复，将强制重建原生 Node.js 依赖。", "warning");
+                CommandResult built = await runner.RunAsync(node, ProcessRunner.Quote(vite) + " build --configLoader runner", webuiRoot, environment, "bootstrap");
+                EnsureSuccess(built, "WebUI 构建失败");
+                string prepare = Path.Combine(webuiRoot, "scripts", "prepare-sites-build.mjs");
+                if (File.Exists(prepare)) {
+                    CommandResult prepared = await runner.RunAsync(node, ProcessRunner.Quote(prepare), webuiRoot, environment, "bootstrap");
+                    EnsureSuccess(prepared, "WebUI 构建准备失败");
                 }
-                CommandResult install = await runner.RunAsync(
-                    node,
-                    installArguments,
-                    webuiRoot,
-                    environment,
-                    "bootstrap");
-                EnsureSuccess(install, "WebUI 依赖安装失败");
-
-                if (!await CanLoadWebUiDependenciesAsync(webuiRoot, environment))
-                {
-                    throw new InvalidOperationException(
-                        "WebUI 依赖安装后加载验证失败；具体模块及异常见上方检测输出和本地错误日志。");
+                if (!File.Exists(index)) throw new IOException("WebUI 构建未生成入口，原构建将恢复。");
+                if (File.Exists(provenance)) {
+                    CommandResult recorded = await runner.RunAsync(node, ProcessRunner.Quote(provenance) + " write", projectRoot, environment, "bootstrap");
+                    EnsureSuccess(recorded, "WebUI 构建来源验证失败");
                 }
-            }
-
-            // A repaired dependency tree also invalidates an existing build.
-            if (force || !dependenciesLoad || !File.Exists(index))
-            {
-                CommandResult build = await runner.RunAsync(
-                    node,
-                    ProcessRunner.Quote(vite) + " build --configLoader runner",
-                    webuiRoot,
-                    environment,
-                    "bootstrap");
-                EnsureSuccess(build, "WebUI 构建失败");
+                WebUiDependencies.RecordDependencyInputs(projectRoot);
+                transaction.Commit();
+                if (!String.IsNullOrEmpty(transaction.CleanupWarning)) logs.Add("bootstrap", transaction.CleanupWarning, "warning");
+                }
+                catch (Exception preparationError) {
+                    try { transaction.Rollback(); }
+                    catch (Exception recoveryError) {
+                        throw new IOException("WebUI 准备和恢复尚未完成，请保留恢复目录：" + transaction.RecoveryPath,
+                            new AggregateException(preparationError, recoveryError));
+                    }
+                    logs.Add("bootstrap", "WebUI 准备失败，原目录已恢复；失败内容保留在：" + transaction.RecoveryPath, "warning");
+                    throw;
+                }
             }
         }
 
@@ -744,6 +1021,10 @@ namespace DflPtWebUi.Launcher
         private string RequireProjectRoot()
         {
             string root = ProjectLocator.Resolve(settings.Current);
+            if (File.Exists(Path.Combine(root, ".launcher-install", "upgrade-current", "journal.json")))
+                throw new InvalidOperationException("源码升级尚未完成，请先恢复原源码和构建，再启动任务。");
+            if (PythonRepairPending(root))
+                throw new InvalidOperationException("Python 环境维护尚未完成，请先恢复运行环境，再启动任务。");
             if (!ProjectLocator.IsProject(root))
             {
                 throw new InvalidOperationException("项目尚未安装，请先完成首次设置。");

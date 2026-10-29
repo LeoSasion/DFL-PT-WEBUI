@@ -20,6 +20,10 @@ namespace DflPtWebUi.Launcher
             }
             string fullProject = Path.GetFullPath(Environment.ExpandEnvironmentVariables(projectRoot))
                 .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (fullProject.Length <= 2 || String.Equals(fullProject,
+                Path.GetPathRoot(fullProject).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("项目安装目录不能是磁盘根目录。");
             DirectoryInfo parent = Directory.GetParent(fullProject);
             string name = Path.GetFileName(fullProject);
             if (parent == null || String.IsNullOrWhiteSpace(name))

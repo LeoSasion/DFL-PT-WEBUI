@@ -1,0 +1,18 @@
+{
+  "profile": "product-admin",
+  "sourceRoots": ["launcher/ui/src"],
+  "locale": "zh-CN",
+  "canonicalMap": "launcher/ui/UX-CONTRACT.md",
+  "requiredCapabilities": ["Scrollbar"],
+  "browserVerifiedCapabilities": ["Dialog", "Runtime lifecycle", "Status"],
+  "requiredCommands": ["unit", "build", "browser"],
+  "commands": {
+    "unit": "node --test launcher/ui/tests/cuda-runtime.test.mjs",
+    "build": "npm --prefix launcher/ui run build",
+    "browser": "node launcher/ui/tests/cuda-runtime.browser.mjs"
+  },
+  "evidence": {
+    "failurePaths": "launcher/ui/tests/cuda-runtime.browser.mjs",
+    "runtimeFullFlow": "launcher/ui/tests/cuda-runtime.browser.mjs"
+  }
+}

@@ -1,28 +1,32 @@
 """ME training, runtime policy and atomic native checkpoints."""
-import copy
 from contextlib import nullcontext
 import math
 import os
 from pathlib import Path
 import tempfile
 import torch
+from core.gpu_runtime import validate_cuda_devices
+from core.torch_checkpoint import load_weights_checkpoint
 from .config import MEConfig
 from .network import MENetwork
 from .optimizer import MEOptimizer, optimizer_settings
 from .losses import me_losses
 from .replay import HardSampleReplay
+from .tensor_checks import all_finite, gradients_are_finite, scalar_metrics
 
 
 class TrainingForward(torch.nn.Module):
     """Autocast belongs inside forward because DataParallel uses worker threads."""
-    def __init__(self, network, use_fp16):
+    def __init__(self, network, use_fp16, use_bf16=False, *, include_swap=True):
         super().__init__()
         self.network, self.use_fp16 = network, use_fp16
+        self.use_bf16 = use_bf16
+        self.include_swap = include_swap
 
     def forward(self, source, destination, face_style=False):
-        with torch.autocast(source.device.type, dtype=torch.float16,
-                            enabled=self.use_fp16 and source.device.type == 'cuda'):
-            return self.network(source, destination, face_style)
+        with torch.autocast(source.device.type, dtype=torch.bfloat16 if self.use_bf16 else torch.float16,
+                            enabled=(self.use_fp16 or self.use_bf16) and source.device.type == 'cuda'):
+            return self.network(source, destination, face_style, include_swap=self.include_swap)
 
 
 def resolve_devices(device):
@@ -44,6 +48,7 @@ def resolve_devices(device):
         raise RuntimeError('CUDA requested but unavailable; use --device cpu explicitly')
     if any(index >= torch.cuda.device_count() for index in indexes):
         raise ValueError('Requested GPU is unavailable')
+    validate_cuda_devices(torch, indexes)
     return torch.device('cuda', indexes[0]), indexes
 
 
@@ -66,24 +71,42 @@ def validate_scaler_state(state):
 
 
 class MEEngine:
-    def __init__(self, config, device='cuda', seed=0):
+    def __init__(self, config, device='cuda', seed=0, *, training=True):
+        if type(training) is not bool:
+            raise ValueError('training must be a boolean')
+        self._inference_only = not training
         self.config = config
         self.training_config = config.effective()
         self.device, self.device_ids = resolve_devices(device)
+        if not training and len(self.device_ids) > 1:
+            raise ValueError('ME inference requires one GPU')
         torch.backends.cuda.matmul.allow_tf32 = False
         torch.backends.cudnn.allow_tf32 = False
-        torch.manual_seed(seed)
-        self.network = MENetwork(self.training_config).to(self.device)
-        self.optimizer = MEOptimizer((p for p in self.network.parameters() if p.requires_grad), config)
+        if training:
+            torch.manual_seed(seed)
+        # Inference discards initialized weights immediately on load; do not
+        # reset caller RNGs or consume their CPU initialization sequence.
+        with nullcontext() if training else torch.random.fork_rng(devices=[]):
+            self.network = MENetwork(self.training_config).to(self.device)
         self.iteration = self.optimizer_updates = 0
         self.data_state = None
-        self.replay = HardSampleReplay(config.retraining_capacity)
-        self._build_runtime()
-        self._build_adversarial()
+        if training:
+            self.optimizer = MEOptimizer((p for p in self.network.parameters() if p.requires_grad), config)
+            self.replay = HardSampleReplay(config.retraining_capacity)
+            self._build_runtime()
+            self._build_adversarial()
+        else:
+            self.optimizer = self.replay = self.scaler = self.forward_network = None
+            self.adversarial = self.adversarial_optimizer = None
+            self.network.requires_grad_(False).eval()
 
     def _build_runtime(self):
+        self._training_precision_checked = False
         self.scaler = torch.amp.GradScaler('cuda', enabled=self.config.use_fp16 and self.device.type == 'cuda', init_scale=1024.)
-        self.forward_network = TrainingForward(self.network, self.config.use_fp16)
+        # Reconstruction and adversarial losses use SRC/DST outputs. Only the
+        # two style losses consume swap; do not decode an unused third face.
+        self.forward_network = TrainingForward(self.network, self.config.use_fp16, self.config.use_bf16,
+            include_swap=bool(self.training_config.face_style_power or self.training_config.bg_style_power))
         if len(self.device_ids) > 1:
             if self.config.batch_size < len(self.device_ids):
                 raise ValueError('Batch size must be at least the number of selected GPUs')
@@ -136,8 +159,7 @@ class MEEngine:
                 self.scaler.scale(total).backward()
                 self.scaler.unscale_(self.optimizer)
             with timed('gradient_check'):
-                grads = [p.grad for p in self.network.parameters() if p.grad is not None]
-                finite = bool(grads) and all(bool(torch.isfinite(g).all()) for g in grads)
+                finite = gradients_are_finite(p for p in self.network.parameters() if p.requires_grad)
             discriminator_loss = None
             self.adversarial.requires_grad_(True)
             if self.adversarial_optimizer is not None:
@@ -148,7 +170,7 @@ class MEEngine:
                         raise FloatingPointError('Nonfinite ME discriminator loss; no optimizer update performed')
                     self.scaler.scale(discriminator_loss).backward()
                     self.scaler.unscale_(self.adversarial_optimizer)
-                    finite = finite and all(p.grad is not None and bool(torch.isfinite(p.grad).all()) for p in self.adversarial.parameters())
+                    finite = finite and gradients_are_finite(self.adversarial.parameters())
             if finite:
                 with timed('optimizer'):
                     self.scaler.step(self.optimizer)
@@ -163,8 +185,16 @@ class MEEngine:
         raise RuntimeError('AMP retry loop did not complete')
 
     def train_step(self, source, destination, profiler=None):
-        if self.config.use_fp16 and self.device.type != 'cuda':
-            raise ValueError('FP16 training requires CUDA; CPU inference/export use FP32')
+        if getattr(self, '_inference_only', False):
+            raise RuntimeError('Load with training=True before resuming training')
+        if (self.config.use_fp16 or self.config.use_bf16) and self.device.type != 'cuda':
+            raise ValueError('FP16/BF16 training requires CUDA; CPU inference/export use FP32')
+        if self.config.use_bf16 and not self._training_precision_checked:
+            for index in self.device_ids:
+                with torch.cuda.device(index):
+                    if not torch.cuda.is_bf16_supported(including_emulation=False):
+                        raise ValueError('Selected GPU does not support BF16; select FP32')
+            self._training_precision_checked = True
         if profiler is not None:
             if len(self.device_ids) > 1:
                 raise ValueError('Stage profiling currently supports one GPU')
@@ -181,9 +211,10 @@ class MEEngine:
                 if replay_batch is not None:
                     self._update(*replay_batch, profiler=profiler, stage_prefix='replay_')
                     replayed = True
-        result = dict(iteration=self.iteration, src_loss=float(src_loss.mean()), dst_loss=float(dst_loss.mean()))
+        metrics = dict(src_loss=src_loss.mean(), dst_loss=dst_loss.mean())
         if self.adversarial_optimizer is not None:
-            result.update(generator_loss=float(generator_loss.mean()), discriminator_loss=float(discriminator_loss.detach()))
+            metrics.update(generator_loss=generator_loss.mean(), discriminator_loss=discriminator_loss)
+        result = dict(iteration=self.iteration, **scalar_metrics(metrics))
         if self.config.retraining_samples:
             result.update(replayed=replayed, optimizer_updates=self.optimizer_updates)
         if profiler is not None:
@@ -200,6 +231,8 @@ class MEEngine:
 
     def reconfigure(self, config, reset_optimizer=False):
         """Build replacement training state before committing any runtime change."""
+        if getattr(self, '_inference_only', False):
+            raise RuntimeError('Cannot reconfigure an inference-only engine')
         self.config.assert_compatible_network(config)
         if config.adabelief != self.config.adabelief and not reset_optimizer:
             raise ValueError('Changing optimizer type requires --reset-optimizer')
@@ -287,6 +320,8 @@ class MEEngine:
             self.scaler.load_state_dict(scaler_state)
 
     def save(self, path, data_state=None, import_metadata=None):
+        if getattr(self, '_inference_only', False):
+            raise RuntimeError('Cannot save an inference-only engine; load with training=True')
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         payload = dict(format='me-pytorch', version=1, config=self.config.to_dict(), iteration=self.iteration,
@@ -310,29 +345,33 @@ class MEEngine:
                 os.unlink(temporary)
 
     @classmethod
-    def load(cls, path, device='cuda'):
-        payload = torch.load(path, map_location='cpu', weights_only=True)
+    def load(cls, path, device='cuda', *, training=True):
+        if type(training) is not bool:
+            raise ValueError('training must be a boolean')
+        # Merger inference needs model weights, not optimizer/discriminator or
+        # replay tensors. Map the checkpoint lazily, then copy model parameters
+        # into owned storage so no live inference object pins the Windows file.
+        payload = load_weights_checkpoint(path, mmap=not training)
         required = {'format','version','config','iteration','model','optimizer','cpu_rng','cuda_rng','data_state'}
         if not isinstance(payload, dict) or not required.issubset(payload):
             raise ValueError('Incomplete ME checkpoint')
         if payload['format'] != 'me-pytorch' or payload['version'] != 1:
             raise ValueError('Unsupported ME checkpoint format')
-        engine = cls(MEConfig.from_dict(payload['config']), device)
+        engine = cls(MEConfig.from_dict(payload['config']), device, training=training)
         engine.network.load_state_dict(payload['model'], strict=True)
-        engine.optimizer.load_state_dict(payload['optimizer'])
-        for group in engine.optimizer.param_groups:
-            if any(group.get(key) != value for key, value in optimizer_settings(engine.config).items()):
-                raise ValueError('Checkpoint optimizer settings differ from its ME configuration')
         engine.iteration = payload['iteration']
         engine.optimizer_updates = payload.get('optimizer_updates', engine.iteration)
         if any(type(value) is not int or value < 0 for value in (engine.iteration, engine.optimizer_updates)):
             raise ValueError('Invalid checkpoint iteration')
-        if hasattr(engine.optimizer, 'validate_state'):
-            engine.optimizer.validate_state(engine.optimizer_updates, require_complete=True)
-        else:
-            engine._validate_optimizer()
-        if any(not bool(torch.isfinite(param).all()) for param in engine.network.parameters()):
+        if not bool(all_finite(engine.network.parameters())):
             raise ValueError('Nonfinite checkpoint parameter')
+        if not training:
+            return engine
+        engine.optimizer.load_state_dict(payload['optimizer'])
+        for group in engine.optimizer.param_groups:
+            if any(group.get(key) != value for key, value in optimizer_settings(engine.config).items()):
+                raise ValueError('Checkpoint optimizer settings differ from its ME configuration')
+        engine.optimizer.validate_state(engine.optimizer_updates, require_complete=True)
         if engine.adversarial_optimizer is not None:
             if 'adversarial' not in payload or payload.get('adversarial_optimizer') is None:
                 raise ValueError('Incomplete discriminator checkpoint')
@@ -367,16 +406,3 @@ class MEEngine:
         engine.data_state = payload['data_state']
         engine.import_metadata = payload.get('import_metadata')
         return engine
-
-    def _validate_optimizer(self):
-        for group in self.optimizer.param_groups:
-            if group['iteration'] != self.optimizer_updates:
-                raise ValueError('Optimizer/model iteration mismatch')
-            expected = {'momentum', 'variance'} if group['adabelief'] else {'variance'}
-            for param in group['params']:
-                if self.optimizer_updates:
-                    state = self.optimizer.state.get(param)
-                    if not state:
-                        raise ValueError('Incomplete optimizer state')
-                    if set(state) != expected or any(value.shape != param.shape or not bool(torch.isfinite(value).all()) for value in state.values()):
-                        raise ValueError('Invalid optimizer tensor state')

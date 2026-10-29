@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { createReadStream } from "node:fs";
+import { sha256File } from "./hash-file.mjs";
 import { lstat, readFile, realpath, readdir } from "node:fs/promises";
 import path from "node:path";
 import { PATHS, assertWithin, pathExists } from "./paths.mjs";
@@ -45,9 +45,7 @@ async function verifyFile(target, expectedHash) {
   if (!info?.isFile() || info.isSymbolicLink()) throw new MergePreviewError("小样图像缺失或路径已变化");
   try { assertWithin(await realpath(PATHS.workspaceRoot), await realpath(target), "小样成员"); }
   catch { throw new MergePreviewError("小样成员超出当前项目"); }
-  const hash = createHash("sha256");
-  for await (const chunk of createReadStream(target)) hash.update(chunk);
-  if (hash.digest("hex") !== expectedHash) throw new MergePreviewError("小样素材或结果已变化，请重新生成独立小样", "MERGE_PREVIEW_SOURCE_CHANGED");
+  if (await sha256File(target) !== expectedHash) throw new MergePreviewError("小样素材或结果已变化，请重新生成独立小样", "MERGE_PREVIEW_SOURCE_CHANGED");
   return target;
 }
 

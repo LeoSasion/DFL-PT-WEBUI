@@ -4,7 +4,6 @@ Supply already acquired, licensed short source clips. The script downloads
 nothing, changes no media, and creates no numerical ground truth by inference.
 """
 import argparse
-import hashlib
 import json
 from pathlib import Path
 import random
@@ -22,7 +21,7 @@ def write(path, value):
 
 
 def sheet(images, entries, output, title, columns=5):
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageDraw
     if not entries:
         canvas = Image.new('RGB', (1000, 100), 'white')
         ImageDraw.Draw(canvas).text((15, 20), title + ' | no cuts reported', fill='black')

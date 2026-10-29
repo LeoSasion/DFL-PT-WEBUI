@@ -17,7 +17,7 @@ export function preflightRecovery(error, command, t) {
     return { target: "console", label: t("查看占用任务") };
   }
   if (["INPUT_MISSING", "INPUT_EMPTY", "OUTPUT_MISSING", "OUTPUT_EMPTY"].includes(error.code)) {
-    if (["train.me", "model.import_me_tf"].includes(command.id)) return { target: "parameters", label: t("返回修改参数") };
+    if (["train.me", "train.tae", "model.import_me_tf"].includes(command.id)) return { target: "parameters", label: t("返回修改参数") };
     const targetByStage = {
       material: ["workspace", "打开工作区导入素材"],
       frames: ["workspace", "打开工作区导入素材"],

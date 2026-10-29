@@ -367,8 +367,8 @@ export const runtimeApi = {
   imageInputUrl: id => `/api/image-service/inputs/${encodeURIComponent(id)}`,
   imageResultUrl: (id, index, { download = false } = {}) => `/api/image-service/tasks/${encodeURIComponent(id)}/results/${index}${download ? "?download=1" : ""}`,
   health: (options = {}) => request("/api/health", options),
-  telemetry: () => request("/api/telemetry"),
-  commands: () => request("/api/commands"),
+  telemetry: (options = {}) => request("/api/telemetry", options),
+  commands: (options = {}) => request("/api/commands", options),
   workspace: () => request("/api/workspace"),
   modelBackups: (name, options = {}) => request(`/api/models/${encodeURIComponent(name)}/backups`, options),
   restoreModelBackup: (name, backupId, options = {}) => request(
@@ -573,8 +573,8 @@ export const runtimeApi = {
       body: JSON.stringify(options),
     },
   ),
-  jobs: () => request("/api/jobs"),
-  events: (jobId, after = 0) => request(`/api/jobs/${encodeURIComponent(jobId)}/events?after=${after}`),
+  jobs: (options = {}) => request("/api/jobs", options),
+  events: (jobId, after = 0, options = {}) => request(`/api/jobs/${encodeURIComponent(jobId)}/events?after=${after}`, options),
   start: (commandId, options = {}) => request("/api/jobs", {
     method: "POST",
     body: JSON.stringify({ commandId, ...options }),

@@ -14,7 +14,7 @@ if (bitrate && (!/^\d{1,3}$/.test(bitrate) || Number(bitrate) < 1 || Number(bitr
 }
 
 const common = [
-  PATHS.currentMain,
+  PATHS.dflMain,
   "videoed",
   "video-from-sequence",
 ];

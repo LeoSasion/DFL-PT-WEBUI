@@ -13,14 +13,22 @@ import sys
 def resolve(root):
     root = Path(root).resolve()
     registry = root / 'webui/.runtime/projects.json'
-    if not registry.exists():
+    try:
+        text = registry.read_text(encoding='utf-8-sig')
+    except FileNotFoundError:
         project = {'id': 'default', 'name': '默认项目'}
     else:
-        record = json.loads(registry.read_text(encoding='utf-8-sig'))
+        record = json.loads(text)
+        projects = record.get('projects')
+        if (not isinstance(projects, list) or
+                any(not isinstance(item, dict) or not isinstance(item.get('id'), str) or
+                    not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,47}', item['id']) for item in projects) or
+                len({item['id'] for item in projects}) != len(projects)):
+            raise ValueError('Invalid project registry; reopen WebUI project selection')
         active = record.get('activeId')
         if not isinstance(active, str) or not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,47}', active):
             raise ValueError('Invalid active project ID; reopen WebUI project selection')
-        matches = [item for item in record.get('projects', []) if item.get('id') == active]
+        matches = [item for item in projects if item['id'] == active]
         if len(matches) != 1:
             raise ValueError('Active project is not registered; reopen WebUI project selection')
         project = matches[0]

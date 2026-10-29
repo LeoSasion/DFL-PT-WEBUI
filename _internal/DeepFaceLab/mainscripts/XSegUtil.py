@@ -1,6 +1,4 @@
-import json
 import shutil
-import traceback
 from pathlib import Path
 
 import numpy as np
@@ -12,7 +10,6 @@ from core.interact import interact as io
 from core.leras import nn
 from DFLIMG import *
 from facelib import XSegNet, LandmarksProcessor, FaceType
-import pickle
 
 def apply_xseg(input_path, model_path):
     if not input_path.exists():

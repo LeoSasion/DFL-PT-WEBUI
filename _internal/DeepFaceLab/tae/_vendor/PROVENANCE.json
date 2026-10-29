@@ -1,0 +1,32 @@
+{
+  "purpose": "Pinned TAEQI2.1 runtime source and separately acquired base asset",
+  "source_revision": "027d3ef404a04a141e60d5ec0fee149c2c8bdd74",
+  "model_revision": "379cc3f29b1fdbf3bc02781792d88f81036780da",
+  "files": [
+    {
+      "name": "taesd.py",
+      "url": "https://raw.githubusercontent.com/madebyollin/taesd/027d3ef404a04a141e60d5ec0fee149c2c8bdd74/taesd.py",
+      "sha256": "be3a8485c187d35d7fcf5c596fa800171f7b157c43f1a086e00e25134c7e6abd",
+      "bytes": 9564
+    },
+    {
+      "name": "LICENSE.taesd",
+      "url": "https://raw.githubusercontent.com/madebyollin/taesd/027d3ef404a04a141e60d5ec0fee149c2c8bdd74/LICENSE",
+      "sha256": "261497cf8e9ed613ed1fa5ddf48af32cdf50545b2ccd9edd7eacc91fb9255d6e",
+      "bytes": 1073
+    },
+    {
+      "name": "taeqi2_1.safetensors",
+      "url": "https://huggingface.co/madebyollin/taeqi2_1/resolve/379cc3f29b1fdbf3bc02781792d88f81036780da/taeqi2_1.safetensors",
+      "sha256": "6578b31cc5e336233a2c842eba61b56425bbcac97c7088705f7c7db93291887e",
+      "bytes": 30591264
+    },
+    {
+      "name": "README.model.md",
+      "url": "https://huggingface.co/madebyollin/taeqi2_1/raw/379cc3f29b1fdbf3bc02781792d88f81036780da/README.md",
+      "sha256": "a1c425f3a8ad3fb0e463e48c563bbe96c559edf6828c9a0813bee11668b4f0f5",
+      "bytes": 4084
+    }
+  ],
+  "license": "MIT"
+}

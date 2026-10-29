@@ -1,7 +1,6 @@
 import sys
 import os
 import multiprocessing
-import json
 import time
 from pathlib import Path
 from core.interact import interact as io
@@ -27,9 +26,14 @@ class Devices(object):
     @staticmethod
     def _enumerate_torch_devices_dict():
         """Return dict[index] = (type, name, total_mem). Safe to call in-process."""
+        from core.torch_runtime_switch import assert_runtime_available
+        assert_runtime_available(Path(__file__).resolve().parents[4])
         if sys.platform[0:3] == 'win':
-            compute_cache_path = Path(os.environ['APPDATA']) / 'NVIDIA' / ('ComputeCache_ALL')
-            os.environ['CUDA_CACHE_PATH'] = str(compute_cache_path)
+            cache_path = os.environ.get('CUDA_CACHE_PATH')
+            if cache_path is None:
+                cache_path = str(Path(os.environ['APPDATA']) / 'NVIDIA' / 'ComputeCache_ALL')
+                os.environ['CUDA_CACHE_PATH'] = cache_path
+            compute_cache_path = Path(cache_path)
             if not compute_cache_path.exists():
                 io.log_info("正在缓存 GPU 内核...")
                 compute_cache_path.mkdir(parents=True, exist_ok=True)
@@ -157,7 +161,7 @@ class Devices(object):
         if 'CUDA_VISIBLE_DEVICES' in os.environ.keys():
             os.environ.pop('CUDA_VISIBLE_DEVICES')
 
-        os.environ['CUDA_​CACHE_​MAXSIZE'] = '2147483647'
+        os.environ.setdefault('CUDA_CACHE_MAXSIZE', '2147483647')
 
         # On macOS (and Python 3.14+), spawn can fail when __main__ has no real file
         # (e.g. python -c / stdin). Fall back to in-process enumeration in that case.
@@ -207,72 +211,3 @@ class Devices(object):
             Devices.all_devices = Devices(devices)
 
         return Devices.all_devices
-
-"""
-
-
-        # {'name'      : name.split(b'\0', 1)[0].decode(),
-        #     'total_mem' : totalMem.value
-        # }
-
-
-
-
-
-        return
-
-
-
-
-        min_cc = int(os.environ.get("TF_MIN_REQ_CAP", 35))
-        libnames = ('libcuda.so', 'libcuda.dylib', 'nvcuda.dll')
-        for libname in libnames:
-            try:
-                cuda = ctypes.CDLL(libname)
-            except:
-                continue
-            else:
-                break
-        else:
-            return Devices([])
-
-        nGpus = ctypes.c_int()
-        name = b' ' * 200
-        cc_major = ctypes.c_int()
-        cc_minor = ctypes.c_int()
-        freeMem = ctypes.c_size_t()
-        totalMem = ctypes.c_size_t()
-
-        result = ctypes.c_int()
-        device = ctypes.c_int()
-        context = ctypes.c_void_p()
-        error_str = ctypes.c_char_p()
-
-        devices = []
-
-        if cuda.cuInit(0) == 0 and \
-            cuda.cuDeviceGetCount(ctypes.byref(nGpus)) == 0:
-            for i in range(nGpus.value):
-                if cuda.cuDeviceGet(ctypes.byref(device), i) != 0 or \
-                    cuda.cuDeviceGetName(ctypes.c_char_p(name), len(name), device) != 0 or \
-                    cuda.cuDeviceComputeCapability(ctypes.byref(cc_major), ctypes.byref(cc_minor), device) != 0:
-                    continue
-
-                if cuda.cuCtxCreate_v2(ctypes.byref(context), 0, device) == 0:
-                    if cuda.cuMemGetInfo_v2(ctypes.byref(freeMem), ctypes.byref(totalMem)) == 0:
-                        cc = cc_major.value * 10 + cc_minor.value
-                        if cc >= min_cc:
-                            devices.append ( {'name'      : name.split(b'\0', 1)[0].decode(),
-                                              'total_mem' : totalMem.value,
-                                              'free_mem'  : freeMem.value,
-                                              'cc'        : cc
-                                              })
-                    cuda.cuCtxDetach(context)
-
-        os.environ['NN_DEVICES_COUNT'] = str(len(devices))
-        for i, device in enumerate(devices):
-            os.environ[f'NN_DEVICE_{i}_NAME'] = device['name']
-            os.environ[f'NN_DEVICE_{i}_TOTAL_MEM'] = str(device['total_mem'])
-            os.environ[f'NN_DEVICE_{i}_FREE_MEM'] = str(device['free_mem'])
-            os.environ[f'NN_DEVICE_{i}_CC'] = str(device['cc'])
-"""

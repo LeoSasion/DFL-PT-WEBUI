@@ -25,11 +25,9 @@ from facelib import LandmarksProcessor
 from dfl_asset_tool import bounded_image_metrics
 from face_quality_review import quality_review
 
-DEFAULT_OUT = ROOT / "workspace/.vision-evaluation/efficient-fiqa-20261007"
 # Caller supplies a source list in ignored evaluation storage. Never bind the
 # repository or its distributed scripts to this workstation's private media.
-VARIANTS = ("original", "minor-blur", "moderate-blur", "severe-blur",
-            "gaussian-noise", "jpeg-8", "dark", "clipped-bright")
+DEFAULT_OUT = ROOT / "workspace/.vision-evaluation/efficient-fiqa-20261007"
 
 
 def sha(path):

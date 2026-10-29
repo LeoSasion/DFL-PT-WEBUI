@@ -3,14 +3,12 @@ import os
 import sys
 import threading
 import time
-import types
 
 import colorama
 import cv2
 import numpy as np
 from tqdm import tqdm
 
-from core import stdex
 
 try:
     import IPython #if success we are in colab

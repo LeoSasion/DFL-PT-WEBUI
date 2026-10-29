@@ -16,6 +16,9 @@ export default defineConfig({
     outDir: "dist/client",
     rollupOptions: {
       output: {
+        // Match only the named packages: pulling their shared dependencies
+        // into charts would make the shell preload the lazy plotting library.
+        onlyExplicitManualChunks: true,
         manualChunks(id) {
           if (id.includes("recharts") || id.includes("d3-")) return "charts";
           if (id.includes("@tabler")) return "icons";

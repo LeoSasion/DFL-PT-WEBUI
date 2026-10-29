@@ -16,6 +16,40 @@ Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
+function Write-ProjectInstallJson([string]$Path, [object]$Value) {
+    $Path = Assert-ProjectInstallPlainPath $Path
+    $temporary = $Path + '.' + [Guid]::NewGuid().ToString('N') + '.tmp'
+    $stream = $null
+    try {
+        $stream = [IO.File]::Open($temporary,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+        $bytes = (New-Object Text.UTF8Encoding($false)).GetBytes(($Value | ConvertTo-Json -Depth 12))
+        $stream.Write($bytes,0,$bytes.Length);$stream.Flush($true);$stream.Dispose();$stream=$null
+        Assert-ProjectInstallPlainPath $Path | Out-Null
+        if ([IO.File]::Exists($Path)) { [IO.File]::Replace($temporary,$Path,[System.Management.Automation.Language.NullString]::Value) }
+        else { [IO.File]::Move($temporary,$Path) }
+    } finally {
+        if($stream){$stream.Dispose()}
+        if([IO.File]::Exists($temporary)){Remove-Item -LiteralPath (Assert-ProjectInstallPlainPath $temporary) -Force}
+    }
+}
+
+function Get-VerifiedProjectInstallArchive([string]$State,[string]$Session,[string]$OfflineArchive,[bool]$Offline,[long]$Limit,[object]$Pin) {
+    $destination=Resolve-ProjectInstallChild $Session 'source.zip'
+    if(-not $Pin){Get-ProjectInstallArchive $destination $OfflineArchive $Offline $Limit;return $destination}
+    $cache=Resolve-ProjectInstallChild $State 'source-cache'
+    if(-not (Test-Path -LiteralPath $cache)){New-Item -ItemType Directory -Path $cache | Out-Null}
+    $verified=Resolve-ProjectInstallChild $cache ($Pin.archiveSha256+'.zip')
+    if(Test-Path -LiteralPath $verified){
+        if(-not (Test-Path -LiteralPath $verified -PathType Leaf) -or (Get-Item -LiteralPath $verified).Length -gt $Limit -or
+            (Get-FileHash -LiteralPath $verified -Algorithm SHA256).Hash.ToLowerInvariant() -cne $Pin.archiveSha256){throw '已保留源码缓存校验失败；未知文件已保留，请检查安装缓存。'}
+        return $verified
+    }
+    Get-ProjectInstallArchive $destination $OfflineArchive $Offline $Limit $Pin
+    if((Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash.ToLowerInvariant() -cne $Pin.archiveSha256){throw '源码包 SHA-256 与固定发行来源不一致。'}
+    Move-ProjectInstallEntry $destination $verified
+    return $verified
+}
+
 function Read-ProjectSourcePin([string]$Path) {
     if (-not $Path) { $Path = Join-Path $PSScriptRoot 'source-pin.json' }
     Assert-ProjectInstallPlainPath $Path | Out-Null
@@ -46,8 +80,8 @@ function Assert-ProjectInstallPlainPath([string]$Path) {
     $absolute = [IO.Path]::GetFullPath($Path)
     $ancestor = $absolute
     while ($ancestor) {
-        if (Test-Path -LiteralPath $ancestor) {
-            $item = Get-Item -LiteralPath $ancestor -Force
+        $item = Get-Item -LiteralPath $ancestor -Force -ErrorAction SilentlyContinue
+        if ($item) {
             if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
                 throw "安装路径不能包含链接或重解析点：$ancestor"
             }
@@ -188,7 +222,7 @@ function Get-ProjectInstallArchive([string]$Destination, [string]$OfflineArchive
     }
 }
 
-function Expand-ProjectInstallArchive([string]$ZipPath, [string]$Destination, [long]$ExpandedLimit, [long]$EntryLimit, [int]$EntryCountLimit, [string]$ArchiveRoot='DFL-PT-WEBUI-main') {
+function Expand-ProjectInstallArchive([string]$ZipPath, [string]$Destination, [long]$ExpandedLimit, [long]$EntryLimit, [int]$EntryCountLimit, [string]$ArchiveRoot='DFL-PT-WEBUI-main', [string]$OwnershipPath='') {
     Add-Type -AssemblyName System.IO.Compression
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = [IO.Compression.ZipFile]::OpenRead($ZipPath)
@@ -225,7 +259,7 @@ function Expand-ProjectInstallArchive([string]$ZipPath, [string]$Destination, [l
                 continue
             }
             $relative = ($parts[1..($parts.Count-1)] -join '/')
-            if ($parts[1] -ieq '.launcher-install' -or $parts[1] -ieq '.git') { throw '源码包不能包含安装缓存或 Git 私有历史。' }
+            if ($parts[1] -imatch '^(\.launcher-install|\.git|\.venv|\.runtime|workspace|workspaces|release-output)$') { throw '源码包不能包含安装缓存、运行环境、用户数据或 Git 私有历史。' }
             if ($entry.Length -gt $EntryLimit -or ($directory -and $entry.Length -ne 0)) { throw '源码包单个文件超过大小上限。' }
             $expanded += $entry.Length
             if ($expanded -gt $ExpandedLimit) { throw '源码包解压后超过大小上限。' }
@@ -241,6 +275,12 @@ function Expand-ProjectInstallArchive([string]$ZipPath, [string]$Destination, [l
                 $parent = $parent.Substring(0, $parent.LastIndexOf('/'))
                 if ($paths.ContainsKey($parent) -and -not $paths[$parent]) { throw "源码包文件与目录冲突：$parent" }
             }
+        }
+        if($OwnershipPath){
+            $owned=New-Object 'System.Collections.Generic.List[string]'
+            foreach($name in @('ownership.json','source.zip','publication.json','staging/release/installation.json')){$owned.Add($name)}
+            foreach($record in $entries){if(-not $record.directory){$owned.Add('staging/'+$record.relative)}}
+            Write-ProjectInstallJson $OwnershipPath @{schemaVersion=1;files=$owned.ToArray()}
         }
         New-Item -ItemType Directory -Path $Destination | Out-Null
         $buffer = New-Object byte[] 65536
@@ -277,7 +317,71 @@ function Move-ProjectInstallEntry([string]$Source, [string]$Destination) {
     else { [IO.File]::Move($Source, $Destination) }
 }
 
-function Publish-ProjectInstallSource([string]$Source, [string]$Target) {
+function Get-ProjectInstallTreeFiles([string]$Root) {
+    Assert-ProjectInstallPlainPath $Root | Out-Null
+    if(Test-Path -LiteralPath $Root -PathType Leaf){return @{path='';sha256=(Get-FileHash -LiteralPath $Root -Algorithm SHA256).Hash.ToLowerInvariant()}}
+    if(-not (Test-Path -LiteralPath $Root -PathType Container)){throw '发布文件缺失，已保留恢复证据。'}
+    $queue=New-Object 'System.Collections.Generic.Queue[string]';$queue.Enqueue($Root)
+    while($queue.Count){
+        foreach($item in Get-ChildItem -LiteralPath $queue.Dequeue() -Force){
+            Assert-ProjectInstallPlainPath $item.FullName | Out-Null
+            if($item.PSIsContainer){$queue.Enqueue($item.FullName)}
+            else{@{path=$item.FullName.Substring($Root.TrimEnd('\','/').Length+1).Replace('\','/');sha256=(Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()}}
+        }
+    }
+}
+function Assert-ProjectInstallTree([string]$Root,[object[]]$Files) {
+    $expected=New-Object 'System.Collections.Generic.Dictionary[string,string]' ([StringComparer]::OrdinalIgnoreCase)
+    foreach($file in $Files){
+        if($file.sha256 -cnotmatch '^[0-9a-f]{64}$' -or $expected.ContainsKey([string]$file.path)){throw '源码发布所有权记录无效。'}
+        if($file.path){Resolve-ProjectInstallChild $Root $file.path | Out-Null}
+        $expected.Add([string]$file.path,[string]$file.sha256)
+    }
+    $actual=@(Get-ProjectInstallTreeFiles $Root)
+    if($actual.Count -ne $expected.Count){throw '已发布源码包含未知或缺失文件，未自动移动或删除。'}
+    foreach($file in $actual){if(-not $expected.ContainsKey([string]$file.path) -or $expected[[string]$file.path] -cne $file.sha256){throw '已发布源码发生修改，未自动移动或删除。'}}
+}
+function Undo-ProjectInstallPublication([string]$Source,[string]$Target,[string]$ReceiptPath,[object]$Receipt) {
+    if($Receipt.schemaVersion -ne 1 -or $Receipt.product -cne 'DFL-PT-WEBUI' -or $Receipt.source -ine $Source -or $Receipt.target -ine $Target -or
+        $Receipt.status -notin @('publishing','rolled-back') -or @($Receipt.entries).Count -eq 0 -or @($Receipt.entries).Count -gt 10000){throw '源码发布恢复记录不正确。'}
+    $seen=New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    foreach($entry in $Receipt.entries){
+        if($entry.name -match '[\\/:\x00-\x1f<>"|?*]' -or $entry.name -in @('.','..','') -or $entry.name.EndsWith('.') -or $entry.name.EndsWith(' ') -or
+            $entry.name -match '^(?i:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)' -or
+            $entry.name -imatch '^(\.launcher-install|\.git|\.venv|\.runtime|workspace|workspaces|release-output)$' -or -not $seen.Add($entry.name) -or
+            $entry.status -notin @('pending','intent','moved','rolled-back')){throw '源码发布恢复路径不正确。'}
+        $from=Resolve-ProjectInstallChild $Target $entry.name;$to=Resolve-ProjectInstallChild $Source $entry.name
+        $published=Test-Path -LiteralPath $from;$staged=Test-Path -LiteralPath $to
+        if($published -eq $staged -or ($entry.status -eq 'pending' -and $published)){throw '源码发布恢复遇到同名或缺失内容，所有文件均已保留。'}
+        Assert-ProjectInstallTree $(if($published){$from}else{$to}) @($entry.files)
+    }
+    $entries=@($Receipt.entries)
+    for($index=$entries.Count-1;$index -ge 0;$index--){
+        $entry=$entries[$index];$from=Resolve-ProjectInstallChild $Target $entry.name;$to=Resolve-ProjectInstallChild $Source $entry.name
+        if(Test-Path -LiteralPath $from){Move-ProjectInstallEntry $from $to}
+        $entry.status='rolled-back';Write-ProjectInstallJson $ReceiptPath $Receipt
+    }
+    $Receipt.status='rolled-back';Write-ProjectInstallJson $ReceiptPath $Receipt
+}
+function Recover-ProjectInstallPublications([string]$Root) {
+    $state=Resolve-ProjectInstallChild $Root '.launcher-install'
+    if(-not (Test-Path -LiteralPath $state)){return}
+    $owner=Resolve-ProjectInstallChild $state 'owner.txt'
+    if(-not (Test-Path -LiteralPath $owner -PathType Leaf) -or [IO.File]::ReadAllText($owner) -cne 'DFL-PT-WEBUI install workspace v1'){throw '安装缓存归属不正确。'}
+    foreach($session in Get-ChildItem -LiteralPath $state -Directory -Force){
+        if($session.Name -cnotmatch '^source-[0-9a-f]{32}$'){continue}
+        Assert-ProjectInstallPlainPath $session.FullName | Out-Null
+        $receiptPath=Resolve-ProjectInstallChild $session.FullName 'publication.json'
+        if(-not (Test-Path -LiteralPath $receiptPath -PathType Leaf)){continue}
+        $receipt=Get-Content -LiteralPath $receiptPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        if($receipt.status -eq 'published'){
+            if($receipt.schemaVersion -ne 1 -or $receipt.product -cne 'DFL-PT-WEBUI' -or $receipt.target -ine $Root){throw '源码发布完成记录不正确。'}
+        }else{Undo-ProjectInstallPublication (Resolve-ProjectInstallChild $session.FullName 'staging') $Root $receiptPath $receipt}
+        try{Remove-ProjectInstallSession $state $session.FullName}catch{Write-ProjectInstallEvent 'cleanup' 'warning' 0 ('恢复后的安装缓存已保留：'+$_.Exception.Message)}
+    }
+}
+
+function Publish-ProjectInstallSource([string]$Source, [string]$Target, [string]$ReceiptPath='') {
     Assert-ProjectInstallTarget $Target
     $children = @(Get-ChildItem -LiteralPath $Source -Force)
     if ($children.Count -eq 0) { throw '没有可发布的源码。' }
@@ -286,17 +390,34 @@ function Publish-ProjectInstallSource([string]$Source, [string]$Target) {
         if (Test-Path -LiteralPath $destination) { throw "源码不能覆盖已有内容：$($child.Name)" }
     }
     $moved = New-Object 'System.Collections.Generic.List[string]'
+    $receipt=$null
+    if($ReceiptPath){
+        $entries=@();foreach($child in $children){$entries+=@{name=$child.Name;status='pending';files=@(Get-ProjectInstallTreeFiles $child.FullName)}}
+        $receipt=@{schemaVersion=1;product='DFL-PT-WEBUI';source=$Source;target=$Target;status='publishing';entries=$entries}
+        Write-ProjectInstallJson $ReceiptPath $receipt
+        $sessionName=Split-Path -Leaf (Split-Path -Parent $ReceiptPath)
+        if($sessionName -cnotmatch '^source-[0-9a-f]{32}$'){throw '源码发布会话标识不正确。'}
+        Write-ProjectInstallJson (Resolve-ProjectInstallChild (Split-Path -Parent (Split-Path -Parent $ReceiptPath)) 'source-publication.json') @{schemaVersion=1;product='DFL-PT-WEBUI';session=$sessionName}
+    }
     try {
         foreach ($child in $children) {
             $sourcePath = Resolve-ProjectInstallChild $Source $child.Name
             $destination = Resolve-ProjectInstallChild $Target $child.Name
             if (Test-Path -LiteralPath $destination) { throw "安装期间出现同名文件：$($child.Name)" }
+            if($receipt){$record=@($receipt.entries | Where-Object {$_.name -ceq $child.Name})[0];$record.status='intent';Write-ProjectInstallJson $ReceiptPath $receipt}
             Move-ProjectInstallEntry $sourcePath $destination
             $moved.Add($child.Name)
+            if($receipt){$record.status='moved';Write-ProjectInstallJson $ReceiptPath $receipt}
         }
         Assert-ProjectInstallIdentity $Target
+        if($receipt){$receipt.status='published';Write-ProjectInstallJson $ReceiptPath $receipt}
     } catch {
         $reason = $_.Exception.Message
+        if($receipt){
+            try{Undo-ProjectInstallPublication $Source $Target $ReceiptPath $receipt}
+            catch{$exception=New-Object IO.IOException("源码发布失败：$reason；恢复未完成：$($_.Exception.Message)");$exception.Data['PreserveInstallSession']=$true;throw $exception}
+            throw "源码发布失败，已回滚：$reason"
+        }
         $rollbackFailed = New-Object 'System.Collections.Generic.List[string]'
         for ($index = $moved.Count - 1; $index -ge 0; $index--) {
             try {
@@ -326,6 +447,12 @@ function Remove-ProjectInstallSession([string]$State, [string]$Session) {
         [IO.File]::ReadAllText($owner) -cne 'DFL-PT-WEBUI install workspace v1') { throw '安装缓存归属不正确。' }
     Assert-ProjectInstallPlainPath $Session | Out-Null
     if (Test-Path -LiteralPath $Session) {
+        $ownership=Resolve-ProjectInstallChild $Session 'ownership.json'
+        if(-not (Test-Path -LiteralPath $ownership -PathType Leaf)){throw '安装缓存缺少所有权记录，未递归清理。'}
+        $plan=Get-Content -LiteralPath $ownership -Raw -Encoding UTF8 | ConvertFrom-Json
+        if($plan.schemaVersion -ne 1 -or @($plan.files).Count -eq 0 -or @($plan.files).Count -gt 50005){throw '安装缓存所有权记录无效。'}
+        $allowed=New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+        foreach($relative in $plan.files){Resolve-ProjectInstallChild $Session $relative | Out-Null;$allowed.Add([string]$relative) | Out-Null}
         $directories = New-Object 'System.Collections.Generic.Queue[string]'
         $directories.Enqueue($Session)
         while ($directories.Count -gt 0) {
@@ -333,9 +460,15 @@ function Remove-ProjectInstallSession([string]$State, [string]$Session) {
             foreach ($item in Get-ChildItem -LiteralPath $directory -Force) {
                 if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw '安装缓存含链接，拒绝递归清理。' }
                 if ($item.PSIsContainer) { $directories.Enqueue($item.FullName) }
+                elseif(-not $allowed.Contains($item.FullName.Substring($Session.TrimEnd('\','/').Length+1).Replace('\','/'))){throw '安装缓存含未知文件，已保留，未递归清理。'}
             }
         }
         Remove-Item -LiteralPath $Session -Recurse -Force -ErrorAction Stop
+        $pointerPath=Resolve-ProjectInstallChild $State 'source-publication.json'
+        if(Test-Path -LiteralPath $pointerPath -PathType Leaf){
+            $pointer=Get-Content -LiteralPath $pointerPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            if($pointer.schemaVersion -eq 1 -and $pointer.product -ceq 'DFL-PT-WEBUI' -and $pointer.session -ceq $sessionName){Remove-Item -LiteralPath $pointerPath -Force}
+        }
     }
 }
 
@@ -358,6 +491,14 @@ function Invoke-ProjectSourceInstall {
             [Environment]::GetFolderPath('ProgramFiles'), [Environment]::GetFolderPath('ProgramFilesX86'))) {
             if ($protected -and $root -ieq $protected.TrimEnd('\','/')) { throw '请使用系统目录以外的独立安装子目录。' }
         }
+        $state=Resolve-ProjectInstallChild $root '.launcher-install'
+        if(Test-Path -LiteralPath $state){
+            $owner=Resolve-ProjectInstallChild $state 'owner.txt'
+            if(-not (Test-Path -LiteralPath $owner -PathType Leaf) -or [IO.File]::ReadAllText($owner) -cne 'DFL-PT-WEBUI install workspace v1'){throw '安装缓存归属不正确。'}
+            try{$lock=[IO.File]::Open((Resolve-ProjectInstallChild $state 'project-source.lock'),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)}
+            catch{throw '已有源码安装正在运行，或安装目录不可写。'}
+            Recover-ProjectInstallPublications $root
+        }
         if ((Test-Path -LiteralPath (Join-Path $root 'release/version.json')) -or
             (Test-Path -LiteralPath (Join-Path $root '_internal/DeepFaceLab/me.py'))) {
             Assert-ProjectInstallIdentity $root
@@ -372,24 +513,26 @@ function Invoke-ProjectSourceInstall {
             [IO.File]::WriteAllText((Join-Path $state 'owner.txt'), 'DFL-PT-WEBUI install workspace v1', (New-Object Text.UTF8Encoding($false)))
         }
         $lockPath = Resolve-ProjectInstallChild $state 'project-source.lock'
-        try { $lock = [IO.File]::Open($lockPath, [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None) }
-        catch { throw '已有源码安装正在运行，或安装目录不可写。' }
+        if(-not $lock){
+            try { $lock = [IO.File]::Open($lockPath, [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None) }
+            catch { throw '已有源码安装正在运行，或安装目录不可写。' }
+        }
         Assert-ProjectInstallTarget $root
         $session = Resolve-ProjectInstallChild $state ('source-' + [Guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $session | Out-Null
-        $archive = Resolve-ProjectInstallChild $session 'source.zip'
+        $ownership=Resolve-ProjectInstallChild $session 'ownership.json'
+        Write-ProjectInstallJson $ownership @{schemaVersion=1;files=@('ownership.json','source.zip','publication.json')}
         $pin = if ($SourcePinPath -or -not $NoNetwork) { Read-ProjectSourcePin $SourcePinPath } else { $null }
         Write-ProjectInstallEvent 'download' 'running' 5 '正在获取 DFL-PT-WEBUI 固定版本源码。'
-        Get-ProjectInstallArchive $archive $SourceArchivePath ([bool]$NoNetwork) $MaxArchiveBytes $pin
-        if ($pin -and (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -cne $pin.archiveSha256) { throw '源码包 SHA-256 与固定发行来源不一致。' }
+        $archive=Get-VerifiedProjectInstallArchive $state $session $SourceArchivePath ([bool]$NoNetwork) $MaxArchiveBytes $pin
         Write-ProjectInstallEvent 'verify' 'running' 35 '正在检查源码包路径、大小与完整性。'
         $staging = Resolve-ProjectInstallChild $session 'staging'
         $archiveRoot = if ($pin) { $pin.archiveRoot } else { 'DFL-PT-WEBUI-main' }
-        Expand-ProjectInstallArchive $archive $staging $MaxExpandedBytes $MaxEntryBytes $MaxEntries $archiveRoot
+        Expand-ProjectInstallArchive $archive $staging $MaxExpandedBytes $MaxEntryBytes $MaxEntries $archiveRoot $ownership
         Assert-ProjectInstallIdentity $staging
         if ($pin) { Write-ProjectInstallationRecord $staging $pin }
         Write-ProjectInstallEvent 'publish' 'running' 80 '正在将已验证的 PT 源码放入独立安装目录。'
-        Publish-ProjectInstallSource $staging $root
+        Publish-ProjectInstallSource $staging $root (Resolve-ProjectInstallChild $session 'publication.json')
         Write-ProjectInstallEvent 'complete' 'complete' 100 'DFL-PT-WEBUI 源码已就绪，可以继续安装本项目运行环境。'
         return 0
     } catch {
@@ -397,11 +540,12 @@ function Invoke-ProjectSourceInstall {
         Write-ProjectInstallEvent 'failed' 'failed' 0 $_.Exception.Message
         return 1
     } finally {
-        if ($lock) { $lock.Dispose() }
-        if ($session -and -not $keepSession) {
-            try { Remove-ProjectInstallSession $state $session }
-            catch { Write-ProjectInstallEvent 'cleanup' 'warning' 0 ('安装缓存已保留：' + $_.Exception.Message) }
-        }
+        try{
+            if ($session -and -not $keepSession) {
+                try { Remove-ProjectInstallSession $state $session }
+                catch { Write-ProjectInstallEvent 'cleanup' 'warning' 0 ('安装缓存已保留：' + $_.Exception.Message) }
+            }
+        }finally{if ($lock) { $lock.Dispose() }}
     }
 }
 

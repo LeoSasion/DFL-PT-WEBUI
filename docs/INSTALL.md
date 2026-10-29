@@ -1,6 +1,6 @@
 # Windows 安装与首次启动
 
-Windows x64 用户可使用独立一键启动器、源码安装包或便携包。当前维护源码为应用 `0.1.2-preview` / 启动器 `0.1.3-preview`；实际可下载的资产版本以发行页为准，历史 `0.1.1-preview` 便携包仍保留原功能集。运行环境固定 Python 3.12.14、PyTorch 2.9.1 + CUDA 12.8、Node.js 24.19.0；驱动由系统提供，CUDA/cuDNN 随 PyTorch wheel 提供。
+Windows x64 用户可使用独立一键启动器、源码安装包或便携包。当前维护源码为应用 `0.1.3-preview` / 启动器 `0.1.4-preview`；实际可下载的资产版本以发行页为准，历史 `0.1.1-preview` 便携包仍保留原功能集。运行环境固定 Python 3.12.14、PyTorch 2.9.1、Node.js 24.19.0；GTX 10 / Pascal 使用 CUDA 12.6 构建，Blackwell 使用 CUDA 12.8 构建，首次安装按硬件选择其中一套。驱动由系统提供，CUDA/cuDNN 随 PyTorch wheel 提供。
 
 建议安装到独立目录，例如 `C:\DFL-PT-WEBUI`，保留足够空间容纳下载、解压和 PyTorch 依赖。个人视频、aligned、模型和任务状态在本机项目工作区创建，发行包不提供这些材料。
 

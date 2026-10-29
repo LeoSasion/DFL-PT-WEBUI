@@ -1,0 +1,137 @@
+/* Shared runtime surfaces consume the launcher's canonical styles.css tokens. */
+:root { scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track); scrollbar-width: thin; }
+* { scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track); scrollbar-width: thin; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+*::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border: 2px solid var(--scrollbar-track); border-radius: 5px; }
+*::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
+*::-webkit-scrollbar-thumb:active { background: var(--emerald-muted); }
+
+.launcher-workspace { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: auto; }
+.launcher-workspace > .ready-layout,
+.launcher-workspace > .install-layout { flex: 1; }
+.terminal-output-label { align-self: end; padding-block: 8px; color: var(--text-3); font-size: 11px; }
+.install-main__intro .install-recovery-message { color: var(--amber); overflow-wrap: anywhere; }
+.cuda-runtime-notice {
+  flex: 0 0 auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  margin: 10px 9px 2px;
+  padding: 15px;
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--amber);
+  border-radius: 6px;
+  background: var(--surface-dialog);
+  color: var(--amber);
+}
+.cuda-runtime-notice.is-success,
+.cuda-runtime-notice.is-working { border-left-color: var(--emerald); color: var(--emerald-muted); }
+.cuda-runtime-notice__copy { min-width: 0; display: grid; gap: 5px; }
+.cuda-runtime-notice h2 { color: var(--text); font-size: 13px; font-weight: 650; line-height: 1.5; }
+.cuda-runtime-notice p { color: var(--text-2); font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
+.cuda-runtime-notice .cuda-runtime-notice__devices { color: var(--text-3); font-size: 11px; }
+.cuda-runtime-notice .cuda-runtime-notice__hint { color: var(--text-3); font-size: 11px; }
+.cuda-runtime-notice .cuda-runtime-cleanup-warning { color: var(--amber); }
+.cuda-runtime-notice .cuda-runtime-notice__error,
+.dialog-error { color: var(--red); font-size: 12px; line-height: 1.6; }
+.cuda-runtime-notice__versions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.cuda-runtime-notice__versions strong { color: var(--emerald-muted); font-weight: 600; }
+.cuda-runtime-notice__actions { display: flex; align-items: stretch; flex-direction: column; gap: 7px; min-width: 208px; }
+.runtime-button,
+.launcher-modal button,
+.launcher-modal .runtime-button {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  min-width: 130px;
+  padding: 8px 12px;
+  margin: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--surface-action);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.runtime-button:hover:not(:disabled),
+.launcher-modal button:hover:not(:disabled) { border-color: var(--emerald-muted); color: var(--text); }
+.runtime-button:active:not(:disabled),
+.launcher-modal button:active:not(:disabled) { transform: translateY(1px); }
+.runtime-button:disabled,
+.launcher-modal .runtime-button:disabled { opacity: .5; cursor: not-allowed; }
+.runtime-button.is-primary { background: var(--emerald); border-color: var(--emerald); color: var(--canvas); }
+.runtime-button.is-primary:hover:not(:disabled) { background: var(--emerald-bright); color: var(--canvas); }
+.runtime-button.is-quiet { min-width: 0; background: transparent; border-color: transparent; color: var(--text-3); }
+.launcher-modal .runtime-button.is-danger { background: var(--red); border-color: var(--red); color: var(--canvas); }
+.launcher-modal .runtime-button.is-danger:hover:not(:disabled) { color: var(--canvas); border-color: var(--text); }
+.cuda-runtime-progress { display: grid; gap: 5px; max-width: 440px; margin-top: 5px; }
+.cuda-runtime-progress progress { width: 100%; height: 7px; accent-color: var(--emerald); }
+.cuda-runtime-progress span { color: var(--text-3); font-size: 11px; }
+.launcher-modal-backdrop { position: fixed; inset: 0; display: grid; place-items: center; background: #000b; z-index: var(--z-backdrop); padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+.launcher-modal {
+  position: relative;
+  z-index: var(--z-dialog);
+  display: flex;
+  flex-direction: column;
+  width: min(660px, 100%);
+  max-height: min(90dvh, 800px);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--action-border);
+  border-radius: 9px;
+  background: var(--surface-dialog);
+  color: var(--text-2);
+}
+.launcher-modal__header { padding: 23px 24px 13px; }
+.launcher-modal__header h2 { color: var(--text); font-size: 18px; line-height: 1.5; }
+.launcher-modal p { line-height: 1.65; }
+.launcher-modal__body { min-height: 0; overflow: auto; scrollbar-gutter: stable; display: grid; gap: 12px; padding: 0 24px 18px; }
+.launcher-modal__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--border); padding: 15px 24px; }
+.launcher-modal__actions button { margin: 0; min-height: 36px; }
+.launcher-modal textarea { width: 100%; resize: none; min-height: 170px; color: var(--text-2); background: var(--canvas); border: 1px solid var(--action-border); padding: 12px; }
+.runtime-cleanup-facts { margin: 2px 0; padding: 12px 0; border-block: 1px solid var(--border); display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.runtime-cleanup-facts dt { color: var(--text-3); font-size: 12px; margin-bottom: 5px; }
+.runtime-cleanup-facts dd { margin: 0; color: var(--text); font-size: 16px; font-family: var(--mono); }
+.runtime-retained-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+.runtime-retained-list li { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 12px; padding-block: 12px; border-bottom: 1px solid var(--border); }
+.runtime-retained-list strong { color: var(--text); font-family: var(--mono); }
+.runtime-retained-list p { color: var(--text-3); font-size: 12px; }
+
+@media (max-width: 980px) {
+  .cuda-runtime-notice { grid-template-columns: 20px minmax(0, 1fr); }
+  .cuda-runtime-notice__actions { grid-column: 2; flex-direction: row; flex-wrap: wrap; align-items: center; }
+}
+@media (max-width: 760px) {
+  html, body, #root { min-width: 320px; min-height: 420px; }
+  .launcher-shell { min-height: 420px; }
+  .titlebar__brand { gap: 6px; padding-left: 9px; font-size: 11px; }
+  .titlebar__brand small, .titlebar__divider, .titlebar__state { display: none; }
+  .window-actions button { width: 35px; }
+  .launcher-workspace > .ready-layout { flex: 0 0 auto; grid-template-columns: 1fr; grid-template-rows: 240px auto 32px; overflow: visible; }
+  .launcher-workspace .ready-sidebar { overflow: visible; grid-template-rows: auto; }
+  .launcher-workspace .project-facts { display: none; }
+  .launcher-workspace .terminal-panel { min-height: 240px; }
+  .terminal-cursor-line { margin-bottom: 12px; }
+  .status-rail > span { white-space: nowrap; }
+  .status-rail > .status-rail__hint { display: none; }
+  .cuda-runtime-notice { padding: 12px; gap: 9px; }
+  .cuda-runtime-notice__actions { grid-column: 1 / -1; }
+  .cuda-runtime-notice__actions .runtime-button.is-primary { flex: 1 1 220px; }
+  .feedback-entry { padding: 8px; flex-wrap: wrap; gap: 8px; }
+  .feedback-entry > small { display: none; }
+  .launcher-modal__header { padding: 17px 17px 10px; }
+  .launcher-modal__header h2 { font-size: 16px; }
+  .launcher-modal__body { padding: 0 17px 16px; }
+  .launcher-modal__actions { padding: 12px 17px; }
+  .launcher-modal__actions .runtime-button { flex: 1 1 120px; }
+}
+@media (forced-colors: active) {
+  * { scrollbar-color: auto; }
+  .cuda-runtime-notice, .runtime-button, .launcher-modal { border-color: CanvasText; }
+}

@@ -21,7 +21,8 @@ async function fixture(run) {
   const restores = [];
   try {
     await originalFs.mkdir(server, { recursive:true });
-    for (const name of ["paths.mjs", "environment.mjs", "helper-process.mjs", "process-tree.mjs", "asset-manager.mjs", "role-assignment-manager.mjs"]) {
+    await originalFs.cp(path.resolve(serverRoot, "../shared"), path.resolve(server, "../shared"), { recursive: true });
+    for (const name of ["paths.mjs", "atomic-json.mjs", "progress-reader.mjs", "environment.mjs", "helper-process.mjs", "process-tree.mjs", "directory-files.mjs", "asset-manager.mjs", "role-assignment-manager.mjs"]) {
       await originalFs.copyFile(path.join(serverRoot, name), path.join(server, name));
     }
     await originalFs.mkdir(runtime, { recursive:true });

@@ -47,3 +47,7 @@ docs/images/product-*.png
 launcher/design/*.png
 webui/design/*.png
 *的冲突副本*
+
+# Recoverable local removals and externally licensed model assets
+待手动删除*/
+_internal/DeepFaceLab/pretrained/*.safetensors

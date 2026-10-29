@@ -1,26 +1,42 @@
 import { activeJobStates } from "./job-presentation.js";
+import { faceModelFamily } from "./tae-training-configuration.js";
 
 // A terminal selection must never redirect controls away from a live trainer.
 export function selectTrainingJob(jobs = [], selectedJob = null) {
-  const trainingJobs = jobs.filter(job => job.commandId === "train.me");
-  return trainingJobs.find(job => activeJobStates.has(job.state) && job.state !== "queued")
-    ?? trainingJobs.find(job => job.state === "queued")
-    ?? trainingJobs.find(job => job.id === selectedJob?.id)
-    ?? trainingJobs[0]
-    ?? null;
+  let first = null, queued = null, selected = null;
+  for (const job of jobs) {
+    if (job.commandId !== "train.me" && job.commandId !== "train.tae") continue;
+    if (job.state !== "queued" && activeJobStates.has(job.state)) return job;
+    first ??= job;
+    if (job.state === "queued") queued ??= job;
+    if (job.id === selectedJob?.id) selected ??= job;
+  }
+  return queued ?? selected ?? first;
 }
 
 // An explicitly named model that has disappeared is not interchangeable with
 // another checkpoint. Leave the new-task model picker in control when ambiguous.
-export function resolveSavedTrainingModel(models = [], job = null) {
-  const candidates = models.filter(model => model.type === "ME");
+export function getSavedTrainingContext(models = [], job = null) {
+  const family = job ? (job.commandId === "train.tae" ? "TAE" : "ME") : null;
   const requestedName = job?.parameters?.forceModelName;
-  if (requestedName) return candidates.find(model => model.name === requestedName) ?? null;
-  return candidates.length === 1 ? candidates[0] : null;
+  let candidate = null;
+  for (const model of models) {
+    const modelFamily = faceModelFamily(model);
+    if (family ? modelFamily !== family : modelFamily !== "ME" && modelFamily !== "TAE") continue;
+    if (requestedName) {
+      if (model.name === requestedName) return { model, state: "available" };
+    } else {
+      if (candidate) return { model: null, state: "ambiguous" };
+      candidate = model;
+    }
+  }
+  return { model: candidate, state: requestedName ? "missing" : candidate ? "available" : "empty" };
+}
+
+export function resolveSavedTrainingModel(models = [], job = null) {
+  return getSavedTrainingContext(models, job).model;
 }
 
 export function getSavedTrainingModelState(models = [], job = null) {
-  if (resolveSavedTrainingModel(models, job)) return "available";
-  if (job?.parameters?.forceModelName) return "missing";
-  return models.some(model => model.type === "ME") ? "ambiguous" : "empty";
+  return getSavedTrainingContext(models, job).state;
 }

@@ -1,6 +1,6 @@
 import { runHelperProcess } from "./helper-process.mjs";
-import { createHash, randomBytes } from "node:crypto";
-import { createReadStream } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { sha256File } from "./hash-file.mjs";
 import { mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { PATHS, assertWithin, pathExists, readJson, writeJsonAtomic } from "./paths.mjs";
@@ -80,8 +80,7 @@ export function normalizeSegments(segments, duration) {
 
 async function fingerprintMaterial(target) {
   const fileStat = await stat(target);
-  const digest = createHash("sha256");
-  for await (const chunk of createReadStream(target)) digest.update(chunk);
+  const digest = await sha256File(target);
   const after = await stat(target);
   if (after.size !== fileStat.size || after.mtimeMs !== fileStat.mtimeMs) {
     throw new VideoToolError("素材在读取时发生变化，请重新检查", "VIDEO_SOURCE_CHANGED", 409);
@@ -90,7 +89,7 @@ async function fingerprintMaterial(target) {
     name: path.basename(target),
     bytes: fileStat.size,
     modifiedAtMs: Math.round(fileStat.mtimeMs),
-    sha256: digest.digest("hex"),
+    sha256: digest,
   };
 }
 
@@ -287,7 +286,7 @@ export async function extractVideoSegments(side, { segments, fps = 0 } = {}) {
     // The native extractor records the decoded integer PTS and real source
     // frame index. Drop-only sampling does not manufacture CFR duplicates.
     await runProcess(PATHS.python, [
-      path.join(path.dirname(PATHS.currentMain), "core", "media_timeline.py"),
+      path.join(path.dirname(PATHS.dflMain), "core", "media_timeline.py"),
       "--source", material, "--output", staging, "--ffmpeg", PATHS.ffmpeg,
       "--ffprobe", PATHS.ffprobe, "--fps", String(safeFps), "--segments-json", JSON.stringify(selected),
     ]);

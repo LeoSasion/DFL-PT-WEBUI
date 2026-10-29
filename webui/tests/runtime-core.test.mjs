@@ -60,6 +60,7 @@ test("command registry exposes the approved fixed workflows", () => {
       "src.extract_faces",
       "dst.extract_frames",
       "dst.extract_faces",
+      "train.tae",
       "train.me",
       "model.import_me_tf",
       "src.sort_faces",
@@ -99,7 +100,9 @@ test("command registry exposes the approved fixed workflows", () => {
       "video.cut_dst",
       "dst.denoise_frames",
       "export.dfm_me",
+      "export.dfm_tae",
       "merge.me",
+      "merge.tae",
       "merge.preview_me",
       "encode.avi",
       "encode.master",
@@ -758,7 +761,7 @@ print(json.dumps({
 });
 
 test("ME pose evaluation uses inference mode and never advances the optimizer", async () => {
-  const source = await readFile(path.join(PATHS.currentDflRoot, "me_backend", "web_bridge.py"), "utf8");
+  const source = (await readFile(path.join(PATHS.currentDflRoot, "me_backend", "web_bridge.py"), "utf8")).replaceAll("\r\n", "\n");
   const method = source.slice(source.indexOf("@torch.inference_mode()\ndef evaluate("), source.indexOf("def train_web("));
   assert.match(method, /inference_mode/);
   assert.doesNotMatch(method, /optimizer\.step\(|train_step\(/);

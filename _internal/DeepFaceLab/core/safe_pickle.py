@@ -35,6 +35,9 @@ class Limits:
 PROFILES = {
     'metadata': Limits(65533, 100000, 1024 * 1024, 2 * 1024 * 1024),
     'faceset': Limits(128 * 1024 * 1024, 4000000, 16 * 1024 * 1024, 128 * 1024 * 1024),
+    # Explicit opt-in for large pretraining archives; the same data-only
+    # interpreter, individual-array, depth and executable-opcode checks apply.
+    'faceset-large': Limits(512 * 1024 * 1024, 32000000, 16 * 1024 * 1024, 512 * 1024 * 1024),
     'session': Limits(128 * 1024 * 1024, 4000000, 16 * 1024 * 1024, 128 * 1024 * 1024),
     'weights': Limits(1024 * 1024 * 1024, 2000000, 512 * 1024 * 1024, 1024 * 1024 * 1024),
 }

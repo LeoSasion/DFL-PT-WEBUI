@@ -42,7 +42,7 @@ try {
     if (-not $DryRun) {
         Assert-BootstrapRuntimeIdle -ProjectRoot $root
         $setup = Join-Path $PSScriptRoot 'setup-runtime.ps1'
-        if ($NoNetwork) { & $setup -ProjectRoot $root -NoNetwork }
+        if ($NoNetwork) { & $setup -ProjectRoot $root -NoNetwork -InstallDependencies:$Repair }
         else {
             $needsInstall = $false
             foreach ($component in $manifest.components) {
@@ -76,8 +76,7 @@ try {
                 # The host owns WebUI dependency repair and its forced rebuild.
                 # Keep backend runtimes and helper-weight validation here even
                 # when the existing node_modules cannot currently be loaded.
-                if ($Repair) { & $installer -ProjectRoot $root -SkipWebuiPreparation }
-                else { & $installer -ProjectRoot $root }
+                & $installer -ProjectRoot $root -SkipWebuiPreparation -RepairDependencies:$Repair
                 if ($LASTEXITCODE -ne 0) { throw 'PT source runtime installation failed.' }
             }
         }

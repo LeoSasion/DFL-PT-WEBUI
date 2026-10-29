@@ -1,6 +1,7 @@
-import { createHash, randomUUID } from "node:crypto";
-import { createReadStream } from "node:fs";
-import { lstat, readFile, readdir, rename, unlink, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { lstat, readFile, readdir } from "node:fs/promises";
+import { writeJsonFileAtomic } from "./atomic-json.mjs";
+import { sha256File } from "./hash-file.mjs";
 import path from "node:path";
 import { PATHS } from "./paths.mjs";
 import { bestFacesetManager } from "./best-faceset-manager.mjs";
@@ -48,8 +49,7 @@ export class ProjectUiStateManager {
         if (!/\.jpe?g$/i.test(name)) continue;
         safeMember(name); await this.facesets.plain(target);
         const before = await lstat(target, { bigint: true });
-        const hash = createHash("sha256");
-        for await (const chunk of createReadStream(target)) hash.update(chunk);
+        const hash = await sha256File(target);
         const after = await lstat(target, { bigint: true });
         if (before.size !== after.size || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs || before.ino !== after.ino)
           fail("读取时素材发生变化，请重试。", "PROJECT_UI_STATE_SOURCE_CHANGED", 409);
@@ -58,7 +58,7 @@ export class ProjectUiStateManager {
           const sidecar = `${target}.landmarks.json`; await this.facesets.plain(sidecar);
           sidecarHash = createHash("sha256").update(await readFile(sidecar)).digest("hex");
         } catch (error) { if (error.code !== "ENOENT") throw error; }
-        records.push([name, hash.digest("hex"), sidecarHash]);
+        records.push([name, hash, sidecarHash]);
       }
     };
     await walk(root);
@@ -77,9 +77,7 @@ export class ProjectUiStateManager {
   async write(name, value) {
     const file = this.file(name); await this.facesets.plain(path.dirname(file), { directory: true, create: true });
     try { await this.facesets.plain(file); } catch (error) { if (error.code !== "ENOENT") throw error; }
-    const temporary = `${file}.${randomUUID()}.tmp`;
-    try { await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { flag: "wx" }); await rename(temporary, file); }
-    finally { await unlink(temporary).catch(error => { if (error.code !== "ENOENT") throw error; }); }
+    await writeJsonFileAtomic(file, value);
   }
   serial(name, action) {
     const previous = this.writes.get(name) ?? Promise.resolve();

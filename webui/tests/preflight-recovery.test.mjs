@@ -36,3 +36,10 @@ test("parameter, resource lock and XSeg annotation guidance remains specific", (
     assert.equal(preflightRecovery({ code }, { stage: "train" }, t).target, target);
   }
 });
+
+test("missing TAE training pools return to the retained task parameters", () => {
+  for (const code of ["INPUT_MISSING", "INPUT_EMPTY"]) {
+    assert.deepEqual(preflightRecovery({ code }, { id: "train.tae", stage: "train" }, t),
+      { target: "parameters", label: "返回修改参数" });
+  }
+});

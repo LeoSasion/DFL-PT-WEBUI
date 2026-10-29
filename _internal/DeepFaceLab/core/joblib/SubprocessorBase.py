@@ -1,7 +1,6 @@
 import traceback
 import multiprocessing
 import time
-import sys
 import os
 import queue
 from core.interact import interact as io

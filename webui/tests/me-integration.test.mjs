@@ -8,10 +8,10 @@ import { JobManager } from "../server/job-manager.mjs";
 import { PATHS } from "../server/paths.mjs";
 import { discoverModels } from "../server/workspace-manager.mjs";
 
-test("face model commands are exclusively ME and use the repository PyTorch runtime", () => {
+test("ME and TAE commands use the repository PyTorch runtime without legacy trainers", () => {
   const commands = listCommands();
-  assert.deepEqual(commands.filter(command => command.category === "training").map(command => command.id), ["train.me", "xseg.train"]);
-  for (const id of ["train.saehd", "train.q384", "train.q512", "merge.saehd", "merge.amp", "export.dfm_saehd"]) {
+  assert.deepEqual(commands.filter(command => command.category === "training").map(command => command.id), ["train.tae", "train.me", "xseg.train"]);
+  for (const id of ["train.h3me", "merge.h3me", "train.saehd", "train.q384", "train.q512", "merge.saehd", "merge.amp", "export.dfm_saehd"]) {
     assert.equal(getCommandDefinition(id), null);
     assert.throws(() => validateCommandParameters(id), { code: "COMMAND_NOT_ALLOWED" });
   }

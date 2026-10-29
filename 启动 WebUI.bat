@@ -44,6 +44,7 @@ if not defined UI_LANG set "UI_LANG=en"
 :initialize
 set "DFL_UI_LANG=%UI_LANG%"
 call "%~dp0_internal\setenv.bat"
+if errorlevel 1 exit /b %errorlevel%
 
 call :find_node
 if not defined NODE_EXE (

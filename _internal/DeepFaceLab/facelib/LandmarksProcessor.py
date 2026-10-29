@@ -1,6 +1,4 @@
-import colorsys
 import math
-from enum import IntEnum
 
 import cv2
 import numpy as np
@@ -519,6 +517,28 @@ def get_image_hull_mask (image_shape, image_landmarks, eyebrows_expand_mod=1.0 )
 
     return hull_mask
 
+def _dilate_sparse_mask(mask, kernel):
+    """Dilate sparse binary eye/mouth regions, retaining full-frame borders."""
+    if max(kernel.shape) <= 8:
+        return cv2.dilate(mask, kernel, iterations=1)
+    plane = mask[:, :, 0] if mask.ndim == 3 else mask
+    height, width = plane.shape
+    x, y, w, h = cv2.boundingRect((plane != 0).astype(np.uint8))
+    if not w or not h:
+        return np.zeros_like(plane)
+    # A whole-kernel margin safely contains the dilated support, including
+    # the asymmetric anchor of even-sized ellipses. Clamp only at real borders.
+    kh, kw = kernel.shape
+    left, top = max(0, x-kw), max(0, y-kh)
+    right, bottom = min(width, x+w+kw), min(height, y+h+kh)
+    if left == top == 0 and right == width and bottom == height:
+        return cv2.dilate(mask, kernel, iterations=1)
+    result = np.zeros_like(plane)
+    result[top:bottom, left:right] = cv2.dilate(
+        plane[top:bottom, left:right], kernel, iterations=1)
+    return result
+
+
 def get_image_eye_mask (image_shape, image_landmarks):
     if len(image_landmarks) != 68:
         raise Exception('get_image_eye_mask works only with 68 landmarks')
@@ -533,7 +553,7 @@ def get_image_eye_mask (image_shape, image_landmarks):
     cv2.fillConvexPoly( hull_mask, cv2.convexHull( image_landmarks[42:48]), (1,) )
 
     dilate = h // 32
-    hull_mask = cv2.dilate(hull_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(dilate,dilate)), iterations = 1 )
+    hull_mask = _dilate_sparse_mask(hull_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(dilate,dilate)))
 
     blur = h // 16
     blur = blur + (1-blur % 2)
@@ -555,7 +575,7 @@ def get_image_mouth_mask (image_shape, image_landmarks):
     cv2.fillConvexPoly( hull_mask, cv2.convexHull( image_landmarks[60:]), (1,) )
 
     dilate = h // 32
-    hull_mask = cv2.dilate(hull_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(dilate,dilate)), iterations = 1 )
+    hull_mask = _dilate_sparse_mask(hull_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(dilate,dilate)))
 
     blur = h // 16
     blur = blur + (1-blur % 2)
@@ -911,101 +931,3 @@ def estimate_pitch_yaw_roll(aligned_landmarks, size=256):
 #        x_diff = x_diff[1]-x_diff[0]
 #
 #    mat = cv2.getAffineTransform( l_t+y_diff+x_diff ,pts2)
-
-
-"""
-def get_averaged_transform_mat (img_landmarks,
-                                img_landmarks_prev,
-                                img_landmarks_next,
-                                average_frame_count,
-                                average_center_frame_count,
-                                output_size, face_type, scale=1.0):
-
-    l_c_list = []
-    tb_diag_vec_list = []
-    bt_diag_vec_list = []
-    mod_list = []
-
-    count = max(average_frame_count,average_center_frame_count)
-    for i in range ( -count, count+1, 1 ):
-        if i < 0:
-            lmrks = img_landmarks_prev[i] if -i < len(img_landmarks_prev) else None
-        elif i > 0:
-            lmrks = img_landmarks_next[i] if i < len(img_landmarks_next) else None
-        else:
-            lmrks = img_landmarks
-
-        if lmrks is None:
-            continue
-
-        l_c, tb_diag_vec, bt_diag_vec, mod = get_transform_mat_data (lmrks, face_type, scale=scale)
-
-        if i >= -average_frame_count and i <= average_frame_count:
-            tb_diag_vec_list.append(tb_diag_vec)
-            bt_diag_vec_list.append(bt_diag_vec)
-            mod_list.append(mod)
-
-        if i >= -average_center_frame_count and i <= average_center_frame_count:
-            l_c_list.append(l_c)
-
-    tb_diag_vec = np.mean( np.array(tb_diag_vec_list), axis=0 )
-    bt_diag_vec = np.mean( np.array(bt_diag_vec_list), axis=0 )
-    mod         = np.mean( np.array(mod_list), axis=0 )
-    l_c         = np.mean( np.array(l_c_list), axis=0 )
-
-    return get_transform_mat_by_data (l_c, tb_diag_vec, bt_diag_vec, mod, output_size, face_type)
-
-
-def get_transform_mat (image_landmarks, output_size, face_type, scale=1.0):
-    if not isinstance(image_landmarks, np.ndarray):
-        image_landmarks = np.array (image_landmarks)
-
-    # get face padding value for FaceType
-    padding, remove_align = FaceType_to_padding_remove_align.get(face_type, 0.0)
-
-    # estimate landmarks transform from global space to local aligned space with bounds [0..1]
-    mat = umeyama( np.concatenate ( [ image_landmarks[17:49] , image_landmarks[54:55] ] ) , landmarks_2D_new, True)[0:2]
-
-    # get corner points in global space
-    l_p = transform_points (  np.float32([(0,0),(1,0),(1,1),(0,1),(0.5,0.5)]) , mat, True)
-    l_c = l_p[4]
-
-    # calc diagonal vectors between corners in global space
-    tb_diag_vec = (l_p[2]-l_p[0]).astype(np.float32)
-    tb_diag_vec /= npla.norm(tb_diag_vec)
-    bt_diag_vec = (l_p[1]-l_p[3]).astype(np.float32)
-    bt_diag_vec /= npla.norm(bt_diag_vec)
-
-    # calc modifier of diagonal vectors for scale and padding value
-    mod = (1.0 / scale)* ( npla.norm(l_p[0]-l_p[2])*(padding*np.sqrt(2.0) + 0.5) )
-
-    # calc 3 points in global space to estimate 2d affine transform
-    if not remove_align:
-        l_t = np.array( [ np.round( l_c - tb_diag_vec*mod ),
-                          np.round( l_c + bt_diag_vec*mod ),
-                          np.round( l_c + tb_diag_vec*mod ) ] )
-    else:
-        # remove_align - face will be centered in the frame but not aligned
-        l_t = np.array( [ np.round( l_c - tb_diag_vec*mod ),
-                          np.round( l_c + bt_diag_vec*mod ),
-                          np.round( l_c + tb_diag_vec*mod ),
-                          np.round( l_c - bt_diag_vec*mod ),
-                         ] )
-
-        # get area of face square in global space
-        area = mathlib.polygon_area(l_t[:,0], l_t[:,1] )
-
-        # calc side of square
-        side = np.float32(math.sqrt(area) / 2)
-
-        # calc 3 points with unrotated square
-        l_t = np.array( [ np.round( l_c + [-side,-side] ),
-                          np.round( l_c + [ side,-side] ),
-                          np.round( l_c + [ side, side] ) ] )
-
-    # calc affine transform from 3 global space points to 3 local space points size of 'output_size'
-    pts2 = np.float32(( (0,0),(output_size,0),(output_size,output_size) ))
-    mat = cv2.getAffineTransform(l_t,pts2)
-
-    return mat
-"""

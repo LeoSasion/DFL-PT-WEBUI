@@ -28,5 +28,6 @@ def training_options(parser):
     parser.add_argument('--archi', default=None)
     parser.add_argument('--rg', dest='use_rg', action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument('--fp16', dest='use_fp16', action=argparse.BooleanOptionalAction, default=None)
+    parser.add_argument('--bf16', dest='use_bf16', action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument('--optimizer-on-cpu', action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument('--pretrain', action=argparse.BooleanOptionalAction, default=None)

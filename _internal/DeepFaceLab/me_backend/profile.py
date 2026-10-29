@@ -114,10 +114,10 @@ def benchmark(config, source_path, destination_path, device='cuda:0', seed=7, wa
     for use_rg, use_fp16, optimizer_on_cpu in _variants(device):
         if torch.device(device).type == 'cuda':
             torch.cuda.empty_cache()
-        variant_config = replace(config, use_rg=use_rg, use_fp16=use_fp16,
+        variant_config = replace(config, use_rg=use_rg, use_fp16=use_fp16, use_bf16=False,
                                  optimizer_on_cpu=optimizer_on_cpu)
         engine = MEEngine(variant_config, device, seed)
-        options = dict(use_rg=use_rg, use_fp16=use_fp16, optimizer_on_cpu=optimizer_on_cpu)
+        options = dict(use_rg=use_rg, use_fp16=use_fp16, use_bf16=False, optimizer_on_cpu=optimizer_on_cpu)
         variant_name = f"rg{int(use_rg)}-fp16{int(use_fp16)}-cpuopt{int(optimizer_on_cpu)}"
         try:
             for _ in range(warmup):

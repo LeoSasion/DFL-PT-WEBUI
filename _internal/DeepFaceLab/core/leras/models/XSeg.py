@@ -1,5 +1,4 @@
 import torch
-import torch.nn.functional as F
 from core.leras import nn
 
 class XSeg(nn.ModelBase):

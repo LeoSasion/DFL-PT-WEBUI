@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "defaultRuntime": "cu128",
+  "runtimes": {
+    "cu128": {
+      "torch": "2.9.1+cu128",
+      "torchvision": "0.24.1+cu128",
+      "cuda": "12.8",
+      "indexUrl": "https://download.pytorch.org/whl/cu128",
+      "architectures": [
+        "sm_70",
+        "sm_75",
+        "sm_80",
+        "sm_86",
+        "sm_90",
+        "sm_100",
+        "sm_120"
+      ],
+      "buildSource": "https://raw.githubusercontent.com/pytorch/pytorch/v2.9.1/.ci/pytorch/windows/cuda128.bat",
+      "packages": {},
+      "cudnnVersion": 91002
+    },
+    "cu126": {
+      "torch": "2.9.1+cu126",
+      "torchvision": "0.24.1+cu126",
+      "cuda": "12.6",
+      "indexUrl": "https://download.pytorch.org/whl/cu126",
+      "architectures": [
+        "sm_50",
+        "sm_60",
+        "sm_61",
+        "sm_70",
+        "sm_75",
+        "sm_80",
+        "sm_86",
+        "sm_90"
+      ],
+      "buildSource": "https://raw.githubusercontent.com/pytorch/pytorch/v2.9.1/.ci/pytorch/windows/cuda126.bat",
+      "packages": {
+        "torch": {
+          "name": "torch",
+          "version": "2.9.1+cu126",
+          "requires": [
+            "filelock",
+            "typing-extensions>=4.10.0",
+            "sympy>=1.13.3",
+            "networkx>=2.5.1",
+            "jinja2",
+            "fsspec>=0.8.5",
+            "setuptools; python_version >= \"3.12\"",
+            "opt-einsum>=3.3; extra == \"opt-einsum\"",
+            "optree>=0.13.0; extra == \"optree\"",
+            "pyyaml; extra == \"pyyaml\""
+          ],
+          "license": "BSD-3-Clause",
+          "homepage": null,
+          "profiles": [
+            "scene",
+            "production",
+            "restoration",
+            "validation",
+            "evaluation"
+          ],
+          "wheel": {
+            "file": "torch-2.9.1+cu126-cp312-cp312-win_amd64.whl",
+            "version": "2.9.1+cu126",
+            "sha256": "f2f1c68c7957ed8b6b56fc450482eb3fa53947fb74838b03834a1760451cf60f",
+            "sizeBytes": 2584508946,
+            "tags": [
+              "cp312-cp312-win_amd64"
+            ],
+            "url": "https://download-r2.pytorch.org/whl/cu126/torch-2.9.1%2Bcu126-cp312-cp312-win_amd64.whl",
+            "indexURL": "https://download.pytorch.org/whl/cu126/torch/"
+          }
+        },
+        "torchvision": {
+          "name": "torchvision",
+          "version": "0.24.1+cu126",
+          "requires": [
+            "numpy",
+            "torch (==2.9.1)",
+            "pillow (!=8.3.*,>=5.3.0)",
+            "gdown (>=4.7.3) ; extra == 'gdown'",
+            "scipy ; extra == 'scipy'"
+          ],
+          "license": "BSD",
+          "homepage": "https://github.com/pytorch/vision",
+          "profiles": [
+            "scene",
+            "production",
+            "restoration",
+            "validation",
+            "evaluation"
+          ],
+          "wheel": {
+            "file": "torchvision-0.24.1+cu126-cp312-cp312-win_amd64.whl",
+            "version": "0.24.1+cu126",
+            "sha256": "54c1902bad62bd113f66dd3cc0368aa4d0005837100d3ab9dc823aebf945ead0",
+            "sizeBytes": 8791048,
+            "tags": [
+              "cp312-cp312-win_amd64"
+            ],
+            "url": "https://download-r2.pytorch.org/whl/cu126/torchvision-0.24.1%2Bcu126-cp312-cp312-win_amd64.whl",
+            "indexURL": "https://download.pytorch.org/whl/cu126/torchvision/"
+          }
+        }
+      },
+      "cudnnVersion": 91002
+    }
+  }
+}

@@ -30,24 +30,70 @@ class _ImageReference:
     packed_sample: object = None
 
 
-def read_aligned(path, config):
+@dataclass(frozen=True)
+class _DecodedAligned:
+    """One read/decode shared by validation and alignment, never a dataset cache."""
+    name: str
+    payload: bytes
+    image: object
+    face_type: object
+    dfl: object
+    packed: object
+    metadata: dict
+
+
+def decode_aligned(path, *, include_metadata=False):
+    """Read an aligned sample once, including virtual PAK/ZIP members.
+
+    Loose JPEGs retain IMREAD_UNCHANGED (including grayscale rejection and
+    EXIF behavior); packed samples retain their existing IMREAD_COLOR policy.
+    Packed training metadata remains authoritative. Embedded metadata is parsed
+    only when the TAE startup identity/holdout policy asks for it.
+    """
     packed = path.packed_sample if isinstance(path, _ImageReference) else (
         path if hasattr(path, 'read_raw_file') else None)
     name = path.path if isinstance(path, _ImageReference) else str(path)
     if packed is None:
-        dfl = DFLIMG.load(name)
+        try:
+            payload = Path(name).read_bytes()
+        except OSError as error:
+            raise ValueError(f'{name}: missing DFL aligned metadata') from error
+        dfl = DFLIMG.load(name, loader_func=lambda _: payload)
         if dfl is None or not dfl.has_data():
             raise ValueError(f'{name}: missing DFL aligned metadata')
-        image = dfl.get_img()
-        landmarks = dfl.get_landmarks()
+        try:
+            image = cv2.imdecode(np.frombuffer(payload, np.uint8), cv2.IMREAD_UNCHANGED)
+        except cv2.error:
+            # DFLJPG.get_img()/cv2_imread previously returned None on decoder
+            # errors. Keep malformed loose samples on the ValueError path so
+            # TAE pretraining can record/exclude them and continue scanning.
+            image = None
         source_type = FaceType.fromString(dfl.get_face_type())
-        full = dfl.get_xseg_mask()
-        eyebrows = dfl.get_eyebrows_expand_mod()
+        metadata = dfl.get_dict()
     else:
         payload = packed.read_raw_file()
         image = cv2.imdecode(np.frombuffer(payload, np.uint8), cv2.IMREAD_COLOR)
-        landmarks = packed.landmarks
         source_type = FaceType(packed.face_type)
+        dfl = DFLIMG.load(name, loader_func=lambda _: payload) if include_metadata else None
+        metadata = dfl.get_dict() if dfl is not None and dfl.has_data() else {}
+    return _DecodedAligned(name, payload, image, source_type, dfl, packed, metadata)
+
+
+def read_aligned(path, config, *, decoded=None, include_masks=True):
+    """Align a decoded face; image-only consumers skip unused mask work.
+
+    Image, landmarks, crop type and supplied XSeg data retain the same input
+    validation. Return the usual triple, with None masks when not requested.
+    """
+    decoded = decode_aligned(path) if decoded is None else decoded
+    name, image, source_type = decoded.name, decoded.image, decoded.face_type
+    dfl, packed = decoded.dfl, decoded.packed
+    if packed is None:
+        landmarks = dfl.get_landmarks()
+        full = dfl.get_xseg_mask()
+        eyebrows = dfl.get_eyebrows_expand_mod()
+    else:
+        landmarks = packed.landmarks
         full = packed.get_xseg_mask()
         eyebrows = packed.eyebrows_expand_mod
     if image is None or image.ndim != 3 or image.shape[2] != 3:
@@ -58,19 +104,25 @@ def read_aligned(path, config):
         raise ValueError(f'{name}: expected finite 68-point landmarks')
     if source_type == FaceType.MARK_ONLY:
         raise ValueError(f'{name}: mark_only is not an aligned crop')
-    if full is None:
-        full = LandmarksProcessor.get_image_hull_mask(image.shape,landmarks,eyebrows)
-    else:
-        if not np.isfinite(full).all() or full.ndim not in (2, 3) or (full.ndim == 3 and full.shape[2] != 1):
-            raise ValueError(f'{name}: invalid XSeg mask')
-        full = cv2.resize(full, image.shape[1::-1], interpolation=cv2.INTER_CUBIC)[...,None]
-    full = np.clip(full,0,1)
-    eyes = np.clip(LandmarksProcessor.get_image_eye_mask(image.shape,landmarks),0,1)
-    mouth = np.clip(LandmarksProcessor.get_image_mouth_mask(image.shape,landmarks),0,1)
-    eyes = np.where(eyes>.1,eyes+1,eyes)*(full!=0)
-    mouth = np.where(mouth>.1,mouth+2,mouth)*(full!=0)
-    encoded = np.where(eyes>1,eyes,full)
-    encoded = np.where(mouth>2,mouth,encoded)
+    if full is not None and (not np.isfinite(full).all() or full.ndim not in (2, 3) or
+                            0 in full.shape[:2] or (full.ndim == 3 and full.shape[2] != 1)):
+        raise ValueError(f'{name}: invalid XSeg mask')
+    if not include_masks and full is None:
+        # Preserve the hull path's eyebrow-metadata validation without
+        # allocating or rasterizing its full-resolution mask.
+        LandmarksProcessor.expand_eyebrows(landmarks, eyebrows)
+    if include_masks:
+        if full is None:
+            full = LandmarksProcessor.get_image_hull_mask(image.shape,landmarks,eyebrows)
+        else:
+            full = cv2.resize(full, image.shape[1::-1], interpolation=cv2.INTER_CUBIC)[...,None]
+        full = np.clip(full,0,1)
+        eyes = np.clip(LandmarksProcessor.get_image_eye_mask(image.shape,landmarks),0,1)
+        mouth = np.clip(LandmarksProcessor.get_image_mouth_mask(image.shape,landmarks),0,1)
+        eyes = np.where(eyes>.1,eyes+1,eyes)*(full!=0)
+        mouth = np.where(mouth>.1,mouth+2,mouth)*(full!=0)
+        encoded = np.where(eyes>1,eyes,full)
+        encoded = np.where(mouth>2,mouth,encoded)
     target_type = FACE_TYPES[config.face_type]
     size = config.resolution
     if source_type == target_type:
@@ -81,19 +133,21 @@ def read_aligned(path, config):
         def align(x, interpolation, border):
             return cv2.warpAffine(x,matrix,(size,size),flags=interpolation,borderMode=border)
     image = np.clip(align(image,cv2.INTER_CUBIC,cv2.BORDER_REPLICATE),0,1)
+    if not include_masks:
+        return image, None, None
     full = align(full,cv2.INTER_LINEAR,cv2.BORDER_CONSTANT).reshape(size,size,1)
     encoded = align(encoded,cv2.INTER_LINEAR,cv2.BORDER_CONSTANT).reshape(size,size,1)
     return image, full, encoded
 
 
-def _load_inventory(directory):
+def _load_inventory(directory, *, allow_large=False):
     from samplelib.PackedFaceset import PackedFaceset, _member
     original = Path(directory).resolve()
     archive = original if original.is_file() and original.suffix.lower() in ('.pak', '.zip') else None
     root = archive.parent if archive else original
     if not root.is_dir():
         raise ValueError(f'Aligned dataset directory does not exist: {directory}')
-    samples = PackedFaceset.load(root, archive_path=archive)
+    samples = PackedFaceset.load(root, archive_path=archive, allow_large=allow_large)
     if samples is not None:
         if not samples:
             raise ValueError(f'Packed aligned faceset is empty: {directory}')
@@ -112,7 +166,10 @@ def _load_inventory(directory):
             raise ValueError(f'No aligned JPG images or faceset PAK/ZIP in {directory}')
         references = [_ImageReference(str(p)) for p in paths]
         # Flat directories retain the earlier checkpoint fingerprint exactly.
-        inventory = [(p.relative_to(root).as_posix(), p.stat().st_size, p.stat().st_mtime_ns) for p in paths]
+        inventory = []
+        for path in paths:
+            info = path.stat()
+            inventory.append((path.relative_to(root).as_posix(), info.st_size, info.st_mtime_ns))
     fingerprint = hashlib.sha256(repr(inventory).encode()).hexdigest()
     return root, references, fingerprint
 
@@ -145,7 +202,8 @@ def _process_sample(reference, config, source, seed, warp_seed, color_reference)
     rnd, warp_rnd = np.random.RandomState(seed), np.random.RandomState(warp_seed)
     flip = config.random_src_flip if source else config.random_dst_flip
     params = gen_warp_params(config.resolution, flip, rotation_range=[-3, 3],
-                             scale_range=[-.05, .05], rnd_state=rnd, warp_rnd_state=warp_rnd)
+                             scale_range=[-.05, .05], rnd_state=rnd, warp_rnd_state=warp_rnd,
+                             generate_warp=config.random_warp)
     def warp(value, random_warp=False, mask=False):
         return warp_by_params(params, value, random_warp, True, True, not mask,
                               cv2.INTER_LINEAR if mask else cv2.INTER_CUBIC)
@@ -164,14 +222,24 @@ def _process_sample(reference, config, source, seed, warp_seed, color_reference)
             h, s, v = cv2.split(cv2.cvtColor(value_image, cv2.COLOR_BGR2HSV))
             return np.clip(cv2.cvtColor(cv2.merge(((h + hue) % 360,
                 np.clip(s + saturation, 0, 1), np.clip(v + value, 0, 1))), cv2.COLOR_HSV2BGR), 0, 1)
+        shared_image = input_image is target_image
         target_image = hsv(target_image)
         # Preserve local ME's destination policy: HSV only changes its target.
         if source:
-            input_image = hsv(input_image)
+            input_image = target_image if shared_image else hsv(input_image)
+    # With no input distortion or nonlinear warp, both RGB paths consume the
+    # same object. Reuse deterministic transforms; public outputs still own
+    # separate arrays so changing a warped input cannot alter its target.
+    shared_image = not config.random_warp and input_image is target_image
     target = np.clip(warp(target_image), 0, 1)
-    warped = np.clip(warp(input_image, config.random_warp), 0, 1)
+    if not shared_image:
+        warped = np.clip(warp(input_image, config.random_warp), 0, 1)
     if getattr(config, 'random_color', False):
-        target, warped = rotate_lab_color(target, seed), rotate_lab_color(warped, seed)
+        target = rotate_lab_color(target, seed)
+        if not shared_image:
+            warped = rotate_lab_color(warped, seed)
+    if shared_image:
+        warped = target.copy()
     result = (warped, target, np.clip(warp(full, mask=True), 0, 1), warp(encoded, mask=True))
     if not all(np.isfinite(value).all() for value in result):
         raise ValueError(f'{reference.path}: nonfinite ME batch sample')
@@ -183,10 +251,28 @@ def _stack_batch(samples):
                  for items in zip(*samples))
 
 
+@dataclass(frozen=True)
+class _SamplerCheckpoint:
+    state: dict
+
+    def materialize(self):
+        return copy.deepcopy(self.state)
+
+
+@dataclass(frozen=True)
+class _PairCheckpoint:
+    source: object
+    destination: object
+
+    def materialize(self):
+        return dict(src=self.source.materialize(), dst=self.destination.materialize())
+
+
 class AlignedDataset:
     def __init__(self, directory, config, source, seed):
         self.config, self.source = config, bool(source)
-        self.directory, self._references, self.fingerprint = _load_inventory(directory)
+        self.directory, self._references, self.fingerprint = _load_inventory(
+            directory, allow_large=getattr(config, 'allow_large_faceset', False))
         self.paths = [Path(reference.path) for reference in self._references]
         mode = getattr(config, 'ct_mode', 'none')
         if mode not in CT_MODES:
@@ -217,6 +303,10 @@ class AlignedDataset:
             state['reference_fingerprint'] = (self._color_reference.fingerprint if self._color_reference
                                                else self._saved_reference_fingerprint)
         return state
+
+    def checkpoint_snapshot(self):
+        """Capture the next unconsumed batch without changing state_dict's API."""
+        return _SamplerCheckpoint(self.state_dict())
 
     def load_state_dict(self, state):
         if state['fingerprint'] != self.fingerprint:
@@ -344,6 +434,15 @@ class PairDataLoader:
 
     def state_dict(self):
         return dict(src=self.source_data.state_dict(), dst=self.destination_data.state_dict())
+
+    def checkpoint_snapshot(self):
+        """Capture after consuming a pair, before loading its successor.
+
+        Materialize at save time. TAE snapshots support at most one subsequently
+        loaded, unconsumed pair; the bridge renews this bookmark after each step.
+        """
+        return _PairCheckpoint(self.source_data.checkpoint_snapshot(),
+                               self.destination_data.checkpoint_snapshot())
 
     def load_state_dict(self, state):
         self.source_data.load_state_dict(state['src'])

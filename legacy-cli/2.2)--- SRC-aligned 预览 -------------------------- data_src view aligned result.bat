@@ -1,9 +1,7 @@
 @echo off
 setlocal EnableExtensions
 chcp 65001 >nul
-call "%~dp0..\_internal\setenv.bat"
-if errorlevel 1 exit /b %errorlevel%
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0external-tools.ps1" -Tool XnViewMP -InputDirectory "%WORKSPACE%\data_src\aligned"
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0open-native-tool.ps1" -View aligned -Side src
 set "TOOL_EXIT=%errorlevel%"
 pause
 exit /b %TOOL_EXIT%

@@ -124,8 +124,13 @@ class DeepFakeArchi(ArchiBase):
                     x = nn.flatten(x)
                     if 'u' in opts:
                         # pixel_norm: x / sqrt(mean(x^2) + epsilon)
+                        # Keep the reduction in FP32 for AMP and quantized
+                        # exports: squaring FP16 activations can overflow.
+                        input_dtype = x.dtype
+                        x = x.float()
                         epsilon = 1e-6
                         x = x / torch.sqrt(torch.mean(x**2, dim=-1, keepdim=True) + epsilon)
+                        x = x.to(input_dtype)
 
                     if use_fp16:
                         x = x.to(torch.float32)
@@ -245,6 +250,17 @@ class DeepFakeArchi(ArchiBase):
                         x = torch.sigmoid(self.out_conv(x))
 
 
+                    m = self.forward_mask(z)
+
+                    if use_fp16:
+                        x = x.to(torch.float32)
+
+                    return x, m
+
+                def forward_mask(self, z):
+                    """Decode the independent mask path without unused RGB work."""
+                    if not self.built:
+                        self.build()
                     m = self.upscalem0(z)
                     m = self.upscalem1(m)
                     m = self.upscalem2(m)
@@ -260,10 +276,9 @@ class DeepFakeArchi(ArchiBase):
                     m = torch.sigmoid(self.out_convm(m))
 
                     if use_fp16:
-                        x = x.to(torch.float32)
                         m = m.to(torch.float32)
 
-                    return x, m
+                    return m
 
         self.Encoder = Encoder
         self.Inter = Inter

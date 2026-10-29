@@ -34,8 +34,9 @@ async function fixture(run) {
   process.env.PYTHONDONTWRITEBYTECODE = "1";
   try {
     await originalFs.mkdir(server, { recursive: true });
+    await originalFs.cp(path.join(sourceWebui, "shared"), path.join(root, "webui", "shared"), { recursive: true });
     await originalFs.mkdir(aligned, { recursive: true });
-    for (const name of ["paths.mjs", "environment.mjs", "helper-process.mjs", "process-tree.mjs", "asset-manager.mjs"]) {
+    for (const name of ["paths.mjs", "atomic-json.mjs", "progress-reader.mjs", "environment.mjs", "helper-process.mjs", "process-tree.mjs", "directory-files.mjs", "asset-manager.mjs"]) {
       await originalFs.copyFile(path.join(sourceWebui, "server", name), path.join(server, name));
     }
     await originalFs.cp(path.join(sourceWebui, "python"), path.join(root, "webui", "python"), {

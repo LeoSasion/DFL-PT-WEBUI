@@ -1056,10 +1056,12 @@ code {
 .training-preview-stage {
   position: relative;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .training-preview-stage .preview-block {
-  height: 100%;
+  flex: 1;
   min-height: 0;
   grid-template-rows: 34px minmax(0, 1fr);
 }
@@ -1083,9 +1085,15 @@ code {
 }
 
 .training-run-progress {
-  position: absolute;
-  z-index: 5;
-  inset: 0 0 auto;
+  flex-shrink: 0;
+  margin-bottom: 8px;
+}
+
+.training-timing-note {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .chart-block {

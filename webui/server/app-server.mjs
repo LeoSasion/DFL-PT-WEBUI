@@ -37,6 +37,7 @@ import {
 } from "./asset-manager.mjs";
 import { listCommands, prepareCommand } from "./command-registry.mjs";
 import { ME_CONFIG_PARAMETERS } from "../shared/me-training-options.mjs";
+import { TAE_CONFIG_PARAMETERS } from "../shared/tae-training-options.mjs";
 import { describeEnvironment } from "./environment.mjs";
 import { DisabledExternalWindowAdapter } from "./external-window-adapter.mjs";
 import { JobManager } from "./job-manager.mjs";
@@ -112,15 +113,16 @@ async function sendImageServiceFile(response, file, { download = false } = {}) {
   if (bytes) { response.end(bytes); return; }
   createReadStream(file.path).on("error", () => response.destroy()).pipe(response);
 }
-const ME_CONFIG_KEYS = new Set(ME_CONFIG_PARAMETERS.map(parameter => parameter.configKey));
+const TRAIN_CONFIG_KEYS = new Set([...ME_CONFIG_PARAMETERS, ...TAE_CONFIG_PARAMETERS].map(parameter => parameter.configKey));
 // Expose confirmation data explicitly rather than forwarding internal preflight state.
 function trainingPreflightSummary(training) {
   if (!training) return null;
   const fields = ["initializeFrom", "resumed", "srcFaceset", "dstFaceset", "pretrainingDataDir",
-    "sourceDirectory", "legacyModelName", "destination", "networkOnly"];
+    "sourceDirectory", "legacyModelName", "destination", "networkOnly", "newOptimizationStage"];
   return {
-    config: Object.fromEntries(Object.entries(training.config ?? {}).filter(([key]) => ME_CONFIG_KEYS.has(key))),
-    changes: (training.changes ?? []).filter(change => ME_CONFIG_KEYS.has(change.field))
+    config: Object.fromEntries(Object.entries(training.config ?? {}).filter(([key]) => TRAIN_CONFIG_KEYS.has(key))),
+    changes: (training.changes ?? []).map(change => typeof change === "string"
+      ? { field: change, next: training.config?.[change] } : change).filter(change => TRAIN_CONFIG_KEYS.has(change.field))
       .map(change => ({ field: change.field, previous: change.previous, next: change.next })),
     ...Object.fromEntries(fields.filter(key => Object.hasOwn(training, key)).map(key => [key, training[key]])),
   };
@@ -816,14 +818,13 @@ export class RuntimeServer {
   }
 
   async buildSystemDiagnostic() {
-    const [workspace, telemetry, storage, pythonAvailable, currentAvailable, legacyAvailable, workspaceAvailable] =
+    const [workspace, telemetry, storage, pythonAvailable, currentAvailable, workspaceAvailable] =
       await Promise.all([
         inspectWorkspace(),
         getGpuTelemetry(),
         inspectStorage(PATHS.workspaceRoot),
         pathExists(PATHS.python),
-        pathExists(PATHS.currentMain),
-        pathExists(PATHS.legacyMain),
+        pathExists(PATHS.dflMain),
         pathExists(PATHS.workspaceRoot),
       ]);
     return buildDiagnosticSnapshot({
@@ -841,7 +842,7 @@ export class RuntimeServer {
         profile: "local",
         pythonAvailable,
         currentAvailable,
-        legacyAvailable,
+        legacyAvailable: currentAvailable,
         workspaceAvailable,
       },
     });
@@ -958,11 +959,10 @@ export class RuntimeServer {
       throw this.imageServiceInitializationError;
     }
     if (request.method === "GET" && url.pathname === "/api/health") {
-      const [pythonAvailable, currentAvailable, legacyAvailable, workspaceAvailable] =
+      const [pythonAvailable, currentAvailable, workspaceAvailable] =
         await Promise.all([
           pathExists(PATHS.python),
-          pathExists(PATHS.currentMain),
-          pathExists(PATHS.legacyMain),
+          pathExists(PATHS.dflMain),
           pathExists(PATHS.workspaceRoot),
         ]);
       return sendJson(
@@ -977,7 +977,7 @@ export class RuntimeServer {
             runtime: {
               pythonAvailable,
               currentAvailable,
-              legacyAvailable,
+              legacyAvailable: currentAvailable,
               workspaceAvailable,
               current: describeEnvironment("current"),
               legacy: describeEnvironment("legacy"),

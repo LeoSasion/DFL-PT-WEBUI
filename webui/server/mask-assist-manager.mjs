@@ -1,4 +1,5 @@
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
+import { sha256File as digest } from "./hash-file.mjs";
 import { copyFile, lstat, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { PATHS, assertWithin, pathExists } from "./paths.mjs";
@@ -56,8 +57,6 @@ async function plainPath(target, { directory = false, create = false } = {}) {
   assertWithin(await realpath(PATHS.workspaceRoot), await realpath(target), "辅助遮罩真实路径");
   return target;
 }
-
-async function digest(target) { return createHash("sha256").update(await readFile(target)).digest("hex"); }
 
 function validateNames(names) {
   if (!Array.isArray(names) || names.length < 1 || names.length > 500

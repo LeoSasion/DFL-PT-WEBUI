@@ -93,7 +93,7 @@ function runPython(executable, args, paths, capture = false) {
 }
 
 export async function validateRestoredFaces(staging, sourceMap, paths = PATHS, landmarkModel = "tufa") {
-  return JSON.parse(await runPython(paths.python, ["-B", "-c", VALIDATE_FACES, staging, sourceMap, paths.currentDflRoot, landmarkModel], paths, true));
+  return JSON.parse(await runPython(paths.python, ["-B", "-c", VALIDATE_FACES, staging, sourceMap, paths.dflRoot, landmarkModel], paths, true));
 }
 
 export async function extractRestored(side, parameters, { paths = PATHS, manager = new RestorationManager({
@@ -123,7 +123,7 @@ export async function extractRestored(side, parameters, { paths = PATHS, manager
   if (await lstat(destination).catch(error => { if (error.code === "ENOENT") return null; throw error; })) throw new Error("修复记录已提取，不覆盖已有副本");
   const staging = path.join(parent, `.pending-${taskId}-${randomBytes(6).toString("hex")}`);
   await mkdir(staging);
-  const args = [paths.currentMain, "extract", "--input-dir", input, "--output-dir", staging, "--source-map", sourceMap, "--no-output-debug"];
+  const args = [paths.dflMain, "extract", "--input-dir", input, "--output-dir", staging, "--source-map", sourceMap, "--no-output-debug"];
   for (const [key, flag] of [["detector", "--detector"], ["landmarkModel", "--landmark-model"], ["faceType", "--face-type"], ["imageSize", "--image-size"], ["maxFaces", "--max-faces-from-image"], ["jpegQuality", "--jpeg-quality"], ["gpuIndexes", "--force-gpu-idxs"]])
     if (parameters[key] !== "" && parameters[key] != null) args.push(flag, String(parameters[key]));
   if (parameters.cpuOnly) args.push("--cpu-only");

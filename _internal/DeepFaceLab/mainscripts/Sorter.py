@@ -1,17 +1,13 @@
 ﻿import math
 import multiprocessing
 import operator
-import os
-import sys
 import tempfile
-from functools import cmp_to_key
 from pathlib import Path
 
 import cv2
 import numpy as np
-from numpy import linalg as npla
 
-from core import imagelib, mathlib, pathex
+from core import mathlib, pathex
 from core.cv2ex import *
 from core.imagelib import estimate_sharpness
 from core.interact import interact as io
@@ -19,7 +15,6 @@ from core.joblib import Subprocessor
 from core.faceset_transaction import execute_plan
 from core.faceset_transaction import sha256 as file_sha256
 from core.imagelib.face_quality import DEFAULT_METRIC, METRICS, face_detail_signals, metadata_coverage, select_quality_coverage
-from core.leras import nn
 from DFLIMG import *
 from facelib import LandmarksProcessor
 
@@ -753,46 +748,6 @@ def sort_quality_coverage(input_path, target_count=None, *, offset=0, limit=500,
                'targetPrefix': f'quality-{offset:06d}-'}
     return selected, rejected + unreadable, preserved, context
 
-"""
-def sort_by_vggface(input_path):
-    io.log_info ("正在使用 VGGFace 模型按人脸相似度排序...")
-
-    model = VGGFace()
-
-    final_img_list = []
-    trash_img_list = []
-
-    image_paths = pathex.get_image_paths(input_path)
-    img_list = [ (x,) for x in image_paths ]
-    img_list_len = len(img_list)
-    img_list_range = [*range(img_list_len)]
-
-    feats = [None]*img_list_len
-    for i in io.progress_bar_generator(img_list_range, "加载中"):
-        img = cv2_imread( img_list[i][0] ).astype(np.float32)
-        img = imagelib.normalize_channels (img, 3)
-        img = cv2.resize (img, (224,224) )
-        img = img[..., ::-1]
-        img[..., 0] -= 93.5940
-        img[..., 1] -= 104.7624
-        img[..., 2] -= 129.1863
-        feats[i] = model.predict( img[None,...] )[0]
-
-    tmp = np.zeros( (img_list_len,) )
-    float_inf = float("inf")
-    for i in io.progress_bar_generator ( range(img_list_len-1), "排序中" ):
-        i_feat = feats[i]
-
-        for j in img_list_range:
-            tmp[j] = npla.norm(i_feat-feats[j]) if j >= i+1 else float_inf
-
-        idx = np.argmin(tmp)
-
-        img_list[i+1], img_list[idx] = img_list[idx], img_list[i+1]
-        feats[i+1], feats[idx] = feats[idx], feats[i+1]
-
-    return img_list, trash_img_list
-"""
 
 def sort_by_absdiff(input_path):
     """Greedy exact pixel-distance ordering with bounded memory and no TF."""

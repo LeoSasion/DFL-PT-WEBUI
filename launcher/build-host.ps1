@@ -381,6 +381,7 @@ $OutputExe = Join-Path $OutputDirectory "DFL-PT-WEBUI.Launcher.exe"
 $BootstrapScript = Join-Path $LauncherRoot "bootstrap.ps1"
 $RuntimeManifest = Join-Path $LauncherRoot "runtime-manifest.json"
 $RuntimeSetup = Join-Path $LauncherRoot "setup-runtime.ps1"
+$RuntimeInstaller = Join-Path $RepositoryRoot "tools/runtime-install.py"
 $ProjectSetup = Join-Path $LauncherRoot "install-project.ps1"
 $SourceSetup = Join-Path $LauncherRoot "install-source.ps1"
 $TerminalBridgeEntry = Join-Path $LauncherRoot "server\index.mjs"
@@ -424,6 +425,7 @@ $payloadSources = @(
     [PSCustomObject]@{ RelativePath = "bootstrap/bootstrap.ps1"; FilePath = $BootstrapScript },
     [PSCustomObject]@{ RelativePath = "bootstrap/runtime-manifest.json"; FilePath = $RuntimeManifest },
     [PSCustomObject]@{ RelativePath = "bootstrap/setup-runtime.ps1"; FilePath = $RuntimeSetup },
+    [PSCustomObject]@{ RelativePath = "bootstrap/runtime-install.py"; FilePath = $RuntimeInstaller },
     [PSCustomObject]@{ RelativePath = "bootstrap/install-project.ps1"; FilePath = $ProjectSetup },
     [PSCustomObject]@{ RelativePath = "bootstrap/install-source.ps1"; FilePath = $SourceSetup },
     [PSCustomObject]@{ RelativePath = "bootstrap/upgrade-project.ps1"; FilePath = (Join-Path $LauncherRoot "upgrade-project.ps1") },

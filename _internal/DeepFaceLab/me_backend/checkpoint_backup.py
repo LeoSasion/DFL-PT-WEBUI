@@ -1,7 +1,6 @@
 """Verified, bounded backup generations for a single ME model directory."""
 
 from datetime import datetime, timezone
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -9,19 +8,12 @@ import re
 import shutil
 import tempfile
 import time
+from core.file_hash import file_sha256 as _sha256
 
 
 BACKUP_ID = re.compile(r'^(automatic|manual|legacy)/iter-(\d{8,12})-(\d{10,20})$')
 BACKUP_FILES = ('me.pt', 'metadata.json')
 HISTORY_FILE = 'loss-history.jsonl'
-
-
-def _sha256(target):
-    digest = hashlib.sha256()
-    with Path(target).open('rb') as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _atomic_json(target, value):

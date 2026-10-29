@@ -18,9 +18,12 @@ import { pipeline } from "node:stream/promises";
 import { Transform } from "node:stream";
 import { promisify } from "node:util";
 import { PATHS, assertWithin, pathExists } from "./paths.mjs";
+import { isDfmPublicationPending } from "./dfm-export.mjs";
 import { inspectStorage } from "./system-diagnostics.mjs";
 import { listExportHistory } from "./export-history.mjs";
 import { inspectRoleLabels } from "./role-assignment-manager.mjs";
+import { validateTaeConfig } from "../shared/tae-training-options.mjs";
+import { compareNaturalNames, directFileStats } from "./directory-files.mjs";
 
 const execFileAsync = promisify(execFile);
 const VIDEO_EXTENSIONS = new Set([".avi", ".mkv", ".mov", ".mp4", ".m4v", ".webm"]);
@@ -57,22 +60,6 @@ export class WorkspaceError extends Error {
     this.status = status;
     this.details = details;
   }
-}
-
-async function directFileStats(target, accept = () => true) {
-  if (!(await pathExists(target))) return { count: 0, bytes: 0, modifiedAt: null };
-  const entries = await readdir(target, { withFileTypes: true });
-  const files = entries.filter(
-    (entry) => entry.isFile() && !entry.name.startsWith(".") && accept(entry.name),
-  );
-  const stats = await Promise.all(files.map((entry) => stat(path.join(target, entry.name))));
-  return {
-    count: files.length,
-    bytes: stats.reduce((total, fileStat) => total + fileStat.size, 0),
-    modifiedAt: stats.length
-      ? new Date(Math.max(...stats.map((fileStat) => fileStat.mtimeMs))).toISOString()
-      : null,
-  };
 }
 
 async function describeFile(target) {
@@ -333,18 +320,28 @@ export async function discoverModels(workspaceRoot = PATHS.workspaceRoot) {
       const metadataStat = await stat(metadataFile);
       if (metadataStat.size > 65536) continue;
       const metadata = JSON.parse(await readFile(metadataFile, "utf8"));
-      if (metadata.format !== "me-pytorch" || metadata.version !== 1 || metadata.model_class !== "ME"
-          || metadata.name !== entry.name || metadata.checkpoint !== "me.pt"
+      const family = metadata.model_class;
+      const checkpointName = family === "TAE" ? "tae.pt" : "me.pt";
+      const expectedFormat = family === "TAE" ? "tae-liae-pytorch" : "me-pytorch";
+      if (!["ME", "TAE"].includes(family) || metadata.format !== expectedFormat || metadata.version !== 1
+          || metadata.name !== entry.name || metadata.checkpoint !== checkpointName
           || !Number.isInteger(metadata.iteration) || metadata.iteration < 0
           || !metadata.config || typeof metadata.config !== "object" || Array.isArray(metadata.config)) continue;
-      const checkpoint = await stat(path.join(directory, "me.pt"));
+      if (family === "TAE") {
+        if (metadata.vae_sha256 !== "6578b31cc5e336233a2c842eba61b56425bbcac97c7088705f7c7db93291887e") continue;
+        if (!["identity", "pretraining"].includes(metadata.training_mode ?? "identity")) continue;
+        try { metadata.config = validateTaeConfig(metadata.config); } catch { continue; }
+      }
+      const checkpoint = await stat(path.join(directory, checkpointName));
       if (!checkpoint.isFile() || checkpoint.size <= 0) continue;
       const files = (await readdir(directory, { withFileTypes: true })).filter(file => file.isFile())
         .map(file => file.name).sort();
-      grouped.push({ name: entry.name, type: "ME", format: "me-pytorch", ready: true,
+      grouped.push({ name: entry.name, type: family, format: expectedFormat, ready: true,
         fileCount: files.length, bytes: checkpoint.size + metadataStat.size,
         modifiedAt: checkpoint.mtime.toISOString(), files,
-        iteration: metadata.iteration, config: metadata.config });
+        iteration: metadata.iteration, config: metadata.config,
+        ...(family === "TAE" ? { modelClass: family, vae_weights: metadata.vae_weights, vae_sha256: metadata.vae_sha256,
+          training_mode: metadata.training_mode ?? "identity", pretraining_data: metadata.pretraining_data ?? "" } : {}) });
     } catch (error) {
       // Incomplete/invalid model instances must never be offered as resumable checkpoints.
       if (!["ENOENT", "ENOTDIR"].includes(error?.code) && !(error instanceof SyntaxError)) throw error;
@@ -377,21 +374,49 @@ export async function discoverModels(workspaceRoot = PATHS.workspaceRoot) {
   }
   const modelStats = { count: grouped.length, bytes: grouped.reduce((sum, model) => sum + model.bytes, 0),
     modifiedAt: grouped.map(model => model.modifiedAt).sort().at(-1) ?? null };
+  const familyStats = family => {
+    const selected = grouped.filter(model => model.type === family);
+    return { count: selected.length, bytes: selected.reduce((sum, model) => sum + model.bytes, 0),
+      modifiedAt: selected.map(model => model.modifiedAt).sort().at(-1) ?? null };
+  };
   const models = [...grouped, ...xsegGroups.values()].sort((a, b) => (b.modifiedAt ?? "").localeCompare(a.modifiedAt ?? ""));
-  return { models, modelStats, meStats: modelStats, xsegStats: xsegStats.bytes > 0 ? xsegStats : { ...xsegStats, count: 0 } };
+  return { models, modelStats, meStats: familyStats("ME"), taeStats: familyStats("TAE"),
+    xsegStats: xsegStats.bytes > 0 ? xsegStats : { ...xsegStats, count: 0 } };
 }
 
 export async function inspectExportReadiness() {
   const modelInfo = await discoverModels();
-  const models = modelInfo.models.filter(model => model.type === "ME").map(model => ({
+  const models = modelInfo.models.filter(model => ["ME", "TAE"].includes(model.type)).map(model => ({
     ...model, dataFileCount: 1, weightFileCount: 1, supported: true, ready: true,
-    commandId: "export.dfm_me", blockers: [],
+    commandId: `export.dfm_${model.type.toLowerCase()}`, blockers: [],
   }));
   const outputs = [];
   for (const model of models) {
     for (const name of model.files.filter(name => /\.(?:dfm|onnx)$/i.test(name))) {
-      const fileStat = await stat(path.join(PATHS.workspaceRoot, "model", model.name, name));
-      outputs.push({ name: `${model.name}/${name}`, bytes: fileStat.size, modifiedAt: fileStat.mtime.toISOString() });
+      const directory = path.join(PATHS.workspaceRoot, "model", model.name);
+      if (await isDfmPublicationPending(directory, name)) continue;
+      const fileStat = await stat(path.join(directory, name));
+      let bundleBytes = fileStat.size;
+      let bundleFiles = 1;
+      try {
+        const receiptPath = path.join(directory, name + ".export.json");
+        if ((await stat(receiptPath)).size > 4 * 1024 * 1024) throw new Error("Oversized DFM receipt");
+        const receipt = JSON.parse(await readFile(receiptPath, "utf8"));
+        if (receipt.version !== 1 || !Array.isArray(receipt.files) || receipt.files.length > 64
+            || !receipt.files.some(item => item.name === name)) throw new Error("Invalid DFM receipt");
+        let total = 0;
+        for (const item of receipt.files) {
+          if (typeof item.name !== "string" || path.basename(item.name) !== item.name || /[\\/:]/.test(item.name)) throw new Error("Invalid bundle filename");
+          const member = await lstat(path.join(directory, item.name));
+          if (!member.isFile() || member.isSymbolicLink() || member.size !== item.bytes) throw new Error("Incomplete DFM bundle");
+          total += member.size;
+        }
+        bundleBytes = total;
+        bundleFiles = receipt.files.length;
+      } catch { /* Older standalone DFM files have no receipt; retain their size. */ }
+      if (await isDfmPublicationPending(directory, name)) continue;
+      outputs.push({ name: `${model.name}/${name}`, bytes: bundleBytes, graphBytes: fileStat.size, bundleFiles,
+        modifiedAt: fileStat.mtime.toISOString() });
     }
   }
   return { modelCount: models.length, readyCount: models.length, outputCount: outputs.length, models, outputs };
@@ -409,7 +434,7 @@ export async function listMergeReview({ offset = 0, limit = 120 } = {}) {
       return [slot, entries
         .filter((entry) => entry.isFile() && REVIEW_IMAGE_NAME.test(entry.name))
         .map((entry) => entry.name)
-        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))];
+        .sort(compareNaturalNames)];
     }),
   ));
   const mergedSet = new Set(directories.merged);
@@ -524,6 +549,7 @@ export async function inspectWorkspace() {
       xseg: modelInfo.xsegStats.count > 0,
       model: modelInfo.modelStats.count > 0,
       me: modelInfo.meStats.count > 0,
+      tae: modelInfo.taeStats.count > 0,
       merged: merged.count > 0 && mergedMask.count > 0,
       encoded: ["mp4", "avi", "mov", "nut"].some(extension =>
         [`result.${extension}`, `result_mask.${extension}`].every(name => outputFiles.some(file => file?.name === name))),

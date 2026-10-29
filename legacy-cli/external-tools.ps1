@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)][ValidateSet('EbSynth','XnViewMP','VisiPics')][string]$Tool,
+    [Parameter(Mandatory = $true)][ValidateSet('EbSynth')][string]$Tool,
     [string]$ExecutablePath,
     [string]$InputDirectory,
     [switch]$ConfigureOnly
@@ -10,8 +10,6 @@ $root = Split-Path -Parent $PSScriptRoot
 $configPath = Join-Path $root '.launcher-install/external-tools.json'
 $defaults = @{
     EbSynth = '_internal/EbSynth/EbSynth.exe'
-    XnViewMP = '_internal/XnViewMP/xnviewmp.exe'
-    VisiPics = '_internal/VisiPics/VisiPics.exe'
 }
 $configured = @{}
 if (Test-Path -LiteralPath $configPath) {

@@ -9,7 +9,7 @@ from pathlib import Path, PurePosixPath
 
 from core import pathex
 from core.interact import interact as io
-from core.safe_pickle import loads as load_data_pickle, validate_faceset_configs
+from core.safe_pickle import loads as load_data_pickle, validate_faceset_configs, PROFILES
 from samplelib import Sample
 
 packed_faceset_filename = "faceset.pak"
@@ -150,7 +150,11 @@ class PackedFaceset:
         return any((directory / name).is_file() for name in (packed_faceset_filename, packed_faceset_filename_zip))
 
     @staticmethod
-    def load(samples_path, pak_name=None, archive_path=None):
+    def load(samples_path, pak_name=None, archive_path=None, *, allow_large=False):
+        if type(allow_large) is not bool:
+            raise ValueError('allow_large must be a boolean')
+        profile = 'faceset-large' if allow_large else 'faceset'
+        metadata_limit = PROFILES[profile].bytes if allow_large else MAX_CONFIG_BYTES
         directory = Path(samples_path)
         base = pak_name or "faceset"
         if Path(base).name != base or any(char in base for char in '<>:"/\\|?*'):
@@ -170,14 +174,15 @@ class PackedFaceset:
         if path.suffix.lower() == ".zip":
             with zipfile.ZipFile(path) as archive:
                 info = archive.getinfo(packed_faceset_filename_config)
-                if info.file_size > MAX_CONFIG_BYTES:
+                if info.file_size > metadata_limit:
                     raise ValueError("Faceset metadata is too large")
-                configs = validate_faceset_configs(load_data_pickle(archive.read(packed_faceset_filename_config), profile='faceset'))
+                configs = validate_faceset_configs(load_data_pickle(archive.read(packed_faceset_filename_config), profile=profile))
                 samples = [Sample(**config) for config in configs]
                 members = set()
+                available_members = set(archive.namelist())
                 for sample in samples:
                     member = _member(sample)
-                    if member in members or member not in archive.namelist():
+                    if member in members or member not in available_members:
                         raise ValueError("Duplicate or missing ZIP faceset image")
                     members.add(member)
                     sample.set_filename_offset_size(str(path), -1, -1)
@@ -187,12 +192,12 @@ class PackedFaceset:
             if len(header) != 16:
                 raise ValueError("Truncated faceset header")
             version, metadata_size = struct.unpack("<QQ", header)
-            if version != PackedFaceset.VERSION or metadata_size > MAX_CONFIG_BYTES:
+            if version != PackedFaceset.VERSION or metadata_size > metadata_limit:
                 raise ValueError("Unsupported faceset version or metadata size")
             metadata = stream.read(metadata_size)
             if len(metadata) != metadata_size:
                 raise ValueError("Truncated faceset metadata")
-            configs = validate_faceset_configs(load_data_pickle(metadata, profile='faceset'))
+            configs = validate_faceset_configs(load_data_pickle(metadata, profile=profile))
             samples = [Sample(**config) for config in configs]
             table = stream.read(8 * (len(samples) + 1))
             if len(table) != 8 * (len(samples) + 1):

@@ -37,6 +37,8 @@ def check_required_paths():
         '.venv/Scripts/python.exe', '_internal/python_base/python.exe',
         '_internal/setenv.bat', '_internal/DeepFaceLab/main.py',
         '_internal/DeepFaceLab/me.py', '_internal/DeepFaceLab/me_backend/engine.py',
+        '_internal/DeepFaceLab/tae.py', '_internal/DeepFaceLab/tae/engine.py',
+        '_internal/DeepFaceLab/tae/vae.py', 'requirements-tae.txt',
         '_internal/DeepFaceLab/models/Model_XSeg/Model_pytorch.py',
         '_internal/ffmpeg/ffmpeg.exe', '_internal/ffmpeg/ffprobe.exe',
         '启动 WebUI.bat', '传统命令菜单.bat', 'legacy-cli/menu.ps1',
@@ -50,8 +52,8 @@ def check_required_paths():
         passed('Independent Python, ME, XSeg, FFmpeg and WebUI entry points exist')
     families = {directory.name for directory in (DFL_ROOT / 'models').glob('Model_*')
                 if directory.is_dir()}
-    if families == {'Model_ME', 'Model_XSeg'}:
-        passed('Available model families are ME and the XSeg mask helper')
+    if families == {'Model_ME', 'Model_TAE', 'Model_XSeg'}:
+        passed('Available model families are ME, TAE and the XSeg mask helper')
     else:
         failed('Unexpected model families: ' + ', '.join(sorted(families)))
 
@@ -75,13 +77,13 @@ def check_python_sources():
 
 def check_runtime():
     import torch
-    expected_python = ROOT / '.venv' / 'Scripts' / 'python.exe'
-    if (Path(sys.executable).resolve() != expected_python.resolve()
-            or Path(sys.base_prefix).resolve() != (ROOT / '_internal' / 'python_base').resolve()
-            or not Path(torch.__file__).resolve().is_relative_to(ROOT / '.venv')):
-        failed("Python and PyTorch must come from this repository's independent runtime")
-    elif sys.version_info[:2] != (3, 12) or torch.__version__ != '2.9.1+cu128' or torch.version.cuda != '12.8':
-        failed(f'Unexpected runtime: Python {sys.version.split()[0]}, PyTorch {torch.__version__}')
+    try:
+        runtime_spec = importlib.util.spec_from_file_location('dfl_smoke_torch_runtime', ROOT / 'tools' / 'torch-runtime.py')
+        runtime_tool = importlib.util.module_from_spec(runtime_spec)
+        runtime_spec.loader.exec_module(runtime_tool)
+        runtime_tool.validate_runtime(ROOT)
+    except Exception as error:
+        failed(f'Project Python / PyTorch runtime validation failed: {error}')
     else:
         passed(f'Local Python {sys.version.split()[0]} and PyTorch {torch.__version__} (CUDA {torch.version.cuda})')
     if importlib.util.find_spec('tensorflow') is not None:
@@ -175,8 +177,8 @@ def check_tool_routes():
     run_check('Native tool menu self-check', [os.environ.get('COMSPEC', 'cmd.exe'),
               '/d', '/c', str(ROOT / '传统命令菜单.bat'), '--check'],
               expected=('[OK]', f'{len(commands)} fixed tool routes', '8 categories'))
-    run_check('Main CLI exposes ME and XSeg', [sys.executable, str(DFL_ROOT / 'main.py'), 'train', '--help'],
-              expected=('{ME,XSeg}',))
+    run_check('Main CLI exposes ME, TAE and XSeg', [sys.executable, str(DFL_ROOT / 'main.py'), 'train', '--help'],
+              expected=('{ME,TAE,XSeg}',))
     run_check('Qt editor binding self-check', [sys.executable, str(DFL_ROOT / 'main.py'), 'qt', 'selftest'],
               expected=('PySide6',))
     run_check('Packaged FFmpeg starts', [str(ROOT / '_internal' / 'ffmpeg' / 'ffmpeg.exe'), '-version'],
@@ -204,6 +206,12 @@ def check_web_cli_flags():
             failed(f'ME {command} CLI help failed: ' + help_result.stderr.strip())
             return
         accepted.update(re.findall(r'--[a-z][a-z-]+', help_result.stdout))
+    h3_help = subprocess.run([sys.executable, str(DFL_ROOT / 'tae.py'), 'web-train', '--help'],
+        capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=120)
+    if h3_help.returncode or '--vae-weights' not in h3_help.stdout:
+        failed('TAE training CLI help failed: ' + h3_help.stderr.strip())
+        return
+    accepted.update(re.findall(r'--[a-z][a-z-]+', h3_help.stdout))
     missing = sorted(used - accepted)
     if missing:
         failed('Web command registry uses unsupported CLI flags: ' + ', '.join(missing))

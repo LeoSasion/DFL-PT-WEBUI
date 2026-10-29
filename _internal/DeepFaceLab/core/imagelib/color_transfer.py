@@ -1,5 +1,4 @@
 import cv2
-import numexpr as ne
 import numpy as np
 import scipy as sp
 from numpy import linalg as npla
@@ -282,18 +281,6 @@ def lab_image_stats(image):
     # return the color statistics
     return (lMean, lStd, aMean, aStd, bMean, bStd)
 
-def _scale_array(arr, clip=True):
-    if clip:
-        return np.clip(arr, 0, 255)
-
-    mn = arr.min()
-    mx = arr.max()
-    scale_range = (max([mn, 0]), min([mx, 255]))
-
-    if mn < scale_range[0] or mx > scale_range[1]:
-        return (scale_range[1] - scale_range[0]) * (arr - mn) / (mx - mn) + scale_range[0]
-
-    return arr
 
 def channel_hist_match(source, template, hist_match_threshold=255, mask=None):
     # Code borrowed from:

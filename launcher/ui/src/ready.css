@@ -33,30 +33,6 @@
   font-weight: 700;
 }
 
-.terminal-tabs__group {
-  align-self: end;
-  display: flex;
-  gap: 2px;
-}
-
-.terminal-tabs__group button {
-  height: 31px;
-  min-width: 76px;
-  padding: 0 12px;
-  border: 0;
-  border-bottom: 1px solid transparent;
-  background: transparent;
-  color: #75837b;
-  font-size: 10px;
-  cursor: pointer;
-}
-
-.terminal-tabs__group button.is-active {
-  border-color: var(--emerald);
-  background: #071610;
-  color: var(--emerald-muted);
-}
-
 .terminal-mode {
   grid-column: 2;
   grid-row: 1;

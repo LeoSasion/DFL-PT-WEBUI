@@ -25,13 +25,17 @@ export function ExportView({ workspace, commands, jobs, onOpenCommand, onError, 
       <p>{artifacts.countsKnown ? t("合成帧 {frames} 张 · 遮罩 {masks} 张", { frames: artifacts.mergedCount.toLocaleString(), masks: artifacts.maskCount.toLocaleString() }) : t("输入数量将在任务预检中读取。")}</p>
       <p>{t(artifacts.exportConfiguredReady ? "数量检查通过；启动前仍会检查逐帧对应关系、音轨与输出位置。" : artifacts.encodedAvailable ? "已有成片可继续查看；重新导出需要可用的合成序列。" : "导出将合成序列封装为视频，先配置合成并检查帧与遮罩。")}</p>
       {!artifacts.exportConfiguredReady ? <button type="button" className="button primary" onClick={() => onOpenCommand(artifacts.meAvailable ? "merge.me" : "train.me")}>{t(artifacts.meAvailable ? artifacts.partialMerge ? "检查并补齐合成" : "配置合成" : "查看模型与训练配置")}</button> : null}
-      {!artifacts.exportConfiguredReady && !artifacts.meAvailable ? <small>{t("未发现可用 ME 模型；可在训练配置中选择或建立模型，再生成合成序列。")}</small> : null}
+      {!artifacts.exportConfiguredReady && !artifacts.meAvailable && !artifacts.taeAvailable ? <small>{t("未发现可用 ME / TAEQI2.1 模型；可在训练配置中选择或建立模型，再生成合成序列。")}</small> : null}
       {workspace.materials?.dst ? <small>{t("音轨来源：DST 素材；具体音频与输出参数将在预检中确认。")}</small> : <small>{t("未发现 DST 原视频；是否能够无音轨导出，以当前任务预检为准。")}</small>}
     </section> : null}
     <section className="export-recommended"><div><strong>{t("RGB 母版 + MP4 · 推荐方案")}</strong><p>{t("保留逐帧校验的 RGB 母版，同时生成可播放的 MP4 和遮罩视频。母版适合保存，MP4 适合播放和分享。")}</p></div>
       <button type="button" className="button primary" disabled={!canExport} title={exportBlockReason} onClick={() => onOpenCommand("encode.quality")}>{t("导出母版与播放版")}</button>
     </section>
     <details className="export-formats"><summary>{t("其他视频格式")}</summary><CommandRows commands={commands.filter(command => command.category === "encode" && command.id !== "encode.quality")} onOpenCommand={onOpenCommand} disabled={!canExport} disabledReason={exportBlockReason}/></details>
-    <details className="export-formats"><summary>{t("模型导出（DeepFaceLive）")}</summary><CommandRows commands={commands.filter(command => command.category === "model")} onOpenCommand={onOpenCommand}/></details>
+    <details className="export-formats"><summary>{t("模型导出（DFM）")}</summary>
+      <p>{t("ME 与 TAEQI2.1 均可正常导出或极致量化。极致量化版需要 Blackwell 与 TensorRT；正常版适用于兼容的 DFM 加载器。")}</p>
+      <p>{t("大于 2GB 的模型自动导出为 DFM + 外置权重，不限制模型总量。复制模型时请一并携带导出回执中列出的配套文件。")}</p>
+      <CommandRows commands={commands.filter(command => command.category === "model")} onOpenCommand={onOpenCommand}/>
+    </details>
   </section>;
 }

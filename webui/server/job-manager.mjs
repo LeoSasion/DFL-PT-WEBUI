@@ -35,6 +35,7 @@ const ALLOWED_CONTROL_OPERATIONS = new Set([
 const MAX_EVENTS_IN_MEMORY = 1000;
 const MAX_INPUT_LENGTH = 8192;
 const SAFE_STOP_GRACE_MS = 12_000;
+const isFaceTrainingCommand = commandId => ["train.me", "train.tae"].includes(commandId);
 const ME_SAFE_STOP_GRACE_MS = 120_000;
 const ME_HEARTBEAT_STALE_MS = 30_000;
 const ME_PROGRESS_STALE_MS = 300_000;
@@ -167,7 +168,7 @@ function publicJob(job) {
     controls: job.controls,
     locks: job.locks,
     state: job.state,
-    runtimeIndependent: job.commandId === "train.me" && Boolean(job.meSupervisorToken),
+    runtimeIndependent: isFaceTrainingCommand(job.commandId) && Boolean(job.meSupervisorToken),
     pid: job.pid,
     exitCode: job.exitCode,
     signal: job.signal,
@@ -271,7 +272,7 @@ export class JobManager extends EventEmitter {
         };
         this.jobs.set(job.id, job);
         if (ACTIVE_STATES.has(job.state)) {
-          if (job.commandId === "train.me" && job.meSupervisorToken) {
+          if (isFaceTrainingCommand(job.commandId) && job.meSupervisorToken) {
             try {
               this.acquireLocks(job.id, job.locks);
               const runner = await this.meRunnerFactory({
@@ -429,10 +430,10 @@ export class JobManager extends EventEmitter {
       previewVersion: null,
       latestEvaluationSnapshotId: null,
       evaluation: launch.evaluation ?? null,
-      health: commandId === "train.me"
+      health: isFaceTrainingCommand(commandId)
         ? { state: "unknown", heartbeatAt: null, progressAt: null, reason: "等待训练心跳" }
         : null,
-      meSupervisorToken: commandId === "train.me" ? createMeSupervisorToken() : null,
+      meSupervisorToken: isFaceTrainingCommand(commandId) ? createMeSupervisorToken() : null,
       runnerOutputOffset: 0,
       directory,
       metadataFile: path.join(directory, "metadata.json"),
@@ -461,7 +462,7 @@ export class JobManager extends EventEmitter {
     this.jobs.set(id, job);
     try {
       await this.persist(job, { force: true });
-    } catch (error) {
+    } catch {
       this.jobs.delete(id);
       this.releaseLocks(job);
       throw new JobError("无法创建任务元数据", "JOB_PERSIST_FAILED", 500);
@@ -475,12 +476,12 @@ export class JobManager extends EventEmitter {
     });
 
     try {
-      const runnerFactory = commandId === "train.me" ? this.meRunnerFactory : this.runnerFactory;
+      const runnerFactory = isFaceTrainingCommand(commandId) ? this.meRunnerFactory : this.runnerFactory;
       const runner = await runnerFactory({
         executable: launch.executable,
         args: launch.args,
         cwd: launch.cwd,
-        env: commandId === "train.me"
+        env: isFaceTrainingCommand(commandId)
           ? { ...launch.env, DFL_WEB_HEARTBEAT_FILE: path.join(directory, "trainer-heartbeat.json") }
           : launch.env,
         directory,
@@ -492,7 +493,7 @@ export class JobManager extends EventEmitter {
       job.pid = runner.pid ?? null;
       job.startedAt = this.now().toISOString();
       job.state = "running";
-      if (commandId === "train.me") {
+      if (isFaceTrainingCommand(commandId)) {
         runner.onState?.((state) => this.updateMeRunnerState(job, state));
       }
       runner.onData((data, offset) => this.handleOutput(job, data, offset));
@@ -500,7 +501,7 @@ export class JobManager extends EventEmitter {
         void this.handleExit(job, exitCode, signal);
       });
       if (job.category === "training") this.startPreviewWatcher(job);
-      if (commandId === "train.me") this.startMeHealthWatcher(job);
+      if (isFaceTrainingCommand(commandId)) this.startMeHealthWatcher(job);
       this.record(job, "job.state", { state: "running", pid: job.pid });
       await this.persist(job, { force: true });
       return publicJob(job);
@@ -571,7 +572,7 @@ export class JobManager extends EventEmitter {
     job.exitCode = exitCode;
     job.signal = signal;
     job.endedAt = this.now().toISOString();
-    if (job.commandId === "train.me" && job.stopReason === "safe-stop") {
+    if (isFaceTrainingCommand(job.commandId) && job.stopReason === "safe-stop") {
       let acknowledgement;
       try { acknowledgement = await readJson(job.controlAckFile); } catch {}
       const saved = exitCode === 0 && !job.error && acknowledgement?.operation === "close"
@@ -631,7 +632,7 @@ export class JobManager extends EventEmitter {
 
   async sendInput(jobId, input) {
     const job = this.getInternal(jobId);
-    if (job.commandId === "train.me" || !job.runner || !ACTIVE_STATES.has(job.state)) {
+    if (isFaceTrainingCommand(job.commandId) || !job.runner || !ACTIVE_STATES.has(job.state)) {
       throw new JobError("任务当前不接受输入", "JOB_NOT_INTERACTIVE", 409);
     }
     if (typeof input !== "string" || input.length === 0 || input.length > MAX_INPUT_LENGTH) {
@@ -833,7 +834,7 @@ export class JobManager extends EventEmitter {
     if (job.stopTimer) clearTimeout(job.stopTimer);
     const requestedAt = Date.parse(job.stopRequestedAt ?? "");
     const elapsed = Number.isFinite(requestedAt) ? Date.now() - requestedAt : 0;
-    const grace = job.commandId === "train.me" ? ME_SAFE_STOP_GRACE_MS : SAFE_STOP_GRACE_MS;
+    const grace = isFaceTrainingCommand(job.commandId) ? ME_SAFE_STOP_GRACE_MS : SAFE_STOP_GRACE_MS;
     const remaining = Math.max(0, grace - elapsed);
     job.stopTimer = setTimeout(() => {
       if (!job.runner || TERMINAL_STATES.has(job.state)) return;

@@ -23,6 +23,8 @@ import sys
 import zipfile
 
 REPO = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO / '_internal/DeepFaceLab'))
+from core.gpu_runtime import derive_sbom, validate_runtime, verify_runtime_records
 CHUNK = 1024 * 1024
 MANIFEST_NAME = "RELEASE-MANIFEST.json"
 PAYLOAD_SUMS_NAME = "PAYLOAD-SHA256SUMS"
@@ -351,7 +353,19 @@ def add_python_runtime_distribution(plan: Plan, item: dict):
             plan.file(destination, category='python-runtime')
 
 
-def plan_release(kind: str, config: dict, commit: str, weights: str) -> Plan:
+def release_python_sbom(config: dict, commit: str, cuda_runtime='cu128'):
+    sbom = json.loads(git('show', commit + ':' + config['pythonSbomManifest']))
+    if cuda_runtime == 'cu126':
+        manifest = json.loads(git('show', commit + ':release/torch-runtimes.json'))
+        sbom = derive_sbom(sbom, manifest, cuda_runtime)
+    else:
+        if cuda_runtime != 'cu128' or sbom['packages']['torch']['version'] != '2.9.1+cu128':
+            raise ReleaseError('The selected portable runtime does not match its fixed SBOM')
+        sbom['torchRuntime'] = cuda_runtime
+    return sbom
+
+
+def plan_release(kind: str, config: dict, commit: str, weights: str, *, cuda_runtime='cu128') -> Plan:
     plan = Plan(kind, config, commit, weights)
     for record in git("ls-tree", "-rlz", "--full-tree", commit).split(b"\0"):
         if not record:
@@ -383,7 +397,7 @@ def plan_release(kind: str, config: dict, commit: str, weights: str) -> Plan:
         verify_launcher_build(plan)
     for name in config["runtimeTrees"]:
         if name == '.venv/Lib/site-packages' and config.get('pythonSbomManifest'):
-            sbom = json.loads(git('show', commit + ':' + config['pythonSbomManifest']))
+            sbom = release_python_sbom(config, commit, cuda_runtime)
             profile = config.get('pythonRuntimeProfile', 'production')
             if sbom.get('target') != 'win_amd64-cp312' or profile not in sbom.get('profiles', {}):
                 raise ReleaseError('Missing fixed Windows Python runtime SBOM/profile')
@@ -392,7 +406,8 @@ def plan_release(kind: str, config: dict, commit: str, weights: str) -> Plan:
                 item = sbom['packages'][key]
                 add_python_runtime_distribution(plan, item)
                 records[key] = item
-            payload = encoded({'schemaVersion': 1, 'profile': profile, 'target': sbom['target'], 'packages': records})
+            payload = encoded({'schemaVersion': 1, 'profile': profile, 'target': sbom['target'],
+                               'torchRuntime': cuda_runtime, 'packages': records})
             plan.add(Entry('release/python-runtime-sbom.json', len(payload), 'python-sbom', data=payload))
             continue
         plan.tree(name, category="built-webui" if name == "webui/dist" else "runtime")
@@ -676,6 +691,8 @@ def main():
         p = sub.add_parser(command)
         p.add_argument("--kind", choices=("source", "portable", "both"), default="source")
         p.add_argument("--weights", choices=("bundled", "download"), default="bundled")
+        p.add_argument("--cuda-runtime", choices=("cu128", "cu126"), default="cu128",
+                       help="Portable Torch build; the installed distribution must match its selected hash-locked SBOM")
         p.add_argument("--ref", default="HEAD", help="Committed snapshot; builds require a clean checkout at this commit")
         p.add_argument("--source-commit", help="Public snapshot commit to record instead of the local development commit")
         p.add_argument("--source-repository", type=Path, help="Read-only repository containing --source-commit; its tree must match --ref")
@@ -719,11 +736,13 @@ def main():
         if commit != git("rev-parse", "HEAD").decode("ascii").strip():
             raise ReleaseError("Portable artifacts must match the checked-out commit; check out --ref before building")
         if "portable" in kinds:
+            validate_runtime(REPO, cuda_runtime=args.cuda_runtime)
+            verify_runtime_records(REPO)
             node = local("_internal/node/bin/node.exe")
             result = subprocess.run([str(node), str(local("tools/dist-provenance.mjs")), "check"], cwd=REPO, capture_output=True, text=True)
             if result.returncode:
                 raise ReleaseError("Read-only WebUI build freshness check failed: " + result.stderr.strip())
-    plans = [plan_release(kind, config, commit, args.weights) for kind in kinds]
+    plans = [plan_release(kind, config, commit, args.weights, cuda_runtime=args.cuda_runtime) for kind in kinds]
     output = args.output_dir.resolve()
     # Outputs may live in the dedicated ignored folder or outside the checkout.
     if output == REPO or (REPO in output.parents and (REPO / "release-output") not in (output, *output.parents)):

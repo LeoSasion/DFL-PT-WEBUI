@@ -2,7 +2,11 @@
 
 Windows 本地工作台：**ME PyTorch 训练 + WebUI + 数据处理、XSeg、合成和视频工具**。
 
-当前源码的应用版本为 **0.1.2-preview**，启动器版本为 **0.1.3-preview**。换脸训练使用 ME/PyTorch，XSeg 是辅助遮罩模型；旧 ME 网络权重可以通过显式导入命令迁移。运行环境与项目材料保持独立。源码版本、EXE 版本与已发布便携包分别记录，以发行资产及 provenance 判断实际内容。
+2026-10-10 已将 H3 训练器替换为 **TAEQI2.1**：Encoder 始终冻结，Decoder 可选冻结／末段／全部训练，配合新的 PyTorch LIAE 双中间层。ME 保留，TAE 使用独立 `tae.pt` 和 WebUI 训练／恢复／合成入口。用法见 [TAEQI2.1 说明](docs/TAE.md)。此项为本地源码改动，尚未发布新发行包。
+
+ME 与 TAE 均支持 FP32／BF16 训练，以及独立的「正常导出／极致量化」DFM 选项。极致量化使用 FP8 + NVFP4，需 Blackwell 与 TensorRT；大模型通过外置权重取消 2GB 导出上限。具体兼容要求和命令见 [DFM 导出说明](docs/DFM_EXPORT.md)。
+
+当前源码的应用版本为 **0.1.3-preview**，启动器版本为 **0.1.4-preview**。换脸训练使用 ME/PyTorch 和 TAEQI2.1，XSeg 是辅助遮罩模型；旧 ME 网络权重可以通过显式导入命令迁移。运行环境与项目材料保持独立。源码版本、EXE 版本与已发布便携包分别记录，以发行资产及 provenance 判断实际内容。
 
 - [历史 0.1.1-preview 便携包](https://github.com/LeoSasion/DFL-PT-WEBUI/releases/tag/v0.1.1-preview)：保持原功能集及原摘要，随包提供通用 XSeg 推理权重。
 - [启动器及源码发行资产](https://github.com/LeoSasion/DFL-PT-WEBUI/releases)：无需预装 Git、Python 或 Node；新启动器按固定公开提交及 SHA-256 安装。历史 launcher-v0.1.2-preview 跟随安装时的 main；详见[启动器说明](docs/LAUNCHER.md)。
@@ -14,6 +18,10 @@ Windows 本地工作台：**ME PyTorch 训练 + WebUI + 数据处理、XSeg、�
 首次使用可双击下载的 **`DFL-PT-WEBUI.Launcher.exe`**，选择独立空目录并开始安装。完成后启动器保留在项目根目录 **`DFL-PT-WEBUI.exe`**，以后双击它，再点击“启动 WebUI”，打开 <http://127.0.0.1:4173>。原有 **`启动 WebUI.bat`** 和 **`传统命令菜单.bat`** 仍可使用。
 
 便携包带独立 Python 3.12.14、PyTorch 2.9.1 + CUDA 12.8、Node.js 24.19.0、FFmpeg 和必要辅助权重。源码安装可在仓库根目录运行 `install-source.bat`，自动准备这些材料、安装依赖并构建 WebUI。需要 Windows x64；GPU 训练需要支持 CUDA 12.8 的 NVIDIA 驱动。Python base 在 `_internal/python_base`，venv 在 `.venv`。
+
+GTX 10 系列（Pascal）使用同版本 PyTorch 的官方 CUDA 12.6 构建；Blackwell 使用 CUDA 12.8 构建。新源码安装会检测显卡并选择匹配的构建，已有环境保持原构建，不会自动换包。每台工作站只需一套 `.venv`。GTX 10 系列选择 FP32 训练；BF16 训练要求原生硬件支持，极致 FP8/NVFP4 导出仍要求 Blackwell。运行时选择、锁定安装和验证范围见 [GPU 兼容说明](docs/GPU_COMPATIBILITY.md)。
+
+更换显卡后，启动器会在需要时提示下载匹配的运行包。点击后先下载、校验和验证，再切换；新环境启用成功后，由用户单独选择保留或删除旧版。素材、模型和训练进度保留，运行任务期间禁止切换。
 
 运行检查：
 
@@ -65,7 +73,7 @@ ME 训练直接读取带 DFL 元数据的 aligned JPG/JPEG，以及 PAK/ZIP 打�
 
 aligned 预览与清洗默认使用 WebUI 的 SRC/DST 人脸浏览器，可检查定位点、标注和遮罩，并隔离或恢复素材，无需安装 XnViewMP。当前 `main` 的“工具 → 数据审计 → 相似组清洗”支持选择每批最多 500 张，或比较两批各最多 250 张，无需另装 VisiPics。候选由本地 DCT、色彩和边缘描述子生成，需人工复核并保留代表图；隔离前核对项目、SRC/DST、分析范围及素材指纹，共用一个恢复令牌。操作结果失联时先检查，不自动重复隔离。流程与覆盖范围见[相似组复核](docs/SIMILARITY_REVIEW.md)；现有 0.1.1-preview 发行包仍只预检前 500 张。
 
-EbSynth 的关键帧结果传播尚未实现，列为后续 WebUI 功能候选；现有场景检测和分段提帧不包含这项能力。这三项外部工具仍保留可选适配入口，供已有程序的用户通过 `legacy-cli/external-tools.ps1` 配置，不作为 WebUI 安装要求。
+传统菜单的 SRC/DST 预览与相似图审查入口会直接打开当前项目的原生 WebUI，无需配置外部查看器。EbSynth 的关键帧结果传播尚未实现，列为后续 WebUI 功能候选；现有场景检测和分段提帧不包含这项能力。仅 EbSynth 保留已有外部程序的可选适配入口，可通过 `legacy-cli/external-tools.ps1` 配置，不作为 WebUI 安装要求。
 
 ## ME 范围与验证
 

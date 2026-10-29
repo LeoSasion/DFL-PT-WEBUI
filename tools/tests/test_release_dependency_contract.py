@@ -139,3 +139,17 @@ def test_locked_distribution_requires_a_wheel_file_inventory(tmp_path, monkeypat
     plan, item, _, _ = runtime_fixture(tmp_path, monkeypatch, files)
     with pytest.raises(RELEASE.ReleaseError, match='no file inventory'):
         RELEASE.add_python_runtime_distribution(plan, item)
+
+
+def test_legacy_portable_uses_the_selected_git_snapshot_and_rejects_modern_installation(tmp_path, monkeypatch):
+    base = (ROOT / 'release/python-sbom.json').read_bytes()
+    variants = (ROOT / 'release/torch-runtimes.json').read_bytes()
+    responses = {'fixed:release/python-sbom.json': base, 'fixed:release/torch-runtimes.json': variants}
+    monkeypatch.setattr(RELEASE, 'git', lambda command, name: responses[name])
+    selected = RELEASE.release_python_sbom({'pythonSbomManifest':'release/python-sbom.json'}, 'fixed', 'cu126')
+    assert selected['torchRuntime'] == 'cu126'
+    assert selected['packages']['torch']['version'] == '2.9.1+cu126'
+    plan, _, distribution, _ = runtime_fixture(tmp_path, monkeypatch, ['cv2/__init__.py'])
+    distribution.version = '2.9.1+cu128'
+    with pytest.raises(RELEASE.ReleaseError, match='version'):
+        RELEASE.add_python_runtime_distribution(plan, selected['packages']['torch'])

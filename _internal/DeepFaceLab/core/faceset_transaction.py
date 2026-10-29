@@ -12,20 +12,11 @@ import re
 import shutil
 import uuid
 from core.process_identity import process_identity as _process_identity
+from core.file_hash import file_sha256 as sha256
 
 
 class TransactionConflict(ValueError):
     pass
-
-
-
-
-def sha256(path):
-    digest = hashlib.sha256()
-    with Path(path).open('rb') as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b''):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def _plain_name(name):

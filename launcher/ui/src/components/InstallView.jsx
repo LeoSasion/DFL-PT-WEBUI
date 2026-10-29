@@ -149,8 +149,13 @@ function InstallLog({ logs, onClear }) {
   );
 }
 
-export function InstallView({ state, logs, busy, onAction, onClearLogs }) {
+export function InstallView({ state, logs, busy, actionError, onAction, onClearLogs }) {
   const hasError = state.runtimeItems.some((item) => item.status === "error");
+  const upgradeRecovery = Boolean(state.upgradePending);
+  const runtimeRecovery = !upgradeRecovery && Boolean(state.runtimeRepairPending);
+  const action = upgradeRecovery ? "rollbackUpdate" : runtimeRecovery ? "repairDependencies" : hasError ? "retryBootstrap" : "runBootstrap";
+  const actionLabel = upgradeRecovery ? "恢复未完成的升级" : runtimeRecovery ? "恢复运行环境" : hasError ? "重试安装" : state.projectReady ? "检查并准备环境" : "开始安装";
+  const changing = busy || state.environmentStatus === "changing";
 
   return (
     <div className="install-layout">
@@ -158,8 +163,10 @@ export function InstallView({ state, logs, busy, onAction, onClearLogs }) {
       <main className="install-main">
         <div className="install-main__intro">
           <p className="eyebrow">首次运行 · 本地部署</p>
-          <h1>准备本地运行环境</h1>
-          <p>首次安装会获取 DFL-PT-WEBUI 官方源码并准备独立运行环境；已有项目可直接检查或修复。</p>
+          <h1>{upgradeRecovery ? "升级尚未完成" : runtimeRecovery ? "运行环境需要恢复" : "准备本地运行环境"}</h1>
+          <p>{upgradeRecovery ? "请先恢复上次升级，再继续准备环境。模型、素材和训练进度保留。" : runtimeRecovery ? "请先恢复中断的运行环境准备，再继续使用项目。模型和素材保留。" : "首次安装会获取 DFL-PT-WEBUI 官方源码并准备独立运行环境；已有项目可直接检查或修复。"}</p>
+          {upgradeRecovery ? <p className="install-recovery-message" role="status">{state.upgradeMessage || (state.upgradeCanRollback ? "已找到本项目的升级备份，可以恢复。" : "当前恢复记录不完整，请查看日志；暂时不能继续安装或覆盖现有项目。")}</p> : null}
+          {(upgradeRecovery || runtimeRecovery) && actionError ? <p className="dialog-error" role="alert">{actionError}</p> : null}
         </div>
 
         <section className="runtime-list panel-line" aria-label="运行环境组件">
@@ -173,7 +180,7 @@ export function InstallView({ state, logs, busy, onAction, onClearLogs }) {
             <IconSettings size={17} />
             <span>安装目录</span>
             <code title={state.installPath}>{state.installPath}</code>
-            <button disabled={busy} onClick={() => onAction("chooseInstallPath")}>更改</button>
+            <button disabled={changing || upgradeRecovery || runtimeRecovery} onClick={() => onAction("chooseInstallPath")}>更改</button>
           </div>
           <div className="install-setting install-setting--network">
             <IconBrandGithub size={17} />
@@ -192,12 +199,12 @@ export function InstallView({ state, logs, busy, onAction, onClearLogs }) {
               官方固定来源
             </button>
           </div>
-          <button className="primary-action" disabled={busy} onClick={() => onAction(hasError ? "retryBootstrap" : "runBootstrap")}>
-            {busy && <IconLoader2 className="spin" size={17} />}
-            {hasError ? "重试安装" : state.projectReady ? "检查并准备环境" : "开始安装"}
-            {!busy && <IconArrowRight size={17} />}
+          <button className="primary-action" disabled={changing || (upgradeRecovery && !state.upgradeCanRollback)} onClick={() => onAction(action)}>
+            {changing && <IconLoader2 className="spin" size={17} />}
+            {actionLabel}
+            {!changing && <IconArrowRight size={17} />}
           </button>
-          <p className="install-path-hint">项目文件将直接安装到以上目录。选择空文件夹时直接使用；选择磁盘根目录或非空文件夹时，自动使用 DFL-PT-WEBUI 子文件夹。已有项目将继续使用。</p>
+          <p className="install-path-hint">{upgradeRecovery || runtimeRecovery ? "当前项目目录保持不变，恢复完成后再继续准备环境。模型和素材保留。" : "项目文件将直接安装到以上目录。选择空文件夹时直接使用；选择磁盘根目录或非空文件夹时，自动使用 DFL-PT-WEBUI 子文件夹。已有项目将继续使用。"}</p>
         </footer>
       </main>
     </div>

@@ -40,13 +40,14 @@ class MENetwork(torch.nn.Module):
             return checkpoint(module, value, use_reentrant=False)
         return module(value)
 
-    def forward(self, source, destination, face_style=False):
+    def forward(self, source, destination, face_style=False, *, include_swap=True):
+        if face_style and not include_swap:
+            raise ValueError('Face style requires the swap branch')
         if self.archi_type == 'df':
             src_code = self._run(self.inter, self._run(self.encoder, source))
             dst_code = self._run(self.inter, self._run(self.encoder, destination))
             src, src_mask = self._run(self.decoder_src, src_code)
             dst, dst_mask = self._run(self.decoder_dst, dst_code)
-            swap, swap_mask = self._run(self.decoder_src, dst_code)
             swap_code, swap_decoder = dst_code, self.decoder_src
         else:
             src_ab = self._run(self.inter_AB, self._run(self.encoder, source))
@@ -55,10 +56,12 @@ class MENetwork(torch.nn.Module):
             dst_b = self._run(self.inter_B, dst_code)
             src, src_mask = self._run(self.decoder, torch.cat((src_ab, src_ab), 1))
             dst, dst_mask = self._run(self.decoder, torch.cat((dst_b, dst_ab), 1))
-            swap_code, swap_decoder = torch.cat((dst_ab, dst_ab), 1), self.decoder
+            if include_swap:
+                swap_code, swap_decoder = torch.cat((dst_ab, dst_ab), 1), self.decoder
+        result = dict(src=src, src_mask=src_mask, dst=dst, dst_mask=dst_mask)
+        if include_swap:
             swap, swap_mask = self._run(swap_decoder, swap_code)
-        result = dict(src=src, src_mask=src_mask, dst=dst, dst_mask=dst_mask,
-                      swap=swap, swap_mask=swap_mask)
+            result.update(swap=swap, swap_mask=swap_mask)
         if self.archi_type == 'df':
             result.update(src_code=src_code, dst_code=dst_code)
         if face_style:
@@ -70,9 +73,9 @@ class MENetwork(torch.nn.Module):
         if self.archi_type == 'df':
             code = self.inter(code)
             swap, src_mask = self.decoder_src(code)
-            _, dst_mask = self.decoder_dst(code)
+            dst_mask = self.decoder_dst.forward_mask(code)
             return swap, src_mask, dst_mask
         ab, b = self.inter_AB(code), self.inter_B(code)
         swap, src_mask = self.decoder(torch.cat((ab, ab), 1))
-        _, dst_mask = self.decoder(torch.cat((b, ab), 1))
+        dst_mask = self.decoder.forward_mask(torch.cat((b, ab), 1))
         return swap, src_mask, dst_mask

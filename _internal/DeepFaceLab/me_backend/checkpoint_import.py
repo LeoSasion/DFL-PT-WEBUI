@@ -6,7 +6,6 @@ supported. The caller supplies the exact saved-model filename prefix and the
 source configuration: activation options cannot be inferred from tensor shapes.
 Legacy optimizer, discriminator, iteration, data and RNG state are not resumed.
 """
-import hashlib
 import pickle
 from pathlib import Path
 

@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { lstat, mkdir, open, readFile, readdir, realpath, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { PATHS } from "./paths.mjs";
+import { writeJsonFileAtomic } from "./atomic-json.mjs";
 import { localImageCredentialCodec } from "./image-service-credentials.mjs";
 import { ImageServiceError, abortable, publicHttpsUrl, publicImageFetch, resolvePublicUrl } from "./image-service-network.mjs";
 import {
@@ -26,13 +27,7 @@ function within(parent, target) {
   return relative === "" || relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
 }
 
-async function atomicJson(file, value) {
-  const temporary = `${file}.${randomBytes(8).toString("hex")}.tmp`;
-  try {
-    await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600, flag: "wx" });
-    await rename(temporary, file);
-  } finally { await unlink(temporary).catch(() => {}); }
-}
+const atomicJson = (file, value) => writeJsonFileAtomic(file, value, { mode: 0o600 });
 
 function imageKind(bytes) {
   if (bytes.length >= 24 && bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))

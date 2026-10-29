@@ -10,7 +10,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
-import { PATHS, assertWithin, pathExists } from "./paths.mjs";
+import { PATHS, assertWithin } from "./paths.mjs";
 
 const TERMINAL_STATES = new Set(["succeeded", "failed", "cancelled", "interrupted"]);
 const ACTIVE_STATES = new Set(["queued", "running", "cancelling"]);
@@ -275,8 +275,4 @@ export class OperationManager {
     if (operation.promise) await operation.promise;
     return publicOperation(operation);
   }
-}
-
-export function operationRecordExists(root, id) {
-  return pathExists(path.join(root, `${id}.json`));
 }

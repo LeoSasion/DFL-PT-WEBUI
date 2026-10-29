@@ -1,4 +1,3 @@
-import collections
 import math
 from enum import IntEnum
 
@@ -7,7 +6,6 @@ import numpy as np
 
 from core import imagelib
 from core.cv2ex import *
-from core.imagelib import sd
 from facelib import FaceType, LandmarksProcessor
 
 

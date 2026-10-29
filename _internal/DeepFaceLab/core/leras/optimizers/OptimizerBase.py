@@ -1,4 +1,3 @@
-import torch
 from core.leras import nn
 from core.leras.layers.Saveable import Saveable
 

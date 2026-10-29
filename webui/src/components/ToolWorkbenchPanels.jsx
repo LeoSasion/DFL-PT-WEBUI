@@ -558,7 +558,7 @@ export function ExportPreflightPanel({ refreshVersion, onError, onOpenCommand })
   return (
     <div className="export-preflight-layout">
       <CompactSummary><div><span>{t("模型组")}</span><strong>{preflight.modelCount}</strong></div><div><span>{t("可导出")}</span><strong>{preflight.readyCount}</strong></div><div><span>{t("已有 DFM")}</span><strong>{preflight.outputCount}</strong></div><small>{t("固定规则预检")}</small></CompactSummary>
-      <p className="export-alignment-note">{t("DeepFaceLive 的人脸对齐范围和偏移需与 ME 训练脸型匹配，再判断 DFM 画质。")}</p>
+      <p className="export-alignment-note">{t("输入对齐范围须与训练脸型匹配。正常 DFM 保持浮点精度；极致量化需要 Blackwell + TensorRT。大模型使用外置权重，无 2GB 总量限制。")}</p>
       {preflight.models.length ? <div className="export-model-rows">{preflight.models.map((model) => (
         <article key={`${model.type}:${model.name}`}>
           <div className="export-model-heading"><div><strong>{model.name}</strong><span>{model.type}</span></div><em className={model.ready ? "is-ok" : "is-warning"}>{model.ready ? t("就绪") : t("未就绪")}</em></div>
@@ -566,7 +566,7 @@ export function ExportPreflightPanel({ refreshVersion, onError, onOpenCommand })
           {model.blockers.length > 0 && <div className="tool-issue-list">{model.blockers.map((blocker) => <span key={blocker}>{blocker === "model_data_missing" ? t("缺少模型 data.dat") : blocker === "model_weights_missing" ? t("缺少权重组件") : t("当前类型不支持 DFM")}</span>)}</div>}
           <button className="button primary" type="button" disabled={!model.ready} onClick={() => onOpenCommand(model.commandId)}><IconPlayerPlay size={15} />{t("打开 DFM 导出")}</button>
         </article>
-      ))}</div> : <div className="tool-workbench-state"><IconCode size={26} /><strong>{t("workspace/model 中没有可识别模型")}</strong><span>{t("训练生成 ME PyTorch 检查点后，组件预检会在这里显示。")}</span><button className="button primary" type="button" onClick={() => onOpenCommand("train.me")}>{t("打开训练任务")}</button></div>}
+      ))}</div> : <div className="tool-workbench-state"><IconCode size={26} /><strong>{t("workspace/model 中没有可识别模型")}</strong><span>{t("训练生成 ME 或 TAEQI2.1 检查点后，组件预检会在这里显示。")}</span><button className="button primary" type="button" onClick={() => onOpenCommand("train.me")}>{t("打开训练任务")}</button></div>}
       {preflight.outputs.length > 0 && <section className="dfm-output-list"><h3>{t("已有导出")}</h3>{preflight.outputs.map((output) => <div key={output.name}><span>{output.name}</span><strong>{formatBytes(output.bytes)}</strong><small>{new Date(output.modifiedAt).toLocaleString()}</small></div>)}</section>}
     </div>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, memo, useEffect, useRef, useState } from "react";
 import {
   IconAdjustmentsHorizontal,
   IconAlertTriangle,
@@ -19,17 +19,8 @@ import {
   IconSparkles,
   IconUsersGroup,
 } from "@tabler/icons-react";
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { LoadingProgress } from "./ProgressFeedback.jsx";
+import { DeferredContent } from "./Overlays.jsx";
 import { pipelineTasks as defaultPipelineTasks } from "../data/dashboard.js";
 import { useI18n } from "../i18n.jsx";
 import { jobPresentation } from "../domain/job-presentation.js";
@@ -58,12 +49,7 @@ const taskIcons = {
 
 const activeTrainingStates = new Set(["queued", "starting", "running", "waiting_input"]);
 const previewEligibleStates = new Set(["starting", "running", "waiting_input", "stopping"]);
-
-function formatIteration(value) {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `${Math.round(value / 1_000)}K`;
-  return String(value);
-}
+const TrainingLossPlot = lazy(() => import("./TrainingLossPlot.jsx"));
 
 function formatRate(value) {
   if (!Number.isFinite(value)) return "—";
@@ -151,19 +137,8 @@ export function PipelinePanel({ activeTask, tasks = defaultPipelineTasks, title 
   );
 }
 
-function ChartTooltip({ active, payload, label }) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="chart-tooltip">
-      <strong>{formatIteration(label)} iters</strong>
-      <span>SRC {payload[0]?.value}</span>
-      <span>DST {payload[1]?.value}</span>
-    </div>
-  );
-}
-
-function TrainingChart({ iteration, lossHistory, className = "" }) {
-  const { language, t } = useI18n();
+const TrainingChart = memo(function TrainingChart({ iteration, lossHistory, className = "" }) {
+  const { t } = useI18n();
   const hasHistory = lossHistory.length > 0;
   return (
     <div className={`chart-block ${className} ${hasHistory ? "" : "is-empty"}`.trim()} aria-label={t("训练损失曲线")}>
@@ -180,53 +155,17 @@ function TrainingChart({ iteration, lossHistory, className = "" }) {
           <div className="chart-empty">{t("训练输出出现迭代数据后，将在此绘制真实损失曲线")}</div>
         ) : null}
         {hasHistory ? (
-          <ResponsiveContainer
-            width="100%"
-            height="100%"
-            initialDimension={{ width: 640, height: 127 }}
+          <DeferredContent
+            fallback={<div className="chart-empty" role="status">{t("正在加载训练损失曲线…")}</div>}
+            errorFallback={<div className="chart-empty" role="alert">{t("曲线暂时无法加载；后台训练会继续运行。")}</div>}
           >
-            <LineChart data={lossHistory} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid stroke="#163126" strokeOpacity={0.62} vertical={false} />
-            <XAxis
-              axisLine={false}
-              dataKey="iteration"
-              minTickGap={34}
-              tick={{ fill: "#738079", fontSize: 11 }}
-              tickFormatter={formatIteration}
-              tickLine={false}
-            />
-            <YAxis
-              axisLine={false}
-              domain={[0, "auto"]}
-              tick={{ fill: "#738079", fontSize: 11 }}
-              tickFormatter={(value) => Number(value.toPrecision(3))}
-              tickLine={false}
-              width={44}
-            />
-            <Tooltip content={<ChartTooltip />} cursor={{ stroke: "#2ce39f", strokeOpacity: 0.35 }} />
-            {iteration > 0 ? (
-              <ReferenceLine
-                x={iteration}
-                stroke="#32e4a6"
-                strokeDasharray="3 4"
-                label={{
-                  value: iteration.toLocaleString(language === "zh" ? "zh-CN" : "en-US"),
-                  fill: "#b9f7dc",
-                  fontSize: 11,
-                  position: "insideTop",
-                  dy: 4,
-                }}
-              />
-            ) : null}
-            <Line type="monotone" dataKey="gLoss" stroke="#2ce39f" strokeWidth={1.55} dot={false} isAnimationActive={false} />
-            <Line type="monotone" dataKey="dLoss" stroke="#f3b83f" strokeWidth={1.45} dot={false} isAnimationActive={false} />
-            </LineChart>
-          </ResponsiveContainer>
+            <TrainingLossPlot iteration={iteration} lossHistory={lossHistory} />
+          </DeferredContent>
         ) : null}
       </div>
     </div>
   );
-}
+});
 
 function PreviewRefreshMenu({ intervalSeconds, onChange }) {
   const { t } = useI18n();
@@ -273,7 +212,7 @@ function PreviewRefreshMenu({ intervalSeconds, onChange }) {
   );
 }
 
-function PreviewGrid({ refreshKey, previewUrl, refreshIntervalSeconds, trainingState, hasSavedModel, modelLoading }) {
+function PreviewGrid({ refreshKey, previewUrl, refreshIntervalSeconds, trainingState, hasSavedModel, modelLoading, modelFamily = "ME" }) {
   const { t } = useI18n();
   const [retryCount, setRetryCount] = useState(0);
   const [failedRequest, setFailedRequest] = useState(null);
@@ -289,7 +228,7 @@ function PreviewGrid({ refreshKey, previewUrl, refreshIntervalSeconds, trainingS
     : t("当前没有运行中的训练");
   const emptyDetail = previewFailed ? t("可重试读取；模型保存状态请以已保存模型和任务日志为准。") : trainingHasStarted
     ? t("Trainer 生成首张真实预览后会自动显示")
-    : t("启动 ME 后，这里会显示 Trainer 生成的真实预览");
+    : t("启动 {model} 后，这里会显示 Trainer 生成的真实预览", { model: modelFamily });
   return (
     <div className="preview-block" key={refreshKey}>
       <div className="preview-labels">
@@ -302,7 +241,7 @@ function PreviewGrid({ refreshKey, previewUrl, refreshIntervalSeconds, trainingS
             key={requestKey}
             className="live-preview"
             src={imageUrl}
-            alt={t("ME 最新训练预览")}
+            alt={t("{model} 最新训练预览", { model: modelFamily })}
             decoding="async"
             onError={() => setFailedRequest(requestKey)}
           />
@@ -353,6 +292,8 @@ export function TrainingWorkspace({
 }) {
   const { language, t } = useI18n();
   const isRunning = activeTrainingStates.has(trainingState);
+  const modelFamily = trainingJob?.commandId === "train.tae" || (!trainingJob && ["TAE"].includes(savedModel?.type)) ? "TAEQI2.1" : "ME";
+  const isTAE = modelFamily === "TAEQI2.1";
   const canControl = ["starting", "running", "waiting_input"].includes(trainingState);
   const presentation = jobPresentation(trainingJob ?? { state: trainingState });
   const stateLabel = t(presentation.label);
@@ -401,14 +342,14 @@ export function TrainingWorkspace({
     <section className="panel training-panel" aria-labelledby="training-title">
       <div className="training-heading">
         <div>
-          <h2 id="training-title">{t("训练任务")} <span>·</span> ME</h2>
+          <h2 id="training-title">{t("训练任务")} <span>·</span> {modelFamily}</h2>
           <span className={`status-pill is-${stateTone}`}>
             {stateLabel}
           </span>
         </div>
         <div className="training-heading-actions">
           <PreviewRefreshMenu intervalSeconds={refreshIntervalSeconds} onChange={changeRefreshInterval} />
-          <button
+          {!isTAE ? <button
             className="button compact secondary"
             type="button"
             onClick={onEvaluate}
@@ -416,22 +357,23 @@ export function TrainingWorkspace({
             title={canEvaluate ? t("使用当前权重生成只读评估快照") : t("运行中的受控 ME 任务才能生成快照")}
           >
             <IconCamera size={14} stroke={1.9}/>{t("评估快照")}
-          </button>
-          <button
+          </button> : null}
+          {!isTAE ? <button
             className={`button compact ${latestEvaluationSnapshotId || recommendDiagnostics ? "primary" : "secondary"}`}
             type="button"
             onClick={onOpenDiagnostics}
           >
             <IconChartDots3 size={14} stroke={1.9}/>{t("质量诊断")}
-          </button>
+          </button> : null}
         </div>
       </div>
       <div className="training-preview-stage">
         {isRunning ? (
           <LoadingProgress
+            inline
             compact
             className="training-run-progress"
-            label={trainingState === "running" ? t("ME 正在训练") : stateLabel}
+            label={trainingState === "running" ? t("{model} 正在训练", { model: modelFamily }) : stateLabel}
             detail={targetIterations
               ? t("当前 {current} / 估算目标 {target} 次迭代", {
                 current: iteration.toLocaleString(language === "zh" ? "zh-CN" : "en-US"),
@@ -454,6 +396,7 @@ export function TrainingWorkspace({
           trainingState={trainingState}
           hasSavedModel={Boolean(savedModel)}
           modelLoading={savedModelState === "loading"}
+          modelFamily={modelFamily}
         />
       </div>
       {!isRunning && trainingState !== "stopping" ? <div className="training-resume-bar">
@@ -465,9 +408,9 @@ export function TrainingWorkspace({
         <button className="button primary" type="button" onClick={onSave} disabled={!canControl || Boolean(pendingAction)}>
           <IconDeviceFloppy size={17} stroke={1.9} />{t("保存")}
         </button>
-        <button className="button secondary" type="button" onClick={onBackup} disabled={!canControl || Boolean(pendingAction)}>
+        {!isTAE ? <button className="button secondary" type="button" onClick={onBackup} disabled={!canControl || Boolean(pendingAction)}>
           <IconArchive size={17} stroke={1.9} />{t("备份")}
-        </button>
+        </button> : null}
         <button className="button secondary" type="button" onClick={onRefresh} disabled={!canControl || Boolean(pendingAction)}>
           <IconRefresh size={17} stroke={1.9} />{t("刷新预览")}
         </button>
@@ -541,7 +484,7 @@ export function StatusPanel({
             valueTone={trainingStateTone}
           />
           <MetricRow label={t("训练进程")} value={!trainingJob || trainingState === "queued" ? "—" : previewEligibleStates.has(trainingState) ? trainingJob?.pid ?? "—" : t("已结束")} suffix="" />
-          {previewEligibleStates.has(trainingState) && trainingJob?.commandId === "train.me" ?
+          {previewEligibleStates.has(trainingState) && ["train.me", "train.tae"].includes(trainingJob?.commandId) ?
             <MetricRow label={t("训练心跳")} value={trainerHealthLabel} suffix=""
               valueTone={trainerHealth?.state === "hung" ? "amber" : trainerHealth?.state === "healthy" ? "green" : null} /> : null}
           <MetricRow label={t("当前迭代")} value={metric?.iteration?.toLocaleString(language === "zh" ? "zh-CN" : "en-US") ?? "—"} suffix="" />
@@ -551,6 +494,7 @@ export function StatusPanel({
           <MetricRow label={t("SRC 损失")} value={typeof metric?.srcLoss === "number" ? metric.srcLoss.toFixed(4) : "—"} suffix="" />
           <MetricRow label={t("DST 损失")} value={typeof metric?.dstLoss === "number" ? metric.dstLoss.toFixed(4) : "—"} suffix="" />
         </div>
+        {["train.me", "train.tae"].includes(trainingJob?.commandId) ? <p className="training-timing-note">{t("单步、速度和进度估算仅统计训练计算，不含读图、保存和预览。")}</p> : null}
         {previewEligibleStates.has(trainingState) && trainerHealth?.state === "hung" ? <p className="training-history-recovery" role="status">
           <IconAlertTriangle size={15}/>{t(trainerHealth.reason || "Trainer 迭代长时间没有进展；请检查日志与显存。")}
         </p> : null}
@@ -592,12 +536,16 @@ export function StatusPanel({
   );
 }
 
+const MemoPipelinePanel = memo(PipelinePanel);
+const MemoTrainingWorkspace = memo(TrainingWorkspace);
+const MemoStatusPanel = memo(StatusPanel);
+
 export function WorkbenchGrid(props) {
   return (
     <div className="workbench-grid">
-      <PipelinePanel {...props.pipeline} />
-      <TrainingWorkspace {...props.training} />
-      <StatusPanel {...props.status} />
+      <MemoPipelinePanel {...props.pipeline} />
+      <MemoTrainingWorkspace {...props.training} />
+      <MemoStatusPanel {...props.status} />
     </div>
   );
 }

@@ -1,6 +1,5 @@
 """Six-source locked restoration comparison; private outputs, frozen inference only."""
 import argparse
-import hashlib
 import json
 import sys
 from pathlib import Path

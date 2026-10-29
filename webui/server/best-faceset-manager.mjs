@@ -4,6 +4,7 @@ import path from "node:path";
 import { PATHS, assertWithin, pathExists } from "./paths.mjs";
 import { buildDflEnvironment } from "./environment.mjs";
 import { runHelperProcess } from "./helper-process.mjs";
+import { createJsonProgressReader } from "./progress-reader.mjs";
 
 const PLAN = /^plan-[a-f0-9]{32}$/;
 const HASH = /^[a-f0-9]{64}$/;
@@ -81,19 +82,14 @@ export class BestFacesetManager {
     return data;
   }
   async helper(action, args = [], { signal, onProgress } = {}) {
-    let pending = "";
+    const progress = createJsonProgressReader(onProgress);
     const result = await this.runProcess(this.paths.python,
       [path.join(this.paths.webuiRoot, "python", "best_training_faceset.py"), action, ...args], {
         cwd: this.paths.repositoryRoot, env: buildDflEnvironment("pytorch"), signal,
         label: "最佳训练人脸", timeoutMs: 30 * 60_000, maxBytes: 8 * 1024 * 1024,
-        onStderr: chunk => {
-          pending += chunk.toString("utf8");
-          const lines = pending.split(/\r?\n/); pending = lines.pop().slice(-64000);
-          for (const line of lines) if (line.startsWith("DFL_PROGRESS ")) {
-            try { onProgress?.(JSON.parse(line.slice(13))); } catch { /* Other model diagnostics have no protocol authority. */ }
-          }
-        },
+        onStderr: progress.write,
       });
+    progress.end();
     if (result.code !== 0) {
       const stderr = String(result.stderr ?? "").trim();
       const conflict = /(?:^|\n)(?:[\w.]+\.)?PlanConflict:\s*([^\r\n]+)\s*$/.exec(stderr);

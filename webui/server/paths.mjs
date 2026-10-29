@@ -1,34 +1,54 @@
-import { constants as fsConstants, readFileSync } from "node:fs";
-import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { constants as fsConstants, lstatSync, readFileSync, realpathSync } from "node:fs";
+import { access, mkdir, readFile } from "node:fs/promises";
+import { writeJsonFileAtomic } from "./atomic-json.mjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { defaultProjectRegistry, parseProjectRegistry } from "../shared/project-identity.mjs";
 
 const serverDirectory = path.dirname(fileURLToPath(import.meta.url));
 const webuiRoot = path.resolve(serverDirectory, "..");
 const repositoryRoot = path.resolve(webuiRoot, "..");
 const internalRoot = path.join(repositoryRoot, "_internal");
+const dflRoot = path.join(internalRoot, "DeepFaceLab");
+const dflMain = path.join(dflRoot, "main.py");
 const projectRegistryRoot = path.join(webuiRoot, ".runtime");
 const projectRegistryFile = path.join(projectRegistryRoot, "projects.json");
 const managedWorkspacesRoot = path.join(repositoryRoot, "workspaces");
 
 function readActiveProject() {
+  let registry;
   try {
-    const value = JSON.parse(readFileSync(projectRegistryFile, "utf8"));
-    const activeId = /^[a-z0-9][a-z0-9-]{0,47}$/.test(value?.activeId) ? value.activeId : "default";
-    const record = Array.isArray(value?.projects)
-      ? value.projects.find((project) => project?.id === activeId)
-      : null;
-    if (activeId === "default") {
-      return { id: "default", name: record?.name || "默认项目", workspaceRoot: path.join(repositoryRoot, "workspace") };
+    registry = parseProjectRegistry(readFileSync(projectRegistryFile, "utf8"));
+  } catch (cause) {
+    if (cause.code !== "ENOENT") {
+      const error = new Error("项目清单无法读取；请修复清单后重启，工作区未被选择", { cause });
+      error.code = "PROJECT_REGISTRY_UNREADABLE";
+      throw error;
     }
-    return {
-      id: activeId,
-      name: typeof record?.name === "string" && record.name.trim() ? record.name.trim() : activeId,
-      workspaceRoot: path.join(managedWorkspacesRoot, activeId),
-    };
-  } catch {
-    return { id: "default", name: "默认项目", workspaceRoot: path.join(repositoryRoot, "workspace") };
+    registry = defaultProjectRegistry();
   }
+  const record = registry.projects.find(project => project.id === registry.activeId);
+  const workspaceRoot = record.id === "default" ? path.join(repositoryRoot, "workspace") : path.join(managedWorkspacesRoot, record.id);
+  // Resolve the nearest existing ancestor too: a missing project beneath an
+  // externally redirected workspaces directory must not be created there.
+  let existing = workspaceRoot;
+  const suffix = [];
+  let resolved;
+  while (true) {
+    let entry;
+    try {
+      entry = lstatSync(existing);
+      if (existing === workspaceRoot && entry.isSymbolicLink()) throw new Error("Redirected workspace");
+      resolved = path.resolve(realpathSync(existing), ...suffix);
+      break;
+    } catch (cause) {
+      if (cause.code !== "ENOENT" || entry?.isSymbolicLink()) throw Object.assign(new Error("项目工作区无法安全解析", { cause }), { code: "PROJECT_WORKSPACE_UNSAFE" });
+      suffix.unshift(path.basename(existing)); existing = path.dirname(existing);
+    }
+  }
+  const relative = path.relative(realpathSync(repositoryRoot).toLowerCase(), resolved.toLowerCase());
+  if (relative.startsWith("..") || path.isAbsolute(relative)) throw Object.assign(new Error("项目工作区超出仓库范围"), { code: "PROJECT_WORKSPACE_UNSAFE" });
+  return { id: record.id, name: record.name, workspaceRoot };
 }
 
 const activeProject = readActiveProject();
@@ -53,11 +73,16 @@ export const PATHS = Object.freeze({
   python: path.join(repositoryRoot, ".venv", "Scripts", "python.exe"),
   ffmpeg: path.join(internalRoot, "ffmpeg", "ffmpeg.exe"),
   ffprobe: path.join(internalRoot, "ffmpeg", "ffprobe.exe"),
-  currentMain: path.join(internalRoot, "DeepFaceLab", "main.py"),
+  dflRoot,
+  dflMain,
   meMain: path.join(internalRoot, "DeepFaceLab", "me.py"),
-  legacyMain: path.join(internalRoot, "DeepFaceLab", "main.py"),
-  currentDflRoot: path.join(internalRoot, "DeepFaceLab"),
-  legacyDflRoot: path.join(internalRoot, "DeepFaceLab"),
+  taeWeights: path.join(internalRoot, "DeepFaceLab", "pretrained", "taeqi2_1.safetensors"),
+  taeMain: path.join(internalRoot, "DeepFaceLab", "tae.py"),
+  // Compatibility names for existing integrations; all execution uses dflMain/dflRoot.
+  currentMain: dflMain,
+  legacyMain: dflMain,
+  currentDflRoot: dflRoot,
+  legacyDflRoot: dflRoot,
   staticRoot: path.join(webuiRoot, "dist", "client"),
 });
 
@@ -104,9 +129,7 @@ export async function ensureRuntimeDirectories() {
 
 export async function writeJsonAtomic(target, value) {
   assertWithin(PATHS.runtimeRoot, target, "运行时文件");
-  const temporary = `${target}.${process.pid}.${Date.now()}.tmp`;
-  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-  await rename(temporary, target);
+  await writeJsonFileAtomic(target, value);
 }
 
 export async function readJson(target) {

@@ -1,7 +1,9 @@
 import { mkdir, open, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { PATHS, assertWithin, pathExists } from "./paths.mjs";
-import { PROJECT_ID_PATTERN, normalizeProjectName, normalizeProjectId, projectIdentityIssues } from "../shared/project-identity.mjs";
+import { PROJECT_ID_PATTERN, normalizeProjectName, normalizeProjectId, projectIdentityIssues,
+  defaultProjectRegistry as defaultRegistry, normalizeProjectRegistry as normalizeRegistry,
+  parseProjectRegistry } from "../shared/project-identity.mjs";
 
 const PROJECT_ID = PROJECT_ID_PATTERN;
 const ACTIVE_JOB_STATES = new Set(["queued", "starting", "running", "waiting_input", "stopping"]);
@@ -52,33 +54,6 @@ function normalizeId(value) {
   return id;
 }
 
-function defaultRegistry() {
-  return {
-    schemaVersion: 1,
-    activeId: "default",
-    projects: [{ id: "default", name: "默认项目", managed: false, createdAt: null }],
-  };
-}
-
-function normalizeRegistry(value) {
-  const fallback = defaultRegistry();
-  const records = Array.isArray(value?.projects) ? value.projects : [];
-  const projects = [fallback.projects[0]];
-  const seen = new Set(["default"]);
-  for (const record of records) {
-    if (!PROJECT_ID.test(record?.id) || record.id === "default" || seen.has(record.id)) continue;
-    seen.add(record.id);
-    projects.push({
-      id: record.id,
-      name: typeof record.name === "string" && record.name.trim() ? record.name.trim().slice(0, 64) : record.id,
-      managed: true,
-      createdAt: typeof record.createdAt === "string" ? record.createdAt : null,
-    });
-  }
-  const activeId = seen.has(value?.activeId) ? value.activeId : "default";
-  return { schemaVersion: 1, activeId, projects };
-}
-
 export class ProjectManager {
   constructor({
     registryRoot = PATHS.projectRegistryRoot,
@@ -109,14 +84,7 @@ export class ProjectManager {
 
   async readRegistry() {
     try {
-      const registry = JSON.parse(await readFile(this.registryFile, "utf8"));
-      if (!Array.isArray(registry?.projects) || typeof registry.activeId !== "string" || !PROJECT_ID.test(registry.activeId)
-        || !registry.projects.some(project => project?.id === registry.activeId)
-        || registry.projects.some(project => typeof project?.id !== "string" || !PROJECT_ID.test(project.id))
-        || new Set(registry.projects.map(project => project.id)).size !== registry.projects.length) {
-        throw new Error("Invalid project registry");
-      }
-      return normalizeRegistry(registry);
+      return parseProjectRegistry(await readFile(this.registryFile, "utf8"));
     } catch (error) {
       if (error.code === "ENOENT") return defaultRegistry();
       throw new ProjectError("项目清单无法读取；请检查清单文件或权限后重试，现有项目不会被覆盖", "PROJECT_REGISTRY_UNREADABLE", 500);

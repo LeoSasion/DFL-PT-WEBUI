@@ -12,6 +12,7 @@ import {
 } from "@tabler/icons-react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { CUDA_WORKING_STATES } from "../cuda-runtime.js";
 import "@xterm/xterm/css/xterm.css";
 import { PlainLog } from "./PlainLog.jsx";
 
@@ -145,6 +146,7 @@ function ActionRow({
 }
 
 function ReadySidebar({ state, busyAction, onAction }) {
+  const runtimeBlocked = Boolean(busyAction) || state.environmentStatus === "changing" || CUDA_WORKING_STATES.has(state.cudaRuntime?.status) || Boolean(state.cudaRuntime?.canRecover);
   const webuiAction = state.webuiRunning ? "stopWebUi" : "startWebUi";
   const webuiPid = Number.isInteger(state.webuiPid) && state.webuiPid > 0
     ? `PID ${state.webuiPid}`
@@ -162,6 +164,7 @@ function ReadySidebar({ state, busyAction, onAction }) {
             hoverSubtitle={state.webuiRunning ? "点击后停止本地服务" : null}
             dangerOnHover={state.webuiRunning}
             primary
+            disabled={runtimeBlocked && !state.webuiRunning}
             busy={busyAction === webuiAction}
             onClick={() => onAction(webuiAction)}
           />
@@ -169,6 +172,7 @@ function ReadySidebar({ state, busyAction, onAction }) {
             icon={IconTerminal2}
             title="传统 BAT 模式"
             subtitle="进入原有命令行工作流"
+            disabled={runtimeBlocked}
             busy={busyAction === "openLegacy"}
             onClick={() => onAction("openLegacy")}
           />
@@ -178,12 +182,12 @@ function ReadySidebar({ state, busyAction, onAction }) {
       <section>
         <h2>环境工具</h2>
         <div className="action-stack action-stack--compact">
-          <ActionRow icon={IconSettings} title="首次配置 / 重新检测" busy={busyAction === "runFirstSetup"} onClick={() => onAction("runFirstSetup")} />
+          <ActionRow icon={IconSettings} title="首次配置 / 重新检测" disabled={runtimeBlocked} busy={busyAction === "runFirstSetup"} onClick={() => onAction("runFirstSetup")} />
           <ActionRow icon={IconCloudDownload} title="下载新版启动器" subtitle="通过发行页升级；不会自动更新" onClick={() => onAction("openExternal", { url: "https://github.com/LeoSasion/DFL-PT-WEBUI/releases" })} />
-          <ActionRow icon={IconCloudDownload} title="升级应用 / 备份与回退" subtitle="升级到此启动器固定的源码快照" disabled={state.webuiRunning || state.terminalRunning} busy={busyAction === "applyUpdate"} onClick={() => onAction("reviewUpgrade")} />
+          <ActionRow icon={IconCloudDownload} title="升级应用 / 备份与回退" subtitle="升级到此启动器固定的源码快照" disabled={runtimeBlocked || state.webuiRunning || state.terminalRunning} busy={busyAction === "applyUpdate"} onClick={() => onAction("reviewUpgrade")} />
           {state.upgradePending && <ActionRow icon={IconShieldCheck} title="恢复未完成的升级" subtitle="用本地备份恢复原源码和构建" busy={busyAction === "rollbackUpdate"} onClick={() => onAction("rollbackUpdate")} />}
-          <ActionRow icon={IconShieldCheck} title="修复依赖" disabled={state.webuiRunning || state.terminalRunning} busy={busyAction === "repairDependencies"} onClick={() => onAction("repairDependencies")} />
-          <ActionRow icon={IconGlobe} title="PyTorch 官方运行包" subtitle="CUDA 12.8 随 PyTorch wheel 安装" disabled />
+          <ActionRow icon={IconShieldCheck} title="修复依赖" disabled={runtimeBlocked || state.webuiRunning || state.terminalRunning} busy={busyAction === "repairDependencies"} onClick={() => onAction("repairDependencies")} />
+          <ActionRow icon={IconGlobe} title="PyTorch 官方运行包" subtitle="CUDA 随匹配的运行包安装" disabled />
         </div>
       </section>
 
@@ -208,10 +212,7 @@ export function ReadyView({ state, logs, busyAction, onAction }) {
       <section className="terminal-panel panel-line">
         <header className="terminal-tabs">
           <h1>交互终端</h1>
-          <div className="terminal-tabs__group" role="tablist" aria-label="终端输出视图">
-            <button className="is-active" role="tab" aria-selected="true">启动器</button>
-            <button role="tab" aria-selected="false">任务输出</button>
-          </div>
+          <span className="terminal-output-label">启动器与任务输出</span>
           <span className="terminal-mode"><IconTerminal2 size={14} />ConPTY</span>
         </header>
         <div className="terminal-stage">

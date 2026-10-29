@@ -31,7 +31,7 @@ class MEInferenceModel:
             if indexes and len(indexes) != 1:
                 raise ValueError('ME currently uses one GPU')
             device = f'cuda:{indexes[0]}' if indexes else 'cuda'
-        self.engine = MEEngine.load(self.directory / 'me.pt', device)
+        self.engine = MEEngine.load(self.directory / 'me.pt', device, training=False)
         from core.leras import nn
         nn.initialize(nn.DeviceConfig.CPU() if cpu_only else nn.DeviceConfig.GPUIndexes([self.engine.device.index or 0]))
 

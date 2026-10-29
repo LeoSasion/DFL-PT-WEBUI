@@ -4,9 +4,11 @@ import json
 from pathlib import Path
 import os
 import tempfile
+from core.torch_runtime_switch import assert_runtime_available
+assert_runtime_available(Path(__file__).resolve().parents[2])
+import torch
 import cv2
 import numpy as np
-import torch
 from me_backend.config import MEConfig
 from me_backend.data import read_aligned
 from me_backend.engine import MEEngine

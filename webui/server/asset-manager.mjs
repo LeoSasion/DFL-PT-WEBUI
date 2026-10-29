@@ -7,15 +7,16 @@ import {
   readdir,
   realpath,
   rename,
-  stat,
   unlink,
 } from "node:fs/promises";
 import { createHash, randomBytes } from "node:crypto";
 import { runHelperProcess } from "./helper-process.mjs";
+import { createJsonProgressReader } from "./progress-reader.mjs";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { buildDflEnvironment } from "./environment.mjs";
 import { PATHS, assertWithin, pathExists } from "./paths.mjs";
+import { compareEnglishNaturalNames } from "./directory-files.mjs";
 
 const IMAGE_NAME = /^[^<>:"/\\|?*\u0000-\u001f]{1,220}\.(?:jpe?g|png)$/i;
 const QUARANTINE_TOKEN = /^\d{14}-[a-f0-9]{10}$/;
@@ -294,18 +295,13 @@ export async function resolveQuarantinedImage(side, token, encodedName) {
 }
 
 async function runAssetHelper(args, input, { signal, onProgress, timeoutMs = 120_000 } = {}) {
-  let pending = "";
-  const progress = line => {
-    if (line.startsWith("DFL_PROGRESS ")) {
-      try { onProgress?.(JSON.parse(line.slice(13))); } catch { /* malformed progress is not a result */ }
-    }
-  };
+  const progress = createJsonProgressReader(onProgress);
   const result = await runHelperProcess(PATHS.python, [path.join(PATHS.webuiRoot, "python", "dfl_asset_tool.py"), ...args], {
-    cwd: PATHS.currentDflRoot, env: buildDflEnvironment("current"), input, signal, timeoutMs,
+    cwd: PATHS.dflRoot, env: buildDflEnvironment("current"), input, signal, timeoutMs,
     label: "DFL 分析", maxBytes: MAX_HELPER_OUTPUT,
-    onStderr: chunk => { pending += chunk.toString("utf8"); const lines = pending.split(/\r?\n/); pending = lines.pop() || ""; lines.forEach(progress); },
+    onStderr: progress.write,
   });
-  if (pending) progress(pending);
+  progress.end();
   if (result.code !== 0) throw new AssetError(result.stderr.split(/\r?\n/).filter(line => !line.startsWith("DFL_PROGRESS ")).join("\n").trim() || "读取 DFL 元数据失败", "DFL_METADATA_FAILED", 422);
   try { return JSON.parse(result.stdout); } catch { throw new AssetError("DFL 分析响应不是有效 JSON", "DFL_METADATA_INVALID", 500); }
 }
@@ -857,7 +853,7 @@ export async function streamAlignedPoster(response, side) {
   const names = (await readdir(directory, { withFileTypes: true }))
     .filter((entry) => entry.isFile() && !entry.isSymbolicLink() && IMAGE_NAME.test(entry.name))
     .map((entry) => entry.name)
-    .sort((left, right) => left.localeCompare(right, "en", { numeric: true }));
+    .sort(compareEnglishNaturalNames);
   if (!names.length) {
     throw new AssetError("aligned 预览图不存在", "IMAGE_MISSING", 404);
   }

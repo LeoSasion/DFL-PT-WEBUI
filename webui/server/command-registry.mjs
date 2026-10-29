@@ -1,5 +1,5 @@
-import { createReadStream, readdirSync } from "node:fs";
-import { createHash } from "node:crypto";
+import { readdirSync } from "node:fs";
+import { sha256File } from "./hash-file.mjs";
 import { lstat, readdir, readFile, realpath, stat } from "node:fs/promises";
 import { runHelperProcess } from "./helper-process.mjs";
 import path from "node:path";
@@ -12,6 +12,9 @@ import { RestorationManager } from "./restoration-manager.mjs";
 import { bestFacesetManager } from "./best-faceset-manager.mjs";
 import { mergePreviewDirectory, assertMergePreviewLocation, inspectMergePreview } from "./merge-preview-manager.mjs";
 import { ME_CONFIG_PARAMETERS, ME_DEFAULT_CONFIG, configFromParameters, validateMeConfig } from "../shared/me-training-options.mjs";
+import { TAE_CONFIG_PARAMETERS, TAE_DEFAULT_CONFIG, configFromTaeParameters, validateTaeConfig } from "../shared/tae-training-options.mjs";
+import { verifyTaeDependencies } from "./tae-dependencies.mjs";
+import { verifyExtremeExport, verifyDfmReceipt } from "./dfm-export.mjs";
 
 const GPU_PARAMETERS = [
   {
@@ -166,16 +169,14 @@ async function verifyDetectorSelection(context = {}) {
   const info = await stat(resolved);
   if (!info.isFile() || info.size !== expected.sizeBytes)
     throw new CommandValidationError("检测器权重与固定来源大小不符", "VISION_ASSET_INVALID");
-  const digest = createHash("sha256");
-  for await (const chunk of createReadStream(resolved)) digest.update(chunk);
-  if (digest.digest("hex") !== expected.sha256)
+  if (await sha256File(resolved) !== expected.sha256)
     throw new CommandValidationError("检测器权重与固定来源散列不符", "VISION_ASSET_INVALID");
 }
 
 async function verifyFaceEnhancement(modelId) {
   if (!["mambairv2", "realesrgan-x4plus"].includes(modelId)) throw new CommandValidationError("请选择 MambaIRv2 或 Real-ESRGAN", "PARAMETER_INVALID");
   const script = "import sys,json;sys.path.insert(0,sys.argv[1]);from facelib.FaceEnhancement import validate_enhancement_assets;print(json.dumps(validate_enhancement_assets(sys.argv[2])))";
-  const result = await runHelperProcess(PATHS.python, ["-c", script, PATHS.currentDflRoot, modelId], {
+  const result = await runHelperProcess(PATHS.python, ["-c", script, PATHS.dflRoot, modelId], {
     cwd: PATHS.repositoryRoot, env: buildDflEnvironment("current"), timeoutMs: 60_000, maxBytes: 256 * 1024, label: "人脸修复资源校验",
   });
   if (result.code !== 0) throw new CommandValidationError("人脸修复资源或可选依赖尚未准备，请在安装器中导入修复资源与依赖", "FACE_ENHANCEMENT_UNAVAILABLE", { reason: result.stderr.slice(-600) });
@@ -285,6 +286,97 @@ const ME_IMPORT_PARAMETERS = [
   ...ME_CONFIG_PARAMETERS.filter(parameter => parameter.structural || parameter.configKey === "batch_size"),
 ];
 
+const TAE_VAE_PARAMETER = { id: "vae_weights", label: "TAEQI2.1 基础 权重", group: "workflow", type: "text",
+  default: "", maxLength: 2048, format: "local-path", placeholder: "本机 .safetensors 的绝对路径",
+  help: "留空使用本机随附权重；续训沿用检查点路径。文件须匹配已验证的 TAEQI2.1 版本。" };
+const TAE_TRAIN_PARAMETERS = [
+  ...TAE_CONFIG_PARAMETERS,
+  { id: "pretraining", label: "通用底模预训练", group: "workflow", type: "boolean", default: false,
+    help: "从一个素材池为两路独立采样，自动留出验证样本；继续训练时保留此模式。" },
+  ...ME_TRAIN_PARAMETERS.filter(item => ["forceModelName", "silentStart", "srcFaceset", "dstFaceset",
+    "pretrainingDataDir", "gpuIndexes", "cpuOnly", "resetDataState", "stopAtTarget", "targetIterations"].includes(item.id)).map(item => ({
+      ...item, ...(item.id === "silentStart" ? { help: "仅继续明确选择的 TAE 检查点，保持已保存配置。" } : {}),
+      ...(item.id === "gpuIndexes" ? { help: "TAE 当前支持单张 CUDA GPU；CPU 模式使用 FP32，耗时和内存较高。" } : {}),
+    })),
+  TAE_VAE_PARAMETER,
+  { id: "maxMinutes", label: "本次训练时限（分钟）", group: "workflow", type: "number", default: 60,
+    min: .01, max: 1440, help: "数据检查完成后开始计时；到达时限后在当前更新结束时保存停止。" },
+  { id: "stopAtUtc", label: "固定截止时间（可选，含时区）", group: "workflow", type: "text", default: "",
+    help: "续训可沿用原截止时间，素材检查也计入剩余时间；格式示例：2026-10-17T07:47:50+08:00。到时保存停止，与分钟时限取较早者。" },
+];
+
+const TAE_VAE_SHA256 = "6578b31cc5e336233a2c842eba61b56425bbcac97c7088705f7c7db93291887e";
+async function requireTaeWeights(value) {
+  const selected = value || process.env.TAE_VAE_WEIGHTS || PATHS.taeWeights;
+  if (typeof selected !== "string" || !path.isAbsolute(selected) || !/\.safetensors$/i.test(selected)) {
+    throw new CommandValidationError("请选择本机 TAEQI2.1 .safetensors 权重的绝对路径", "TAE_VAE_MISSING");
+  }
+  const file = path.resolve(selected);
+  await requireFile(file, "TAEQI2.1 基础 权重不存在", "TAE_VAE_MISSING");
+  if (!(await stat(file)).size) throw new CommandValidationError("TAEQI2.1 基础 权重为空", "TAE_VAE_INVALID");
+  // The Python loader verifies the pinned digest before constructing TAE. Avoid
+  // hashing the asset repeatedly during read-only form preflight.
+  return file;
+}
+
+async function requireTaeRuntime() {
+  try { await verifyTaeDependencies(); }
+  catch (error) { throw new CommandValidationError(error.message, error.code); }
+}
+
+async function requireTaeCheckpoint(name) {
+  const directory = meModelDirectory(name);
+  const checkpoint = path.join(directory, "tae.pt");
+  await requireFile(checkpoint, "所选 TAE 检查点不存在", "MODEL_MISSING");
+  if (!(await stat(checkpoint)).size) throw new CommandValidationError("所选 TAE 检查点为空", "MODEL_INVALID");
+  let metadata;
+  try {
+    const file = path.join(directory, "metadata.json");
+    if ((await stat(file)).size > 65536) throw new Error("metadata too large");
+    metadata = JSON.parse(await readFile(file, "utf8"));
+    if (metadata.format !== "tae-liae-pytorch" || metadata.version !== 1 || !["TAE"].includes(metadata.model_class)
+      || metadata.name !== name || metadata.checkpoint !== "tae.pt"
+      || !Number.isInteger(metadata.iteration) || metadata.iteration < 0 || metadata.vae_sha256 !== TAE_VAE_SHA256) throw new Error("metadata mismatch");
+    metadata.config = validateTaeConfig(metadata.config);
+    metadata.training_mode ??= "identity";
+    if (!["identity", "pretraining"].includes(metadata.training_mode)) throw new Error("invalid training mode");
+  } catch {
+    throw new CommandValidationError("所选模型不是有效的 TAE 检查点", "MODEL_INVALID");
+  }
+  return metadata;
+}
+
+async function inspectTaeTrainingIntent(context) {
+  if (context.launchMode !== "guided") throw new CommandValidationError("TAE 训练需要使用任务向导", "PARAMETER_INVALID");
+  const parameters = context.parameters;
+  const directory = meModelDirectory(parameters.forceModelName);
+  const metadata = parameters.silentStart ? await requireTaeCheckpoint(parameters.forceModelName) : null;
+  if (!metadata) {
+    const names = await readdir(path.dirname(directory)).catch(error => { if (error.code === "ENOENT") return []; throw error; });
+    if (names.some(name => name.toLocaleLowerCase("en-US") === parameters.forceModelName.toLocaleLowerCase("en-US"))) {
+      throw new CommandValidationError("模型名称已存在，请选择继续所选模型或使用新名称", "MODEL_EXISTS");
+    }
+  }
+  const explicit = context.requestedParameterIds ? Object.fromEntries(context.requestedParameterIds.map(id => [id, parameters[id]])) : parameters;
+  const pretraining = Object.hasOwn(explicit, "pretraining") ? parameters.pretraining : metadata?.training_mode === "pretraining";
+  if (metadata && (pretraining ? "pretraining" : "identity") !== metadata.training_mode) {
+    throw new CommandValidationError("继续训练须保留模型的普通训练／通用预训练模式", "MODEL_CONFIG_INCOMPATIBLE");
+  }
+  const config = configFromTaeParameters(explicit, metadata?.config ?? TAE_DEFAULT_CONFIG);
+  try { validateTaeConfig(config); } catch (error) { throw new CommandValidationError(error.message, "PARAMETER_INVALID"); }
+  const changes = metadata ? Object.keys(config).filter(key => config[key] !== metadata.config[key]) : [];
+  const incompatible = changes.filter(key => !["decoder_mode", "decoder_lr_multiplier", "precision", "batch_size", "ct_mode", "training_mask_mode", "random_warp", "learning_rate", "eyes_mouth_weight"].includes(key));
+  if (incompatible.length) throw new CommandValidationError(`TAE 续训须保持检查点配置：${incompatible.join(", ")}`, "MODEL_CONFIG_INCOMPATIBLE");
+  if (parameters.stopAtUtc && (!/(Z|[+-]\d{2}:\d{2})$/.test(parameters.stopAtUtc)
+    || !Number.isFinite(Date.parse(parameters.stopAtUtc)) || Date.parse(parameters.stopAtUtc) <= Date.now())) {
+    throw new CommandValidationError("固定截止时间须为含时区的未来 ISO 时间", "PARAMETER_INVALID");
+  }
+  if (parameters.gpuIndexes?.includes(",")) throw new CommandValidationError("TAE 当前只支持一张 CUDA GPU", "PARAMETER_INVALID");
+  const vae_weights = await requireTaeWeights(parameters.vae_weights || metadata?.vae_weights);
+  return { config, changes, newOptimizationStage: changes.length > 0, resumed: Boolean(metadata), vae_weights,
+    pretraining, pretrainingDataDir: parameters.pretrainingDataDir || metadata?.pretraining_data || "" };
+}
+
 function meModelDirectory(name) {
   if (typeof name !== "string" || !name || name.length > 64 || name.trim() !== name
       || /[/\\:*?"<>|\u0000-\u001f]/.test(name) || /[. ]$/.test(name)
@@ -359,7 +451,7 @@ async function inspectMeTrainingIntent(context) {
   if (changes.some(change => change.field === "pretrain") && !parameters.resetDataState) {
     throw new CommandValidationError("切换预训练阶段需要重置采样状态", "DATA_RESET_REQUIRED");
   }
-  if (parameters.cpuOnly && config.use_fp16) throw new CommandValidationError("FP16 混合精度训练需要 CUDA，请关闭仅使用 CPU 或 FP16", "PARAMETER_INVALID");
+  if (parameters.cpuOnly && (config.use_fp16 || config.use_bf16)) throw new CommandValidationError("FP16 / BF16 混合精度训练需要 CUDA，请关闭仅使用 CPU 或混合精度", "PARAMETER_INVALID");
   const indexes = parameters.gpuIndexes ? parameters.gpuIndexes.split(",").map(Number) : [];
   if (new Set(indexes).size !== indexes.length) throw new CommandValidationError("GPU 索引不能重复", "PARAMETER_INVALID");
   if (!parameters.cpuOnly && indexes.length > config.batch_size) throw new CommandValidationError("Batch size 必须至少为 GPU 数量", "PARAMETER_INVALID");
@@ -882,7 +974,7 @@ function buildDatasetUtility({
     locks: locks ?? [`workspace:data_${side}_aligned`],
     async preflight(context) {
       await requireFile(PATHS.python, "内置 Python 不存在，请在启动器中修复依赖", "RUNTIME_MISSING");
-      await requireFile(PATHS.currentMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
+      await requireFile(PATHS.dflMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
       if (!allowEmpty) await requireDirectoryWithFiles(
         datasetDirectory(side),
         `${side.toUpperCase()} aligned 人脸集不存在或为空`,
@@ -892,7 +984,7 @@ function buildDatasetUtility({
     build(context) {
       return {
         executable: PATHS.python,
-        args: [PATHS.currentMain, ...args(datasetDirectory(side), context.parameters)],
+        args: [PATHS.dflMain, ...args(datasetDirectory(side), context.parameters)],
         env: buildDflEnvironment("current"),
       };
     },
@@ -1029,7 +1121,7 @@ function buildXsegUtility({ id, label, shortLabel, side, action, modelDirectory 
     ],
     async preflight() {
       await requireFile(PATHS.python, "内置 Python 不存在，请在启动器中修复依赖", "RUNTIME_MISSING");
-      await requireFile(PATHS.currentMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
+      await requireFile(PATHS.dflMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
       await requireDirectoryWithFiles(
         datasetDirectory(side),
         `${side.toUpperCase()} aligned 人脸集不存在或为空`,
@@ -1047,7 +1139,7 @@ function buildXsegUtility({ id, label, shortLabel, side, action, modelDirectory 
       }
     },
     build() {
-      const values = [PATHS.currentMain, "xseg", action, "--input-dir", datasetDirectory(side)];
+      const values = [PATHS.dflMain, "xseg", action, "--input-dir", datasetDirectory(side)];
       if (requiresModel) {
         values.push(
           "--model-dir",
@@ -1102,35 +1194,64 @@ function buildModelExport(model, profile, label) {
     id,
     label: `导出 ${label} DFM`,
     shortLabel: `${label} DFM`,
-    description: `把 ${label} 模型导出为 DeepFaceLive 可用的 DFM。`,
+    description: `导出 ${label} DFM：正常导出或 FP8 / FP4 极致量化。大模型自动配套外置权重，无 2GB 总量限制。`,
     profile,
     category: "model",
     stage: "encode",
     side: "both",
-    interactive: true,
-    parameters: [TRAIN_PARAMETERS.find(parameter => parameter.id === "forceModelName"), ...GPU_PARAMETERS],
+    interactive: false,
+    parameters: [TRAIN_PARAMETERS.find(parameter => parameter.id === "forceModelName"),
+      { id: "exportMode", label: "DFM 导出模式", type: "select", default: "normal", options: [
+        { value: "normal", label: "正常导出" }, { value: "extreme", label: "极致量化（FP8 / FP4）" }],
+        help: "正常导出保持浮点精度。极致量化需要 Blackwell + TensorRT，使用真实 DST 人脸校准，不能直接用于旧版 DeepFaceLive。训练权重不变。" },
+      { id: "calibrationDir", label: "量化校准人脸集", type: "text", default: "data_dst/aligned", maxLength: 512, advanced: true,
+        help: "仅极致量化使用；当前项目内的 DST aligned 文件夹或 PAK / ZIP，至少 8 张。" },
+      { id: "calibrationSamples", label: "校准样本上限", type: "number", integer: true, min: 8, max: 512, default: 64, advanced: true },
+      ...(model === "TAE" ? [TAE_VAE_PARAMETER] : []), ...GPU_PARAMETERS],
     controls: [],
-    locks: ["workspace:model", "gpu"],
+    locks: ["workspace:model", "workspace:data_dst_aligned", "gpu"],
     async preflight(context = {}) {
       await requireFile(PATHS.python, "内置 Python 不存在，请在启动器中修复依赖", "RUNTIME_MISSING");
       await requireFile(
-        profile === "legacy" ? PATHS.legacyMain : PATHS.currentMain,
+        PATHS.dflMain,
         `${profile} DeepFaceLab 入口不存在，请检查项目更新`,
         "PROJECT_INCOMPLETE",
       );
-      await requireMeCheckpoint(context.parameters?.forceModelName);
+      const parameters = context.parameters ?? {};
+      const metadata = model === "TAE" ? await requireTaeCheckpoint(parameters.forceModelName)
+        : await requireMeCheckpoint(parameters.forceModelName);
+      const result = {};
+      if (model === "TAE") {
+        await requireTaeRuntime();
+        result.vae_weights = await requireTaeWeights(parameters.vae_weights || metadata.vae_weights);
+      }
+      if (parameters.gpuIndexes?.includes(",")) throw new CommandValidationError("DFM 导出只使用一张 GPU", "PARAMETER_INVALID");
+      if (parameters.exportMode === "extreme") {
+        if (parameters.cpuOnly) throw new CommandValidationError("极致量化需要 Blackwell GPU，不能选择仅 CPU", "PARAMETER_INVALID");
+        try { result.quantization = await verifyExtremeExport({ gpuIndex: parameters.gpuIndexes || "0" }); }
+        catch (error) { throw new CommandValidationError(error.message, "DFM_QUANTIZATION_UNAVAILABLE"); }
+        result.calibrationDir = (await requireMeFaceset(parameters.calibrationDir, "量化校准人脸集")).path;
+      }
+      return result;
     },
     build(context) {
       return {
         executable: PATHS.python,
         args: [
-          PATHS.currentMain,
+          PATHS.dflMain,
           "exportdfm",
           "--model-dir",
           path.join(PATHS.workspaceRoot, "model"),
           "--model",
           model,
           "--force-model-name", context.parameters.forceModelName,
+          "--export-mode", context.parameters.exportMode || "normal",
+          ...(context.jobId ? ["--export-id", context.jobId] : []),
+          ...(context.parameters.exportMode === "extreme" ? ["--calibration-dir",
+            context.preflight?.calibrationDir || resolveWorkspacePath(context.parameters.calibrationDir, "校准人脸集"),
+            "--calibration-samples", String(context.parameters.calibrationSamples)] : []),
+          ...(model === "TAE" && (context.preflight?.vae_weights || context.parameters.vae_weights)
+            ? ["--vae-weights", context.preflight?.vae_weights || context.parameters.vae_weights] : []),
           ...(context.parameters.cpuOnly ? ["--cpu-only"] : []),
           ...(context.parameters.gpuIndexes ? ["--force-gpu-idxs", context.parameters.gpuIndexes] : []),
         ],
@@ -1138,11 +1259,8 @@ function buildModelExport(model, profile, label) {
       };
     },
     async postflight(context) {
-      await requireDirectoryMatching(
-        meModelDirectory(context.parameters.forceModelName),
-        /\.(?:dfm|onnx)$/i,
-        `${label} DFM 导出结束，但没有找到 .dfm 文件`,
-      );
+      await verifyDfmReceipt(meModelDirectory(context.parameters.forceModelName),
+        { family: model, mode: context.parameters.exportMode || "normal", jobId: context.jobId });
     },
   };
 }
@@ -1159,22 +1277,26 @@ function buildModelMerge(model, profile, label) {
     stage: "merge",
     side: "dst",
     interactive: true,
-    parameters: [...MERGE_PARAMETERS,
+    parameters: [...MERGE_PARAMETERS, ...(model === "TAE" ? [TAE_VAE_PARAMETER] : [
       { id: "previewJobId", label: "已复核小样任务", type: "text", default: "", advanced: true, maxLength: 64,
-        help: "从小样采用参数时自动绑定，预检会再次检查素材、模型和参数一致性；普通合成可留空。" }],
+        help: "从小样采用参数时自动绑定，预检会再次检查素材、模型和参数一致性；普通合成可留空。" }])],
     controls: [],
     locks: ["workspace:model", "workspace:data_dst_merged", "gpu"],
     async preflight(context = {}) {
       await requireFile(PATHS.python, "内置 Python 不存在，请在启动器中修复依赖", "RUNTIME_MISSING");
       await requireFile(
-        profile === "legacy" ? PATHS.legacyMain : PATHS.currentMain,
+        PATHS.dflMain,
         `${profile} DeepFaceLab 入口不存在，请检查项目更新`,
         "PROJECT_INCOMPLETE",
       );
       await requireDirectoryWithFiles(path.join(PATHS.workspaceRoot, "data_dst"), "DST 视频帧不存在");
       const faceset = await requireMeFaceset(context.parameters?.dstFaceset || "data_dst/aligned", "DST 合成人脸集");
       if (faceset.packed) throw new CommandValidationError("合成人脸集需要解包后的 aligned 文件夹", "PARAMETER_INVALID");
-      await requireMeCheckpoint(context.parameters?.forceModelName);
+      const modelMetadata = model === "TAE" ? await requireTaeCheckpoint(context.parameters?.forceModelName)
+        : await requireMeCheckpoint(context.parameters?.forceModelName);
+      if (model === "TAE") await requireTaeRuntime();
+      const vae_weights = model === "TAE" ? await requireTaeWeights(context.parameters?.vae_weights || modelMetadata.vae_weights) : null;
+      if (model === "TAE" && context.parameters?.gpuIndexes?.includes(",")) throw new CommandValidationError("TAE 当前只支持一张 GPU", "PARAMETER_INVALID");
       if (context.parameters?.previewJobId) {
         const preview = await inspectMergePreview(context.parameters.previewJobId);
         if (preview.status !== "complete" || preview.completeCount !== preview.items.length
@@ -1189,11 +1311,11 @@ function buildModelMerge(model, profile, label) {
         }
       }
       if (Number(context.parameters?.superResolution) > 0) await verifyFaceEnhancement(context.parameters.superResolutionModel);
-      return { ...await requireMergeXseg(context), dstFaceset: faceset.path };
+      return { ...await requireMergeXseg(context), dstFaceset: faceset.path, ...(vae_weights ? { vae_weights } : {}) };
     },
     build(context) {
       const args = [
-        profile === "legacy" ? PATHS.legacyMain : PATHS.currentMain,
+        PATHS.dflMain,
         "merge",
         "--input-dir",
         path.join(PATHS.workspaceRoot, "data_dst"),
@@ -1215,7 +1337,8 @@ function buildModelMerge(model, profile, label) {
       return {
         executable: PATHS.python,
         args,
-        env: buildMergeEnvironment(profile, context),
+        env: { ...buildMergeEnvironment(profile, context), ...(model === "TAE"
+          ? { TAE_VAE_WEIGHTS: context.preflight?.vae_weights || context.parameters.vae_weights || process.env.TAE_VAE_WEIGHTS || "" } : {}) },
       };
     },
     async postflight() {
@@ -1287,7 +1410,7 @@ function buildAdditionalEncode(id, label, mode, extension) {
     locks: ["workspace:data_dst_merged", "workspace:result"],
     async preflight() {
       await requireFile(PATHS.python, "内置 Python 不存在，请在启动器中修复依赖", "RUNTIME_MISSING");
-      await requireFile(PATHS.currentMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
+      await requireFile(PATHS.dflMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
       if (!(await findWorkspaceVideo("data_dst"))) {
         throw new CommandValidationError("未找到 workspace/data_dst.* 参考视频", "INPUT_MISSING");
       }
@@ -1340,7 +1463,7 @@ function buildRestoredExtraction(side) {
     controls: [], locks: [`workspace:data_${side}_aligned`, "gpu"],
     async preflight(context = {}) {
       await requireFile(PATHS.python, "内置 Python 不存在", "RUNTIME_MISSING");
-      await requireFile(PATHS.currentMain, "提取入口不存在", "PROJECT_INCOMPLETE");
+      await requireFile(PATHS.dflMain, "提取入口不存在", "PROJECT_INCOMPLETE");
       await completedRestoration(side, context.parameters.restorationTaskId);
       await verifyDetectorSelection(context);
       await verifyLandmarkSelection(context);
@@ -1373,7 +1496,7 @@ function buildVideoCut(side) {
     locks: [`workspace:data_${side}`],
     async preflight() {
       await requireFile(PATHS.python, "内置 Python 不存在，请在启动器中修复依赖", "RUNTIME_MISSING");
-      await requireFile(PATHS.currentMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
+      await requireFile(PATHS.dflMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
       if (!(await findWorkspaceVideo(`data_${side}`))) {
         throw new CommandValidationError(`未找到 ${upper} 视频`, "INPUT_MISSING");
       }
@@ -1384,7 +1507,7 @@ function buildVideoCut(side) {
         throw new CommandValidationError(`未找到 ${upper} 视频`, "INPUT_MISSING");
       }
       const args = [
-        PATHS.currentMain,
+        PATHS.dflMain,
         "videoed",
         "cut-video",
         "--input-file",
@@ -1441,7 +1564,7 @@ const definitions = Object.freeze({
     locks: ["workspace:data_src"],
     async preflight() {
       await requireFile(PATHS.python, "内置 Python 不存在，请在启动器中修复依赖", "RUNTIME_MISSING");
-      await requireFile(PATHS.currentMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
+      await requireFile(PATHS.dflMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
       const sourceVideo = await findWorkspaceVideo("data_src");
       if (!sourceVideo) {
         throw new CommandValidationError(
@@ -1453,7 +1576,7 @@ const definitions = Object.freeze({
     },
     build(context) {
       const args = [
-        PATHS.currentMain,
+        PATHS.dflMain,
         "videoed",
         "extract-video",
         "--input-file",
@@ -1491,7 +1614,7 @@ const definitions = Object.freeze({
     locks: ["workspace:data_src_aligned", "gpu"],
     async preflight(context = {}) {
       await requireFile(PATHS.python, "内置 Python 不存在，请在启动器中修复依赖", "RUNTIME_MISSING");
-      await requireFile(PATHS.currentMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
+      await requireFile(PATHS.dflMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
       await verifyDetectorSelection(context);
       await verifyLandmarkSelection(context);
       await requireDirectoryWithFiles(
@@ -1501,7 +1624,7 @@ const definitions = Object.freeze({
     },
     build(context) {
       const args = [
-        PATHS.currentMain,
+        PATHS.dflMain,
         "extract",
         "--input-dir",
         path.join(PATHS.workspaceRoot, "data_src"),
@@ -1544,7 +1667,7 @@ const definitions = Object.freeze({
     locks: ["workspace:data_dst"],
     async preflight() {
       await requireFile(PATHS.python, "内置 Python 不存在，请在启动器中修复依赖", "RUNTIME_MISSING");
-      await requireFile(PATHS.currentMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
+      await requireFile(PATHS.dflMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
       const targetVideo = await findWorkspaceVideo("data_dst");
       if (!targetVideo) {
         throw new CommandValidationError(
@@ -1556,7 +1679,7 @@ const definitions = Object.freeze({
     },
     build(context) {
       const args = [
-        PATHS.currentMain,
+        PATHS.dflMain,
         "videoed",
         "extract-video",
         "--input-file",
@@ -1594,7 +1717,7 @@ const definitions = Object.freeze({
     locks: ["workspace:data_dst_aligned", "gpu"],
     async preflight(context = {}) {
       await requireFile(PATHS.python, "内置 Python 不存在，请在启动器中修复依赖", "RUNTIME_MISSING");
-      await requireFile(PATHS.currentMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
+      await requireFile(PATHS.dflMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
       await verifyDetectorSelection(context);
       await verifyLandmarkSelection(context);
       await requireDirectoryWithFiles(
@@ -1604,7 +1727,7 @@ const definitions = Object.freeze({
     },
     build(context) {
       const args = [
-        PATHS.currentMain,
+        PATHS.dflMain,
         "extract",
         "--input-dir",
         path.join(PATHS.workspaceRoot, "data_dst"),
@@ -1631,6 +1754,54 @@ const definitions = Object.freeze({
         "DST 人脸提取命令已结束，但 aligned 目录没有产物",
       );
     },
+  },
+  "train.tae": {
+    id: "train.tae", label: "训练 TAEQI2.1", shortLabel: "TAEQI2.1",
+    description: "冻结 Encoder，训练 LIAE Inter；Decoder 支持冻结、末段和全量三档。",
+    profile: "pytorch", category: "training", stage: "train", side: "both", interactive: true,
+    parameters: TAE_TRAIN_PARAMETERS, controls: ["save", "preview", "close"], locks: ["workspace:model", "gpu"],
+    async preflight(context = {}) {
+      await requireFile(PATHS.python, "内置 Python 不存在，请在启动器中修复依赖", "RUNTIME_MISSING");
+      await requireFile(PATHS.taeMain, "TAE PyTorch 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
+      await requireTaeRuntime();
+      const training = await inspectTaeTrainingIntent(context);
+      if (training.pretraining && !training.pretrainingDataDir) {
+        throw new CommandValidationError("请选择通用预训练人脸集", "PARAMETER_INVALID");
+      }
+      const pool = training.pretraining ? await requireMeFaceset(training.pretrainingDataDir, "预训练人脸集") : null;
+      const src = pool ?? await requireMeFaceset(context.parameters.srcFaceset || "data_src/aligned", "SRC 人脸集");
+      const dst = pool ?? await requireMeFaceset(context.parameters.dstFaceset || "data_dst/aligned", "DST 人脸集");
+      Object.assign(training, { srcFaceset: src.path, dstFaceset: dst.path, pretrainingDataDir: pool?.path ?? null });
+      const resources = await inspectTrainingResources(context.parameters);
+      resources.recommendation = { resolution: training.config.resolution, batchSize: training.config.batch_size };
+      resources.summary = "显示当前资源状态；TAE 配置沿用本次选择，实际占用以训练记录为准。";
+      return { training, resources,
+        evaluation: { enabled: false, reason: "TAE 暂未接入 ME 姿态评测快照" } };
+    },
+    build(context) {
+      const parameters = context.parameters;
+      const training = context.preflight?.training ?? { config: configFromTaeParameters(parameters), pretraining: parameters.pretraining };
+      const pool = training.pretraining ? resolveWorkspacePath(training.pretrainingDataDir || parameters.pretrainingDataDir, "预训练人脸集") : null;
+      const args = [PATHS.taeMain, "web-train",
+        "--src", pool ?? training.srcFaceset ?? resolveWorkspacePath(parameters.srcFaceset || "data_src/aligned", "SRC 人脸集"),
+        "--dst", pool ?? training.dstFaceset ?? resolveWorkspacePath(parameters.dstFaceset || "data_dst/aligned", "DST 人脸集"),
+        "--model", meModelDirectory(parameters.forceModelName), "--name", parameters.forceModelName,
+        "--config-json", JSON.stringify(training.config), "--steps", "0",
+        "--max-minutes", String(parameters.maxMinutes),
+        "--device", parameters.cpuOnly ? "cpu" : parameters.gpuIndexes ? `cuda:${parameters.gpuIndexes}` : "cuda",
+      ];
+      appendValue(args, "--vae-weights", training.vae_weights || parameters.vae_weights || process.env.TAE_VAE_WEIGHTS);
+      appendValue(args, "--stop-at-utc", parameters.stopAtUtc);
+      appendBoolean(args, "--pretraining", training.pretraining);
+      appendBoolean(args, "--resume", parameters.silentStart);
+      appendBoolean(args, "--reset-data-state", parameters.resetDataState);
+      if (parameters.stopAtTarget) appendValue(args, "--target-iterations", parameters.targetIterations);
+      return { executable: PATHS.python, args, env: buildDflEnvironment("pytorch", {
+        DFL_WEB_CONTROL_FILE: context.controlFile, DFL_WEB_PREVIEW_FILE: context.previewFile,
+        DFL_WEB_CONTROL_ACK_FILE: context.controlAckFile,
+      }), evaluation: { enabled: false, reason: "TAE 暂未接入 ME 姿态评测快照" } };
+    },
+    async postflight(context) { await requireTaeCheckpoint(context.parameters.forceModelName); },
   },
   "train.me": {
     id: "train.me",
@@ -1856,7 +2027,7 @@ const definitions = Object.freeze({
     locks: ["workspace:data_src_aligned"],
     async preflight() {
       await requireFile(PATHS.python, "内置 Python 不存在，请在启动器中修复依赖", "RUNTIME_MISSING");
-      await requireFile(PATHS.currentMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
+      await requireFile(PATHS.dflMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
       await requireDirectoryWithFiles(
         path.join(PATHS.workspaceRoot, "data_src", "aligned"),
         "SRC aligned 人脸集不存在或为空",
@@ -1864,7 +2035,7 @@ const definitions = Object.freeze({
     },
     build(context) {
       const args = [
-        PATHS.currentMain,
+        PATHS.dflMain,
         "sort",
         "--input-dir",
         path.join(PATHS.workspaceRoot, "data_src", "aligned"),
@@ -1902,7 +2073,7 @@ const definitions = Object.freeze({
     locks: ["workspace:data_dst_aligned"],
     async preflight() {
       await requireFile(PATHS.python, "内置 Python 不存在，请在启动器中修复依赖", "RUNTIME_MISSING");
-      await requireFile(PATHS.currentMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
+      await requireFile(PATHS.dflMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
       await requireDirectoryWithFiles(
         path.join(PATHS.workspaceRoot, "data_dst", "aligned"),
         "DST aligned 人脸集不存在或为空",
@@ -1910,7 +2081,7 @@ const definitions = Object.freeze({
     },
     build(context) {
       const args = [
-        PATHS.currentMain,
+        PATHS.dflMain,
         "sort",
         "--input-dir",
         path.join(PATHS.workspaceRoot, "data_dst", "aligned"),
@@ -1948,7 +2119,7 @@ const definitions = Object.freeze({
     locks: ["workspace:xseg_model", "gpu"],
     async preflight() {
       await requireFile(PATHS.python, "内置 Python 不存在，请在启动器中修复依赖", "RUNTIME_MISSING");
-      await requireFile(PATHS.legacyMain, "legacy DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
+      await requireFile(PATHS.dflMain, "legacy DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
       await requireDirectoryWithFiles(
         path.join(PATHS.workspaceRoot, "data_src", "aligned"),
         "SRC aligned 人脸集不存在或为空",
@@ -1965,7 +2136,7 @@ const definitions = Object.freeze({
     },
     build(context) {
       const args = [
-        PATHS.legacyMain,
+        PATHS.dflMain,
         "train",
         "--training-data-src-dir",
         path.join(PATHS.workspaceRoot, "data_src", "aligned"),
@@ -2014,7 +2185,7 @@ const definitions = Object.freeze({
     locks: ["workspace:data_src_aligned", "workspace:xseg_model", "gpu"],
     async preflight() {
       await requireFile(PATHS.python, "内置 Python 不存在，请在启动器中修复依赖", "RUNTIME_MISSING");
-      await requireFile(PATHS.currentMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
+      await requireFile(PATHS.dflMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
       await requireDirectoryWithFiles(
         path.join(PATHS.workspaceRoot, "data_src", "aligned"),
         "SRC aligned 人脸集不存在或为空",
@@ -2030,7 +2201,7 @@ const definitions = Object.freeze({
       return {
         executable: PATHS.python,
         args: [
-          PATHS.currentMain,
+          PATHS.dflMain,
           "xseg",
           "apply",
           "--input-dir",
@@ -2063,7 +2234,7 @@ const definitions = Object.freeze({
     locks: ["workspace:data_dst_aligned", "workspace:xseg_model", "gpu"],
     async preflight() {
       await requireFile(PATHS.python, "内置 Python 不存在，请在启动器中修复依赖", "RUNTIME_MISSING");
-      await requireFile(PATHS.currentMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
+      await requireFile(PATHS.dflMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
       await requireDirectoryWithFiles(
         path.join(PATHS.workspaceRoot, "data_dst", "aligned"),
         "DST aligned 人脸集不存在或为空",
@@ -2079,7 +2250,7 @@ const definitions = Object.freeze({
       return {
         executable: PATHS.python,
         args: [
-          PATHS.currentMain,
+          PATHS.dflMain,
           "xseg",
           "apply",
           "--input-dir",
@@ -2123,7 +2294,7 @@ const definitions = Object.freeze({
     locks: ["workspace:data_dst_merged", "workspace:result"],
     async preflight() {
       await requireFile(PATHS.python, "内置 Python 不存在，请在启动器中修复依赖", "RUNTIME_MISSING");
-      await requireFile(PATHS.currentMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
+      await requireFile(PATHS.dflMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
       await requireFile(
         path.join(PATHS.serverDirectory, "encode-mp4.mjs"),
         "Web Runtime 编码器入口不存在",
@@ -2214,7 +2385,7 @@ const definitions = Object.freeze({
     locks: ["workspace:data_dst"],
     async preflight() {
       await requireFile(PATHS.python, "内置 Python 不存在，请在启动器中修复依赖", "RUNTIME_MISSING");
-      await requireFile(PATHS.currentMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
+      await requireFile(PATHS.dflMain, "current DeepFaceLab 入口不存在，请检查项目更新", "PROJECT_INCOMPLETE");
       await requireDirectoryWithFiles(
         path.join(PATHS.workspaceRoot, "data_dst"),
         "DST 图片帧不存在或为空",
@@ -2224,7 +2395,7 @@ const definitions = Object.freeze({
       return {
         executable: PATHS.python,
         args: [
-          PATHS.currentMain,
+          PATHS.dflMain,
           "videoed",
           "denoise-image-sequence",
           "--input-dir",
@@ -2243,7 +2414,9 @@ const definitions = Object.freeze({
     },
   },
   "export.dfm_me": buildModelExport("ME", "current", "ME"),
+  "export.dfm_tae": buildModelExport("TAE", "current", "TAEQI2.1"),
   "merge.me": buildModelMerge("ME", "current", "ME"),
+  "merge.tae": buildModelMerge("TAE", "current", "TAEQI2.1"),
   "merge.preview_me": buildMergePreview(),
   "encode.avi": buildAdditionalEncode("encode.avi", "导出 AVI", "avi", "avi"),
   "encode.master": {
@@ -2432,11 +2605,6 @@ export function buildCommand(definition, context) {
       cwd: PATHS.repositoryRoot,
     },
   };
-}
-
-export async function resolveCommand(commandId, context) {
-  const { definition, result: preflight } = await preflightCommand(commandId, context);
-  return buildCommand(definition, { ...context, preflight });
 }
 
 export function getCommandDefinition(commandId) {

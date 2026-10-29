@@ -5,11 +5,13 @@ param(
     [string]$ArchiveDirectory = '',
     [string]$WheelhousePath = '',
     [ValidateSet('production','restoration','validation','evaluation','scene')][string]$RuntimeProfile = 'production',
+    [ValidateSet('auto','cu126','cu128')][string]$CudaRuntime = 'auto',
     [string]$ResourcePackPath = '',
     [string]$VisionCacheRoot = '',
     [switch]$SkipVisionAssets,
     [switch]$SkipWebuiBuild,
-    [switch]$SkipWebuiPreparation
+    [switch]$SkipWebuiPreparation,
+    [switch]$RepairDependencies
 )
 
 # Windows PowerShell 5.1 / PowerShell 7. No global Python, npm or PATH changes.
@@ -22,15 +24,16 @@ $rootPrefix = $root + [IO.Path]::DirectorySeparatorChar
 $cache = Join-Path $root '.launcher-install\source'
 $session = Join-Path $cache ('installing-' + [Guid]::NewGuid().ToString('N'))
 $lock = $null
-$createdVenv = $false
 $createdModules = $false
 $createdDist = $false
 $succeeded = $false
 $savedEnvironment = @{}
+$savedSecurityProtocol = [Net.ServicePointManager]::SecurityProtocol
+$installToken = [Guid]::NewGuid().ToString('N')
+$ownerPath = Join-Path $cache 'source-install-owner.json'
 $base = Join-Path $root '_internal\python_base'
 $basePython = Join-Path $base 'python.exe'
 $venv = Join-Path $root '.venv'
-$python = Join-Path $venv 'Scripts\python.exe'
 $nodeRoot = Join-Path $root '_internal\node'
 $nodeBin = Join-Path $nodeRoot 'bin'
 $node = Join-Path $nodeBin 'node.exe'
@@ -38,7 +41,6 @@ $ffmpegRoot = Join-Path $root '_internal\ffmpeg'
 $webui = Join-Path $root 'webui'
 $modules = Join-Path $webui 'node_modules'
 $dist = Join-Path $webui 'dist'
-$requirements = Join-Path $root ('release\python-locks\' + $RuntimeProfile + '-win-cp312.txt')
 
 # Digests are pinned from upstream release metadata / Node SHASUMS256.txt.
 $pythonArchive = 'cpython-3.12.14+20260814-x86_64-pc-windows-msvc-install_only_stripped.tar.gz'
@@ -59,13 +61,11 @@ function Assert-ProjectPath([string]$Path) {
     }
     # Do not follow an old runtime junction or a linked staging directory.
     $ancestor = $absolute
-    while ($ancestor -and $ancestor.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
-        if (Test-Path -LiteralPath $ancestor) {
-            $item = Get-Item -LiteralPath $ancestor -Force
-            if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-                throw "Linked runtime / install paths are not supported: $ancestor"
-            }
-        }
+    while ($ancestor -and ($ancestor -eq $root -or $ancestor.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase))) {
+        try {
+            if (([IO.File]::GetAttributes($ancestor) -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "Linked runtime / install paths are not supported: $ancestor" }
+        } catch [IO.FileNotFoundException] {} catch [IO.DirectoryNotFoundException] {}
+        if ($ancestor -eq $root) { break }
         $ancestor = Split-Path -Parent $ancestor
     }
     return $absolute
@@ -88,7 +88,12 @@ function Get-VerifiedArchive([string]$Name, [string]$Url, [string]$Sha256) {
     if (-not (Test-Path -LiteralPath $candidate -PathType Leaf) -and (Test-Path -LiteralPath $projectCached -PathType Leaf)) {
         $candidate = $projectCached
     }
-    if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+    if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+        $actual = (Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash
+        if ($actual -eq $Sha256) { return $candidate }
+        if ($NoNetwork -or [IO.Path]::GetFullPath($candidate) -ne $projectCached) { throw "SHA-256 mismatch for $candidate. Read-only/offline input was preserved." }
+        Write-Host "[source-install] Replacing an invalid managed archive cache: $Name"
+    }
         if ($NoNetwork) { throw "Offline archive missing: $candidate" }
         $download = Assert-ProjectPath (Join-Path $cache ('download-' + [Guid]::NewGuid().ToString('N') + '.partial'))
         Write-Host "[source-install] Downloading $Name from $Url"
@@ -100,14 +105,10 @@ function Get-VerifiedArchive([string]$Name, [string]$Url, [string]$Sha256) {
             # always go to the project cache, even when that directory is external.
             $candidate = $projectCached
             New-Item -ItemType Directory -Path (Split-Path -Parent $candidate) -Force | Out-Null
-            if (Test-Path -LiteralPath $candidate) { throw "Archive appeared during installation; retry: $candidate" }
-            Move-Item -LiteralPath $download -Destination $candidate
+            Move-Item -LiteralPath $download -Destination $candidate -Force
         } finally {
             if (Test-Path -LiteralPath $download) { Remove-Item -LiteralPath (Assert-ProjectPath $download) -Force }
         }
-    }
-    $actual = (Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash
-    if ($actual -ne $Sha256) { throw "SHA-256 mismatch for $candidate. Expected $Sha256, got $actual. Nothing was installed from this archive." }
     return $candidate
 }
 
@@ -118,6 +119,19 @@ function Publish-Runtime([string]$Source, [string]$Target) {
     New-Item -ItemType Directory -Path (Split-Path -Parent $Target) -Force | Out-Null
     Get-ChildItem -LiteralPath $Source -File -Recurse | Unblock-File -ErrorAction SilentlyContinue
     Move-Item -LiteralPath $Source -Destination $Target
+}
+
+function Remove-InstallDirectory([string]$Path) {
+    $absolute = Assert-ProjectPath $Path
+    $pending = New-Object 'System.Collections.Generic.Stack[string]'
+    $pending.Push($absolute)
+    while ($pending.Count) {
+        foreach ($item in Get-ChildItem -LiteralPath ($pending.Pop()) -Force) {
+            Assert-ProjectPath $item.FullName | Out-Null
+            if ($item.PSIsContainer) { $pending.Push($item.FullName) }
+        }
+    }
+    Remove-Item -LiteralPath $absolute -Recurse -Force
 }
 
 function Assert-BasePython([string]$Executable) {
@@ -133,33 +147,31 @@ function Assert-Node([string]$Executable) {
     if ([string]$actual -ne $nodeVersion) { throw "Expected Node $nodeVersion, got '$actual'. Existing Node will not be replaced." }
 }
 
-$pythonValidation = @'
-import pathlib,sys,importlib.metadata as metadata,re
-root=pathlib.Path(sys.argv[1]).resolve()
-assert sys.version_info[:2] == (3,12),sys.version
-assert pathlib.Path(sys.base_prefix).resolve() == root/'_internal'/'python_base',sys.base_prefix
-assert pathlib.Path(sys.prefix).resolve() == root/'.venv',sys.prefix
-import torch,cv2,numpy,scipy
-assert pathlib.Path(torch.__file__).resolve().is_relative_to(root/'.venv'),torch.__file__
-assert torch.__version__ == '2.9.1+cu128',torch.__version__
-assert torch.version.cuda == '12.8',torch.version.cuda
-for line in pathlib.Path(sys.argv[2]).read_text(encoding='utf-8').splitlines():
-    match=re.match(r'^([A-Za-z0-9_.-]+)==([^ #]+)',line.strip())
-    if match:
-        actual=metadata.version(match[1])
-        assert actual == match[2],f'{match[1]}: expected {match[2]}, got {actual}'
-        assert pathlib.Path(metadata.distribution(match[1]).locate_file('')).resolve().is_relative_to(root/'.venv'),match[1]
-print('DFL_PT_RUNTIME_OK|'+sys.version.split()[0]+'|'+torch.__version__)
-'@
-
 try {
     if ($root -eq [IO.Path]::GetPathRoot($root).TrimEnd('\','/')) { throw 'ProjectRoot must be an independent source checkout directory.' }
     if ($env:OS -ne 'Windows_NT' -or -not [Environment]::Is64BitOperatingSystem -or
         $env:PROCESSOR_ARCHITECTURE -eq 'ARM64' -or $env:PROCESSOR_ARCHITEW6432 -eq 'ARM64') {
         throw 'This source installer supports Windows x64 (Windows 10/11) only.'
     }
+    $capabilitiesReady = $true
+    foreach ($relative in @('tools\torch-runtime.py','release\torch-runtimes.json','release\python-sbom.json',
+        '_internal\DeepFaceLab\core\gpu_runtime.py','_internal\DeepFaceLab\core\torch_runtime_switch.py')) {
+        if (-not (Test-Path -LiteralPath (Assert-ProjectPath (Join-Path $root $relative)) -PathType Leaf)) { $capabilitiesReady = $false }
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'runtime-install.py') -PathType Leaf) -and
+        -not (Test-Path -LiteralPath (Assert-ProjectPath (Join-Path $root 'tools\runtime-install.py')) -PathType Leaf)) { $capabilitiesReady = $false }
+    if ($capabilitiesReady) {
+        $runtimeApi = Get-Content -LiteralPath (Join-Path $root '_internal\DeepFaceLab\core\gpu_runtime.py') -Raw -Encoding UTF8
+        $guardApi = Get-Content -LiteralPath (Join-Path $root '_internal\DeepFaceLab\core\torch_runtime_switch.py') -Raw -Encoding UTF8
+        $capabilitiesReady = $runtimeApi -match '(?m)^def validate_runtime\([^\r\n]*maintenance_transaction' -and
+            $runtimeApi.Contains('--maintenance-transaction') -and $guardApi -match '(?m)^def assert_runtime_available\([^\r\n]*maintenance_transaction'
+    }
+    if (-not $capabilitiesReady) {
+        throw 'This source package predates transactional runtime repair. Update the verified source package first; no runtimes were downloaded or installed.'
+    }
     foreach ($relative in @('_internal\DeepFaceLab\me.py', 'requirements.txt', 'webui\package.json',
-        'webui\pnpm-lock.yaml', 'webui\pnpm-workspace.yaml', 'release\version.json', 'tools\prepare-vision-runtime.ps1')) {
+        'webui\pnpm-lock.yaml', 'webui\pnpm-workspace.yaml', 'release\version.json', 'tools\prepare-vision-runtime.ps1',
+        'tools\torch-runtime.py')) {
         if (-not (Test-Path -LiteralPath (Join-Path $root $relative) -PathType Leaf)) { throw "Not a complete source checkout: missing $relative" }
     }
     $runtimePaths = @($cache, $session, $base, $venv, $nodeRoot, $ffmpegRoot, $modules, $dist,
@@ -172,18 +184,25 @@ try {
     foreach ($module in @('Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'CimCmdlets')) {
         Import-Module (Join-Path $PSHOME ("Modules\$module\$module.psd1")) -Force
     }
-    # No package installation or rebasing while this checkout is in use.
-    $busy = @(Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='pythonw.exe' OR Name='node.exe' OR Name='ffmpeg.exe' OR Name='ffprobe.exe'" |
-        Where-Object {
-            ($_.ExecutablePath -and $_.ExecutablePath.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) -or
-            ($_.CommandLine -and $_.CommandLine.IndexOf($root, [StringComparison]::OrdinalIgnoreCase) -ge 0)
-        })
-    if ($busy.Count -gt 0) { throw 'Project runtime processes are active. Stop WebUI and all project tasks, then rerun the installer.' }
     New-Item -ItemType Directory -Path $cache -Force | Out-Null
     $lockPath = Assert-ProjectPath (Join-Path $cache 'source-install.lock')
     try { $lock = [IO.File]::Open($lockPath, [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None) }
     catch { throw 'Another source installation is active, or the project cache is not writable.' }
+    [IO.File]::WriteAllText((Assert-ProjectPath $ownerPath),(@{schemaVersion=1;token=$installToken;pid=$PID}|ConvertTo-Json -Compress),(New-Object Text.UTF8Encoding($false)))
+    # No package installation or rebasing while this checkout is in use.
+    $busy = @(Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='pythonw.exe' OR Name='node.exe' OR Name='ffmpeg.exe' OR Name='ffprobe.exe'" |
+        Where-Object {
+            ($_.ExecutablePath -and $_.ExecutablePath.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) -or
+            ($_.CommandLine -and $_.CommandLine -match ('(?i)(?:^|[\s"''=])' + [regex]::Escape($root) + '(?:[\\/]|(?=[\s"'']|$))'))
+        })
+    if ($busy.Count -gt 0) { throw 'Project runtime processes are active. Stop WebUI and all project tasks, then rerun the installer.' }
     New-Item -ItemType Directory -Path $session | Out-Null
+    $temporary = Join-Path $session 'tmp'
+    New-Item -ItemType Directory -Path $temporary | Out-Null
+    foreach ($name in @('TEMP','TMP','TMPDIR')) { Set-InstallEnvironment $name $temporary }
+    Set-InstallEnvironment 'PYTHONDONTWRITEBYTECODE' '1'
+    Set-InstallEnvironment 'PYTHONUTF8' '1'
+    Set-InstallEnvironment 'NN_PROCESS_COUNT' '0'
     if (-not $ArchiveDirectory) { $ArchiveDirectory = Join-Path $cache 'archives' }
     $ArchiveDirectory = [IO.Path]::GetFullPath($ArchiveDirectory)
     if ($WheelhousePath) {
@@ -251,41 +270,12 @@ try {
         & $executable -version
         Assert-Exit "$name validation"
     }
-    if (Test-Path -LiteralPath $venv) {
-        if (-not (Test-Path -LiteralPath $python -PathType Leaf)) { throw "Existing .venv is incomplete and will not be replaced: $venv" }
-        Assert-ProjectPath $python | Out-Null
-        Write-Host '[source-install] Reusing existing .venv without changing pyvenv.cfg or installed packages.'
-    } else {
-        if ($NoNetwork -and -not $WheelhousePath) { throw 'Creating .venv offline requires -WheelhousePath with torch 2.9.1+cu128 and all requirements / dependencies.' }
-        New-Item -ItemType Directory -Path $venv | Out-Null
-        $createdVenv = $true
-        & $basePython -I -m venv $venv
-        Assert-Exit 'Project .venv creation'
-        $pipOptions = @('--disable-pip-version-check', '--only-binary=:all:', '--cache-dir', (Join-Path $cache 'pip-cache'))
-        if ($WheelhousePath) { $pipOptions += @('--no-index', '--find-links', $WheelhousePath) }
-        $requirementsOptions = $pipOptions + @('--require-hashes', '-r', $requirements)
-        if (-not $WheelhousePath) {
-            $requirementsOptions += @('--index-url', 'https://pypi.org/simple')
-            $requirementsOptions += @('--extra-index-url', 'https://download.pytorch.org/whl/cu128')
-        }
-        & $python -I -m pip --isolated install @requirementsOptions
-        Assert-Exit 'Pinned Python requirements installation'
-    }
-    & $python -I -c $pythonValidation $root $requirements
-    Assert-Exit 'Independent Python / pinned requirements validation (existing environments are preserved)'
-    # A production portable venv has inference packages but no installed pip.
-    # Check its graph using the local base's official bundled wheel without
-    # altering the existing environment or initiating a download.
-    $pipHealthCode = "import importlib.util, ensurepip, pathlib, runpy, sys; " +
-        "present = importlib.util.find_spec('pip') is not None; " +
-        "wheel = pathlib.Path(ensurepip.__file__).parent / '_bundled' / ('pip-' + ensurepip.version() + '-py3-none-any.whl'); " +
-        "assert present or wheel.is_file(), 'Project-local bundled pip wheel is missing'; " +
-        "sys.path.insert(0, str(wheel)) if not present else None; " +
-        "sys.argv = ['pip', '--isolated', 'check']; runpy.run_module('pip', run_name='__main__')"
-    & $python -I -c $pipHealthCode
-    Assert-Exit 'Python dependency consistency check'
-    # Keep a fully installed venv if a later, independent asset step fails.
-    $createdVenv = $false
+    $setup = Join-Path $PSScriptRoot 'setup-runtime.ps1'
+    if (-not (Test-Path -LiteralPath $setup -PathType Leaf)) { throw 'The matching Python setup entry point is missing.' }
+    $setupOptions = @{ProjectRoot=$root;InstallDependencies=($RepairDependencies -or -not (Test-Path -LiteralPath $venv));NoNetwork=$NoNetwork;
+        WheelhousePath=$WheelhousePath;RuntimeProfile=$RuntimeProfile;CudaRuntime=$CudaRuntime;SourceInstallLock=$lock;SourceInstallToken=$installToken;PreserveVenvConfiguration=$true}
+    & $setup @setupOptions
+    if (-not $?) { throw 'The transactional Python runtime setup failed.' }
     if (-not $SkipVisionAssets) {
         & (Join-Path $root 'tools\prepare-vision-runtime.ps1') -ProjectRoot $root -NoNetwork:$NoNetwork -SkipFFmpeg -PreserveExisting -ResourcePackPath $ResourcePackPath -VisionCacheRoot $VisionCacheRoot -IncludeRestoration:($RuntimeProfile -in @('restoration','evaluation')) -IncludeScene:($RuntimeProfile -eq 'scene')
         if (-not $?) { throw 'Preparing verified helper weights failed.' }
@@ -301,6 +291,8 @@ try {
     Set-InstallEnvironment 'npm_config_registry' 'https://registry.npmjs.org'
     Set-InstallEnvironment 'npm_config_disturl' 'https://nodejs.org/download/release'
     Set-InstallEnvironment 'npm_config_build_from_source' 'false'
+    Set-InstallEnvironment 'npm_config_cache' (Join-Path $cache 'npm-cache')
+    Set-InstallEnvironment 'npm_config_devdir' (Join-Path $cache 'node-gyp-cache')
     $corepack = Join-Path $nodeBin 'node_modules\corepack\dist\corepack.js'
     Push-Location $webui
     try {
@@ -344,16 +336,23 @@ try {
     # Only remove directories created by this invocation; never an existing env.
     $cleanup = @($session)
     if (-not $succeeded) {
-        if ($createdVenv) { $cleanup += $venv }
         if ($createdModules) { $cleanup += $modules }
         if ($createdDist) { $cleanup += $dist }
     }
     foreach ($path in $cleanup) {
         if (Test-Path -LiteralPath $path) {
-            try { Remove-Item -LiteralPath (Assert-ProjectPath $path) -Recurse -Force }
+            try { Remove-InstallDirectory $path }
             catch { Write-Warning "Could not clean installer-owned directory $path. Move it aside before retrying. $($_.Exception.Message)" }
         }
     }
     foreach ($name in $savedEnvironment.Keys) { [Environment]::SetEnvironmentVariable($name, $savedEnvironment[$name], 'Process') }
-    if ($null -ne $lock) { $lock.Dispose() }
+    [Net.ServicePointManager]::SecurityProtocol = $savedSecurityProtocol
+    if ($null -ne $lock) {
+        try {
+            if (Test-Path -LiteralPath $ownerPath -PathType Leaf) {
+                $owner = Get-Content -LiteralPath $ownerPath -Raw -Encoding UTF8 | ConvertFrom-Json
+                if ($owner.token -eq $installToken) { Remove-Item -LiteralPath (Assert-ProjectPath $ownerPath) -Force }
+            }
+        } finally { $lock.Dispose() }
+    }
 }

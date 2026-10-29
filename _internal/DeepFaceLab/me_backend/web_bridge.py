@@ -43,14 +43,23 @@ def atomic_json(path, value):
 
 
 def atomic_image(path, value):
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    ok, encoded = cv2.imencode(path.suffix, np.round(np.clip(value, 0, 1) * 255).astype(np.uint8))
-    if not ok:
-        raise IOError(f'Cannot encode {path}')
-    temporary = path.with_name(path.name + f'.{os.getpid()}.tmp')
-    encoded.tofile(temporary)
-    os.replace(temporary, path)
+    atomic_images((path,), value)
+
+
+def atomic_images(paths, value):
+    """Publish one preview to its destinations, encoding once per file type."""
+    encoded_by_suffix = {}
+    for target in paths:
+        path = Path(target)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.suffix not in encoded_by_suffix:
+            ok, encoded = cv2.imencode(path.suffix, np.round(np.clip(value, 0, 1) * 255).astype(np.uint8))
+            if not ok:
+                raise IOError(f'Cannot encode {path}')
+            encoded_by_suffix[path.suffix] = encoded
+        temporary = path.with_name(path.name + f'.{os.getpid()}.tmp')
+        encoded_by_suffix[path.suffix].tofile(temporary)
+        os.replace(temporary, path)
 
 
 def validate_model_name(name):
@@ -191,16 +200,20 @@ class TrainingHeartbeat:
 @torch.inference_mode()
 def make_preview(engine, source, destination):
     engine.network.eval()
-    outputs = engine.network(engine.tensors(source)[1], engine.tensors(destination)[1])
+    outputs = (engine.preview_outputs(source, destination) if hasattr(engine, 'preview_outputs')
+               else engine.network(engine.tensors(source)[1], engine.tensors(destination)[1]))
     def nhwc(tensor):
         return tensor.detach().cpu().numpy().transpose(0, 2, 3, 1)
     src = source[1].transpose(0, 2, 3, 1)
     dst = destination[1].transpose(0, 2, 3, 1)
     rows = []
-    mask = nhwc(outputs['swap_mask'] * outputs['dst_mask'])
-    for i in range(min(len(src), 4)):
-        rows.append(np.concatenate((src[i], nhwc(outputs['src'])[i], dst[i],
-            nhwc(outputs['dst'])[i], nhwc(outputs['swap'])[i], np.repeat(mask[i], 3, axis=-1)), axis=1))
+    count = min(len(src), 4)
+    mask = nhwc((outputs['swap_mask'] * outputs['dst_mask'])[:count])
+    reconstructed_src, reconstructed_dst, swapped = (
+        nhwc(outputs[key][:count]) for key in ('src', 'dst', 'swap'))
+    for i in range(count):
+        rows.append(np.concatenate((src[i], reconstructed_src[i], dst[i],
+            reconstructed_dst[i], swapped[i], np.repeat(mask[i], 3, axis=-1)), axis=1))
     return np.concatenate(rows, axis=0)
 
 
@@ -308,7 +321,7 @@ def load_training_engine(args):
     """Strict resume by default; training changes require an explicit flag."""
     checkpoint = Path(args.model).resolve() / 'me.pt'
     options = load_config_options(args)
-    options.update({field: getattr(args, field) for field in ('archi', 'use_rg', 'use_fp16', 'optimizer_on_cpu', 'pretrain', 'resolution', 'batch_size')
+    options.update({field: getattr(args, field) for field in ('archi', 'use_rg', 'use_fp16', 'use_bf16', 'optimizer_on_cpu', 'pretrain', 'resolution', 'batch_size')
                     if getattr(args, field, None) is not None})
     if args.resume:
         if getattr(args, 'initialize_from', None):
@@ -388,11 +401,20 @@ def train_web(args):
             heartbeat.close('finished' if completed else 'failed')
 
 
-def _run_training(args, engine, name, directory, pair, heartbeat):
-    checkpoint = directory / 'me.pt'
+def _run_training(args, engine, name, directory, pair, heartbeat, *, stop_at_utc=None):
+    model_class = getattr(engine, 'model_class', 'ME')
+    checkpoint_name = getattr(engine, 'checkpoint_name', 'me.pt')
+    checkpoint = directory / checkpoint_name
+    max_minutes = getattr(args, 'max_minutes', 0)
+    now = time.monotonic()
+    deadline = now + max_minutes * 60 if max_minutes else None
+    if stop_at_utc is not None:
+        absolute_deadline = now + (stop_at_utc - datetime.now(timezone.utc)).total_seconds()
+        deadline = min(deadline, absolute_deadline) if deadline is not None else absolute_deadline
+        print(f'[{model_class} deadline] {stop_at_utc.isoformat()}; original cutoff retained', flush=True)
     # Validate actual image/mask decoding before publishing a new model.
     with heartbeat.phase('preparing'):
-        next_data_state = pair.state_dict()
+        next_data_state = pair.checkpoint_snapshot()
         source, destination = pair.batch()
     if getattr(args, 'debug_samples', False):
         def sample_grid(batch):
@@ -418,13 +440,18 @@ def _run_training(args, engine, name, directory, pair, heartbeat):
     def save():
         loss_console.flush_latest()
         with heartbeat.phase('saving'):
-            engine.save(checkpoint, next_data_state)
-            atomic_json(directory / 'metadata.json', dict(format='me-pytorch', version=1,
-                schemaVersion=1, name=name, model_class='ME', modelClass='ME', iteration=engine.iteration,
-                config=engine.config.to_dict(), checkpoint='me.pt', savedAt=utc_now()))
-            print(f'[ME saved] iteration={engine.iteration} checkpoint={checkpoint}', flush=True)
+            # TAE materializes dataset-sized exposure counters only here. The
+            # bookmark still precedes any loaded but not yet consumed pair.
+            engine.save(checkpoint, next_data_state.materialize())
+            atomic_json(directory / 'metadata.json', dict(format=getattr(engine, 'checkpoint_format', 'me-pytorch'), version=1,
+                schemaVersion=1, name=name, model_class=model_class, modelClass=model_class, iteration=engine.iteration,
+                config=engine.config.to_dict(), checkpoint=checkpoint_name, savedAt=utc_now(),
+                **(engine.metadata() if hasattr(engine, 'metadata') else {})))
+            print(f'[{model_class} saved] iteration={engine.iteration} checkpoint={checkpoint}', flush=True)
 
     def backup(kind):
+        if not getattr(engine, 'supports_backup', True):
+            raise ValueError(f'{model_class} uses its atomic checkpoint; ME backup format is not supported')
         loss_console.finish_line()
         with heartbeat.phase('backup'):
             result = create_backup(directory, engine.iteration, kind=kind,
@@ -434,12 +461,13 @@ def _run_training(args, engine, name, directory, pair, heartbeat):
     def preview():
         with heartbeat.phase('preview'):
             value = make_preview(engine, source, destination)
-            atomic_image(directory / 'preview.png', value)
+            targets = [directory / 'preview.png']
             if controls.preview is not None:
-                atomic_image(controls.preview, value)
+                targets.append(controls.preview)
+            atomic_images(targets, value)
 
-    print(f"[ME PyTorch] device={engine.device} model={name} resolution={engine.config.resolution} batch={engine.config.batch_size}", flush=True)
-    print(f'[ME resume] iteration={engine.iteration}', flush=True)
+    print(f"[{model_class} PyTorch] device={engine.device} model={name} resolution={engine.config.resolution} batch={engine.config.batch_size}", flush=True)
+    print(f'[{model_class} resume] iteration={engine.iteration}', flush=True)
     save()
     preview()
     heartbeat.update(phase='training')
@@ -451,10 +479,13 @@ def _run_training(args, engine, name, directory, pair, heartbeat):
     previous_interrupt = signal.signal(signal.SIGINT, request_stop)
     try:
         while (args.steps == 0 or completed < args.steps) and (not getattr(args, 'target_iterations', 0) or engine.iteration < args.target_iterations):
+            if deadline is not None and time.monotonic() >= deadline:
+                print(f'[{model_class} stopping] configured wall-clock budget reached', flush=True)
+                break
             if stopping:
                 save()
                 preview()
-                print('[ME stopped] checkpoint saved successfully', flush=True)
+                print(f'[{model_class} stopped] checkpoint saved successfully', flush=True)
                 return
             for request in controls.poll():
                 operation = request['operation']
@@ -466,6 +497,8 @@ def _run_training(args, engine, name, directory, pair, heartbeat):
                     if operation in ('preview', 'close'):
                         preview()
                     if operation == 'evaluate':
+                        if not getattr(engine, 'supports_evaluation', True):
+                            raise ValueError(f'{model_class} does not use the ME evaluation manifest format')
                         loss_console.finish_line()
                         with heartbeat.phase('evaluate'):
                             evaluate(engine, name, args.src, args.dst)
@@ -476,18 +509,19 @@ def _run_training(args, engine, name, directory, pair, heartbeat):
                         raise
                     print(f'[ME {operation}] failed: {error}', flush=True)
                 if operation == 'close':
-                    print('[ME stopped] checkpoint saved successfully', flush=True)
+                    print(f'[{model_class} stopped] checkpoint saved successfully', flush=True)
                     return
             start = time.perf_counter()
             result = engine.train_step(source, destination)
             elapsed = time.perf_counter() - start
             completed += 1
             heartbeat.update(iteration=engine.iteration, progressed=True)
-            next_data_state = pair.state_dict()
+            next_data_state = pair.checkpoint_snapshot()
             with history_path.open('a', encoding='utf-8') as history:
                 history.write(json.dumps({**result, 'seconds': elapsed, 'at': utc_now()}) + '\n')
             loss_console.update(engine.iteration, elapsed, result['src_loss'], result['dst_loss'])
-            automatic_backup = engine.iteration % getattr(args, 'backup_every', 1000) == 0
+            automatic_backup = (getattr(engine, 'supports_backup', True) and
+                                engine.iteration % getattr(args, 'backup_every', 1000) == 0)
             if engine.iteration % args.save_every == 0 or automatic_backup:
                 save()
             if automatic_backup:
@@ -499,6 +533,10 @@ def _run_training(args, engine, name, directory, pair, heartbeat):
                     print(f'[ME automatic backup] failed: {error}', flush=True)
             if engine.iteration % args.preview_every == 0:
                 preview()
+            if ((args.steps and completed >= args.steps) or
+                    (getattr(args, 'target_iterations', 0) and engine.iteration >= args.target_iterations) or
+                    (deadline is not None and time.monotonic() >= deadline)):
+                break
             with heartbeat.phase('loading'):
                 source, destination = pair.batch()
     except KeyboardInterrupt:
@@ -506,7 +544,7 @@ def _run_training(args, engine, name, directory, pair, heartbeat):
         print('[ME stopping] saving current state after interrupt', flush=True)
         save()
         preview()
-        print('[ME stopped] checkpoint saved successfully', flush=True)
+        print(f'[{model_class} stopped] checkpoint saved successfully', flush=True)
         return
     finally:
         loss_console.finish_line()
