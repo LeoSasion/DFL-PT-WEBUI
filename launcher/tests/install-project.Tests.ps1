@@ -300,6 +300,32 @@ Describe 'fixed source upgrade transactions' {
 }
 
 Describe 'bounded PT first-install source acquisition' {
+    It 'bounds fixed-source headers and body reads without following redirects' {
+        $request=New-ProjectInstallSourceRequest @{sourceCommit=('a'*40)}
+        try {
+            $request.RequestUri.AbsoluteUri | Should Be ('https://codeload.github.com/LeoSasion/DFL-PT-WEBUI/zip/'+('a'*40))
+            $request.AllowAutoRedirect | Should Be $false
+            ($request.Timeout -gt 0 -and $request.Timeout -le 30000) | Should Be $true
+            ($request.ReadWriteTimeout -gt 0 -and $request.ReadWriteTimeout -le 30000) | Should Be $true
+        } finally { $request.Abort() }
+    }
+    It 'cleans an owned failed network session while retaining earlier cache files' {
+        $archiveRoot='DFL-PT-WEBUI-'+('a'*40)
+        $archive=New-ProjectSourceFixture (Join-Path $TestDrive 'network-failure.zip') -ArchiveRoot $archiveRoot
+        $pin=Join-Path $TestDrive 'network-failure-pin.json'
+        Write-ProjectInstallJson $pin @{schemaVersion=1;product='DFL-PT-WEBUI';applicationVersion='fixture';sourceCommit=('a'*40);archiveRoot=$archiveRoot;archiveSha256=(Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()}
+        $target=Join-Path $TestDrive 'network-failure-target';$state=New-OwnedProjectInstallTarget $target
+        $keep=Join-Path $state 'earlier-diagnostic.txt';[IO.File]::WriteAllText($keep,'preserve earlier diagnostic')
+        $script:failedSourceRequest=New-Object PSObject -Property @{Aborted=$false}
+        $script:failedSourceRequest | Add-Member ScriptMethod GetResponse {throw (New-Object Net.WebException 'isolated connection failure')}
+        $script:failedSourceRequest | Add-Member ScriptMethod Abort {$this.Aborted=$true}
+        Mock New-ProjectInstallSourceRequest {$script:failedSourceRequest}
+        Invoke-ProjectSourceInstall -ProjectRoot $target -SourcePinPath $pin | Should Be 1
+        $script:failedSourceRequest.Aborted | Should Be $true
+        [IO.File]::ReadAllText($keep) | Should Be 'preserve earlier diagnostic'
+        @(Get-ChildItem -LiteralPath $state -Directory -Filter 'source-*' | Where-Object Name -ne 'source-cache').Count | Should Be 0
+        Test-Path -LiteralPath (Join-Path $target 'release/version.json') | Should Be $false
+    }
     It 'installs a fixed archive with foreign inherited PowerShell module paths' {
         $archiveRoot='DFL-PT-WEBUI-'+('a'*40)
         $archive=New-ProjectSourceFixture (Join-Path $TestDrive 'foreign-modules.zip') -ArchiveRoot $archiveRoot

@@ -166,6 +166,18 @@ function Assert-ProjectInstallTarget([string]$Path) {
     }
 }
 
+function New-ProjectInstallSourceRequest([object]$Pin) {
+    # Use the same Windows proxy/TLS transport as the runtime archive installer.
+    # HttpClient in Windows PowerShell can stall before receiving headers on
+    # otherwise working system proxies. Bound headers and stream reads alike.
+    $request=[Net.HttpWebRequest]::Create('https://codeload.github.com/LeoSasion/DFL-PT-WEBUI/zip/'+$Pin.sourceCommit)
+    $request.AllowAutoRedirect=$false
+    $request.Timeout=30000
+    $request.ReadWriteTimeout=30000
+    $request.UserAgent='DFL-PT-WEBUI-Launcher/1.0'
+    return $request
+}
+
 function Get-ProjectInstallArchive([string]$Destination, [string]$OfflineArchive, [bool]$Offline, [long]$Limit, [object]$Pin=$null) {
     if (-not [string]::IsNullOrWhiteSpace($OfflineArchive)) {
         $inputPath = Assert-ProjectInstallPlainPath $OfflineArchive
@@ -177,41 +189,29 @@ function Get-ProjectInstallArchive([string]$Destination, [string]$OfflineArchive
     }
     if ($Offline) { throw '离线模式需要提供 SourceArchivePath 源码 ZIP。' }
     if (-not $Pin) { throw '在线安装必须指定固定源码快照。' }
-    # HttpClient disables redirects and applies a finite timeout. Never accept an
+    # Disable redirects and apply finite timeouts. Never accept an
     # alternate source host from downloaded content, command-line input or Git.
-    Add-Type -AssemblyName System.Net.Http
     $previousTls = [Net.ServicePointManager]::SecurityProtocol
-    $handler = New-Object Net.Http.HttpClientHandler
-    $handler.AllowAutoRedirect = $false
-    if ($handler.PSObject.Properties.Name -contains 'SslProtocols') {
-        $handler.SslProtocols = [Security.Authentication.SslProtocols]::Tls12
-    }
-    $client = New-Object Net.Http.HttpClient($handler)
-    $client.Timeout = [TimeSpan]::FromMinutes(10)
-    $client.DefaultRequestHeaders.UserAgent.ParseAdd('DFL-PT-WEBUI-Launcher/1.0')
+    $request = $null
     $response = $null
     $inputStream = $null
     $outputStream = $null
     try {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        $response = $client.GetAsync(('https://codeload.github.com/LeoSasion/DFL-PT-WEBUI/zip/' + $Pin.sourceCommit),
-            [Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
+        $request=New-ProjectInstallSourceRequest $Pin
+        $response=$request.GetResponse()
         if ([int]$response.StatusCode -ne 200) { throw "官方源码下载失败（HTTP $([int]$response.StatusCode)）。" }
-        if ($response.Content.Headers.ContentLength -and $response.Content.Headers.ContentLength -gt $Limit) {
+        if ($response.ContentLength -gt $Limit) {
             throw '官方源码包超过大小上限。'
         }
-        $inputStream = $response.Content.ReadAsStreamAsync().GetAwaiter().GetResult()
+        $inputStream = $response.GetResponseStream()
         $outputStream = [IO.File]::Open($Destination, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
         $buffer = New-Object byte[] 65536
         $total = [long]0
         $timer = [Diagnostics.Stopwatch]::StartNew()
         while ($true) {
             if ($timer.Elapsed.TotalMinutes -gt 10) { throw '官方源码下载超时，请稍后重试。' }
-            # Bound each body read too; ResponseHeadersRead's client timeout
-            # otherwise stops covering the transfer after headers arrive.
-            $readTask = $inputStream.ReadAsync($buffer, 0, $buffer.Length)
-            if (-not $readTask.Wait(30000)) { throw '官方源码下载无响应，请稍后重试。' }
-            $read = $readTask.GetAwaiter().GetResult()
+            $read = $inputStream.Read($buffer, 0, $buffer.Length)
             if ($read -eq 0) { break }
             $total += $read
             if ($total -gt $Limit) { throw '官方源码包超过大小上限。' }
@@ -221,8 +221,7 @@ function Get-ProjectInstallArchive([string]$Destination, [string]$OfflineArchive
         if ($outputStream) { $outputStream.Dispose() }
         if ($inputStream) { $inputStream.Dispose() }
         if ($response) { $response.Dispose() }
-        $client.Dispose()
-        $handler.Dispose()
+        if ($request) { $request.Abort() }
         [Net.ServicePointManager]::SecurityProtocol = $previousTls
     }
 }
