@@ -1004,7 +1004,7 @@
     },
     {
       "path": "launcher/host/AssemblyInfo.cs",
-      "sha256": "17a5a271684100512e8758c13bdd14c3fd8fb5cabf4d378cd037281b8b4f387d"
+      "sha256": "b5ffbc59f35b38b8bf06c94671e0eef463e62735f54de0293b05bc2a19e2df38"
     },
     {
       "path": "launcher/host/CudaRuntimeService.cs",
@@ -1148,7 +1148,7 @@
     },
     {
       "path": "launcher/runtime-README.md",
-      "sha256": "b26ac078b671dff33037fb7b01c0466734802ad36e2c69dbd1ac58a230e40902"
+      "sha256": "c553afb3c62f1a6bb44a747e2ff90f45cb8cdf0bc908957ce96409ef9efd3075"
     },
     {
       "path": "launcher/runtime-manifest.json",
@@ -1284,7 +1284,7 @@
     },
     {
       "path": "launcher/update-channel.json",
-      "sha256": "3ac6eb74937fd5aefde859ea4e4003582f070814761f4df7d362a97996fc86c4"
+      "sha256": "3bb1479920ad55c5bca339e33007347c27024ac21114591f50e7df96eb30a590"
     },
     {
       "path": "launcher/update-signing-policy.json",
@@ -1548,7 +1548,7 @@
     },
     {
       "path": "release/installation.mjs",
-      "sha256": "586c50c88af29bc4c393beff9da8a7c1577cdde1bbdfae4b2b81c8ad49081f99"
+      "sha256": "32f98e56491da31802805d1582133456093733540514216da3ecfc94bc582c8f"
     },
     {
       "path": "release/package-config.json",
@@ -1580,7 +1580,7 @@
     },
     {
       "path": "release/source-integrity.mjs",
-      "sha256": "6647e3af508c034283b58aa830dd6182905d7b06aeafd3d9815e9d6e4f026267"
+      "sha256": "e20a4a0ea75d2efc0bc9b376daa61023a172c088dccdc35534a3fd4755a2e4b2"
     },
     {
       "path": "release/torch-runtimes.json",
@@ -1588,7 +1588,7 @@
     },
     {
       "path": "release/version.json",
-      "sha256": "2a4077b862229178988fdd1f2c20d93596b99f05582b1f069d34fa7a4b290923"
+      "sha256": "bdebb89669d62b76795b8b59430320976c2d4073a557af417d5992c71a285492"
     },
     {
       "path": "release/version.mjs",
@@ -1680,7 +1680,7 @@
     },
     {
       "path": "tools/package-launcher.py",
-      "sha256": "2598abfe11d78f7e0cff2e8aee2a7fe3a7071531ffb43bf9fd7013db9a554069"
+      "sha256": "cb41e16b5d002033255150118e3f30d829b08b29108b3df6745910ad9aeaadd4"
     },
     {
       "path": "tools/package_release.ps1",
@@ -1708,7 +1708,7 @@
     },
     {
       "path": "tools/release-snapshot.mjs",
-      "sha256": "27ecfa02105de1a951c62f2c6dd55863621f4b74364cc17fbf8e16b60fb14d09"
+      "sha256": "72f16e3f5d50281b974864271bed54bf3b20a84e850a14699fa13fe5f54a89f9"
     },
     {
       "path": "tools/requirements-vision-evaluation.txt",

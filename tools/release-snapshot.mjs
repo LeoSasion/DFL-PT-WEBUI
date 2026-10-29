@@ -3,12 +3,12 @@ import { execFileSync } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { sourceFileHash } from "../release/source-integrity.mjs";
+import { isSourceSnapshotPath, sourceFileHash } from "../release/source-integrity.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const listed = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], { cwd: root }).toString().split("\0").filter(Boolean);
 const deleted = new Set(execFileSync("git", ["ls-files", "-z", "--deleted"], { cwd: root }).toString().split("\0").filter(Boolean));
-const selected = listed.filter(file => /^(?:webui\/(?:src|shared|server|scripts|public|worker|python)\/|webui\/(?:package.json|pnpm-lock.yaml|vite.config.mjs)$|release\/|launcher\/|tools\/|_internal\/DeepFaceLab\/|legacy-cli\/)/.test(file)
+const selected = listed.filter(file => isSourceSnapshotPath(file)
   && !["release/source-pin.json", "release/source-files.json", "release/installation.json", "tools/prepare-launcher-tests.ps1", "tools/run-launcher-tests.ps1"].includes(file)
   && !deleted.has(file)
   && !/(?:^|\/)(?:tests?|design|\.openai)\//.test(file))

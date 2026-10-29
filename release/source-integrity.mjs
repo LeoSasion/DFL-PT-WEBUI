@@ -1,5 +1,11 @@
 import { createHash } from "node:crypto";
 
+export function isSourceSnapshotPath(file) {
+  return typeof file === "string" && !/[\\:\x00-\x1f]/.test(file)
+    && !file.split("/").some(part => !part || part === "." || part === "..")
+    && /^(?:webui\/(?:src|shared|server|scripts|public|worker|python)\/|webui\/(?:package.json|pnpm-lock.yaml|vite.config.mjs)$|release\/|launcher\/|tools\/|_internal\/DeepFaceLab\/|legacy-cli\/)/.test(file);
+}
+
 // Git archives store LF while Windows checkouts may use CRLF for scripts.
 export function sourceFileHash(file, bytes) {
   // Match Git's text-auto boundary without relying on a filename extension.

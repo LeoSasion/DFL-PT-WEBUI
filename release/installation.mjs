@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { sourceFileHash } from "./source-integrity.mjs";
+import { isSourceSnapshotPath, sourceFileHash } from "./source-integrity.mjs";
 
 const defaultRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const hashPattern = /^[a-f0-9]{64}$/i;
@@ -25,8 +25,7 @@ export async function inspectInstallation(root = defaultRoot) {
     verified = true;
     for (const entry of manifest.files) {
       if (!entry || !hashPattern.test(entry.sha256 ?? "") || typeof entry.path !== "string"
-        || !/^(?:webui\/(?:src|shared|server|scripts|public|worker)\/|webui\/(?:package.json|pnpm-lock.yaml|vite.config.mjs)$|release\/|launcher\/|tools\/|_internal\/DeepFaceLab\/|legacy-cli\/)/.test(entry.path)
-        || entry.path.split(/[\\/]/).some(part => part === "..") || entry.path.includes("\\")) { verified = false; break; }
+        || !isSourceSnapshotPath(entry.path)) { verified = false; break; }
       try {
         const bytes = await readFile(path.join(root, entry.path));
         if (sourceFileHash(entry.path, bytes) !== entry.sha256) { verified = false; break; }
