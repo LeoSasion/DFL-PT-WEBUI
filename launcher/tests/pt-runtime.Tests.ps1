@@ -34,7 +34,7 @@ Describe 'PyTorch runtime migration' {
             $arguments[0]=[string]$TestDrive;$arguments[1]=$component
             $result=$method.Invoke($null,$arguments)
             if($id -eq 'python'){$result.Ready | Should Be $true}
-            else{$result.Ready | Should Be $false;$result.Reason | Should Match '超时'}
+            else{$result.Ready | Should Be $false;$result.Reason | Should Match '\u8d85\u65f6'}
         }
     }
     It 'fails closed when FFmpeg is omitted from the new runtime manifest' {
