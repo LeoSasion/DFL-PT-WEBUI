@@ -695,7 +695,7 @@ namespace DflPtWebUi.Launcher
                         Dictionary<string, object> identity = new JavaScriptSerializer().DeserializeObject(result.StandardOutput) as Dictionary<string, object>;
                         Dictionary<string, object> source = identity["source"] as Dictionary<string, object>;
                         identity["applicationVersion"] = identity["appVersion"];
-                        identity["launcherVersion"] = "0.1.3-preview";
+                        identity["launcherVersion"] = ReleaseIdentity.LauncherVersion;
                         identity["sourceCommit"] = source["revision"] ?? "unverified";
                         identity["archiveSha256"] = source["archiveSha256"];
                         identity["sourceStatus"] = source["status"];
@@ -743,7 +743,7 @@ namespace DflPtWebUi.Launcher
             }
             Dictionary<string, object> template = new JavaScriptSerializer().DeserializeObject(File.ReadAllText(Path.Combine(LauncherPayload.GetPath("bootstrap"), "feedback-template.json"))) as Dictionary<string, object>;
             return new Dictionary<string, object> {
-                { "preview", Convert.ToString(template["offlinePreview"]) + "\n\n失败步骤：" + step + "\n启动器版本：0.1.3-preview\n应用版本/安装来源/源码快照：尚未验证\n" },
+                { "preview", Convert.ToString(template["offlinePreview"]) + "\n\n失败步骤：" + step + "\n启动器版本：" + ReleaseIdentity.LauncherVersion + "\n应用版本/安装来源/源码快照：尚未验证\n" },
                 { "issueUrl", template["issueUrl"] }, { "release", ReleaseIdentity.Get(root) }
             };
         }

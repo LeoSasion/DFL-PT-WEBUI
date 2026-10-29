@@ -1024,7 +1024,7 @@
     },
     {
       "path": "launcher/host/HostController.cs",
-      "sha256": "1f683a3059a5b055dcc9adecffad63eda1be7ee320ee62c619b478af51659a74"
+      "sha256": "0939013ee9f768ea6c588b5aa9dd7b67a9430712433d60f8d5ad753481b2a35e"
     },
     {
       "path": "launcher/host/LauncherConstants.cs",
@@ -1084,7 +1084,7 @@
     },
     {
       "path": "launcher/host/ReleaseIdentity.cs",
-      "sha256": "ca3932789064abcf6312d079c1fb3b23eaf809ad165ab668adc00c70416826d0"
+      "sha256": "4e793a276c390f41a4699cb5caa285ceb04c53a35baa7774918df209844c1794"
     },
     {
       "path": "launcher/host/RpcBridge.cs",
@@ -1188,7 +1188,7 @@
     },
     {
       "path": "launcher/ui/UX-CONTRACT.md",
-      "sha256": "b61bfd865f1ece496f0cd48b5854bccdcab3ed5aaf81d55c6b0b8ec38bcd5fbb"
+      "sha256": "169b4824986a3887e961e9b5293136d4a60ba487238a3521fe94fd42e89427d3"
     },
     {
       "path": "launcher/ui/index.html",
@@ -1220,7 +1220,7 @@
     },
     {
       "path": "launcher/ui/src/bridge.js",
-      "sha256": "a0e9529328b344c624446e6d18dcaa2e8d2cf072afc60bc4c4ec31d5dba182db"
+      "sha256": "33947b5a871d95966c1742f7db3cb6d0e751a030f1d271c4b6d7d53c64ac69f5"
     },
     {
       "path": "launcher/ui/src/components/CudaRuntimeNotice.jsx",
@@ -1244,7 +1244,7 @@
     },
     {
       "path": "launcher/ui/src/components/TitleBar.jsx",
-      "sha256": "1e7c490ea207c2a0a70ba1fef1ccd71aec65b8d6d9b9ccbd69181525e0d07a24"
+      "sha256": "bf41a0f94a90d6cc15c0824a83f74b4131ad39728614b3096c9b0dbde7d16fee"
     },
     {
       "path": "launcher/ui/src/cuda-preview.js",
@@ -1261,6 +1261,10 @@
     {
       "path": "launcher/ui/src/ready.css",
       "sha256": "d6b37e2a6fe7ee93b7b68b9b0d5528beb3103f61b869431cd00288376437a831"
+    },
+    {
+      "path": "launcher/ui/src/release-version.js",
+      "sha256": "3777a627ade7ada189d598c38e5c4aa0fa09992e42f3f37990bd9968772b3566"
     },
     {
       "path": "launcher/ui/src/runtime.css",

@@ -9,6 +9,7 @@ import { createRequire } from "node:module";
 import { createServer, build } from "vite";
 import config from "../vite.config.mjs";
 import { cudaPreview } from "../src/cuda-preview.js";
+import { applicationVersion, launcherVersion } from "../src/release-version.js";
 
 const require = createRequire(import.meta.url);
 const { chromium } = require("playwright");
@@ -79,6 +80,13 @@ async function nativeFixture(runtime, extra = {}, controls = {}) {
 }
 
 try {
+  await check("release labels and offline feedback match the release manifest", async () => {
+    await demo("cuda=compatible");
+    assert.equal(await page.locator(".titlebar__brand small").textContent(), launcherVersion);
+    const feedback = await page.evaluate(async () => (await import("/src/bridge.js")).launcherBridge.request("prepareFeedback", { step: "install" }));
+    assert.ok(feedback.preview.includes("应用版本：" + applicationVersion));
+    assert.ok(feedback.preview.includes("启动器版本：" + launcherVersion));
+  });
   await check("compatible state does not prompt or mutate", async () => {
     await demo("cuda=compatible");
     assert.equal(await notice().count(), 0); assert.deepEqual(await mutations(), []);

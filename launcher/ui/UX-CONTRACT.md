@@ -2,6 +2,8 @@
 
 This contract covers the launcher surfaces maintained in `src`. Visual intent and canonical tokens are recorded in the project-root `DESIGN.md`.
 
+Version labels and browser previews read `release/version.json` through `src/release-version.js`. Native host identity and offline feedback use the executing assembly version. Product and launcher versions remain separate; individual screens must not maintain version literals.
+
 ## Business sources
 
 | Rule | Authoritative source | UI consequence |

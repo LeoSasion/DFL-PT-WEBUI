@@ -7,6 +7,10 @@ namespace DflPtWebUi.Launcher
 {
     internal static class ReleaseIdentity
     {
+        public static string LauncherVersion
+        {
+            get { return typeof(ReleaseIdentity).Assembly.GetName().Version.ToString(3) + "-preview"; }
+        }
         private static Dictionary<string, object> Read(string path)
         {
             if (!File.Exists(path) || new FileInfo(path).Length > 65536) return new Dictionary<string, object>();
@@ -23,7 +27,7 @@ namespace DflPtWebUi.Launcher
                 && System.Text.RegularExpressions.Regex.IsMatch(Convert.ToString(receipt["archiveSha256"]), "^[0-9a-f]{64}$");
             return new Dictionary<string, object> {
                 {"applicationVersion", version.ContainsKey("version") ? version["version"] : "unknown"},
-                {"launcherVersion", "0.1.3-preview"},
+                {"launcherVersion", LauncherVersion},
                 {"installationSource", verified && receipt.ContainsKey("installationSource") ? receipt["installationSource"] : "local-source / unverified"},
                 {"sourceCommit", verified ? source : "unverified"},
                 {"archiveSha256", verified ? receipt["archiveSha256"] : null}
