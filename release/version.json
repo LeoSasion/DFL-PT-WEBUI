@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "version": "0.1.5-preview",
-  "launcherVersion": "0.1.6-preview",
+  "version": "0.1.6-preview",
+  "launcherVersion": "0.1.7-preview",
   "nodeVersion": "24.19.0",
   "pnpmVersion": "11.19.0",
   "product": "DFL-PT-WEBUI"

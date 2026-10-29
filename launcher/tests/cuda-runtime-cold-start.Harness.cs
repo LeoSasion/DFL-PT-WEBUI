@@ -83,16 +83,19 @@ namespace DflPtWebUi.Launcher
                     string journal=Path.Combine(root,".launcher-install/source/python-repair.json");Directory.CreateDirectory(Path.GetDirectoryName(journal));
                     File.WriteAllText(journal,"{\"schemaVersion\":1,\"phase\":\"installing\"}");
                 }
-                if(lifecycleScenario=="upgrade-recovery") {
+                if(lifecycleScenario=="upgrade-recovery" || lifecycleScenario=="upgrade-archived-recovery") {
                     File.WriteAllText(Path.Combine(payload,"bootstrap/bootstrap.ps1"),"# isolated bootstrap marker");
                     File.WriteAllText(Path.Combine(payload,"bootstrap/setup-runtime.ps1"),"# isolated setup marker");
                     File.WriteAllText(Path.Combine(payload,"bootstrap/runtime-manifest.json"),"{}");
-                    string journal=Path.Combine(root,".launcher-install/upgrade-current/journal.json");Directory.CreateDirectory(Path.GetDirectoryName(journal));File.WriteAllText(journal,"{}");
+                    bool archived=lifecycleScenario=="upgrade-archived-recovery";
+                    string relative=archived?".launcher-install/upgrade-last.json":".launcher-install/upgrade-current/journal.json";
+                    string journal=Path.Combine(root,relative);Directory.CreateDirectory(Path.GetDirectoryName(journal));
+                    File.WriteAllText(journal,archived?"{\"schemaVersion\":1,\"product\":\"DFL-PT-WEBUI\",\"status\":\"completing\",\"history\":\"upgrade-backup-11111111111111111111111111111111\"}":"{}");
                     File.WriteAllText(Path.Combine(root,"release/version.json"),"{corrupt interrupted source identity");
                     File.WriteAllText(Path.Combine(payload,"bootstrap/upgrade-project.ps1"),
                         "param([string]$ProjectRoot,[string]$Action,[string]$SourcePinPath)\n"+
                         "if($Action -eq 'status'){Write-Output '{\"status\":\"applied\",\"canRollback\":true,\"message\":\"synthetic interrupted upgrade\"}'}\n"+
-                        "if($Action -eq 'rollback'){[IO.File]::WriteAllText((Join-Path $ProjectRoot 'rollback.called'),'fixture recovery');Remove-Item -LiteralPath (Join-Path $ProjectRoot '.launcher-install/upgrade-current/journal.json')}\n");
+                        "if($Action -eq 'rollback'){[IO.File]::WriteAllText((Join-Path $ProjectRoot 'rollback.called'),'fixture recovery');Remove-Item -LiteralPath (Join-Path $ProjectRoot '"+relative+"')}\n");
                 }
                 if(lifecycleScenario=="operation-dedup") {
                     SemaphoreSlim operation=(SemaphoreSlim)typeof(HostController).GetField("operationGate",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(host);
@@ -123,7 +126,7 @@ namespace DflPtWebUi.Launcher
                     }
                     if(lifecycleScenario=="maintenance" && (string)result["environmentStatus"]!="changing")throw new InvalidOperationException("Maintenance state imported or validated the runtime");
                     if(lifecycleScenario=="python-recovery" && !(bool)result["runtimeRepairPending"])throw new InvalidOperationException("Interrupted Python replacement has no recovery state");
-                    if(lifecycleScenario=="upgrade-recovery") {
+                    if(lifecycleScenario=="upgrade-recovery" || lifecycleScenario=="upgrade-archived-recovery") {
                         if(!(bool)result["upgradePending"] || !(bool)result["upgradeCanRollback"])throw new InvalidOperationException("Corrupt source identity hid upgrade recovery");
                         host.RollbackUpdateAsync().GetAwaiter().GetResult();
                         if(!File.Exists(Path.Combine(root,"rollback.called")))throw new InvalidOperationException("Rollback was blocked by damaged project identity");

@@ -1,6 +1,6 @@
 # Windows 安装与首次启动
 
-Windows x64 用户可使用独立一键启动器、源码安装包或便携包。当前维护源码为应用 `0.1.5-preview` / 启动器 `0.1.6-preview`；实际可下载的资产版本以发行页为准，历史 `0.1.1-preview` 便携包仍保留原功能集。运行环境固定 Python 3.12.14、PyTorch 2.9.1、Node.js 24.19.0；GTX 10 / Pascal 使用 CUDA 12.6 构建，Blackwell 使用 CUDA 12.8 构建，首次安装按硬件选择其中一套。驱动由系统提供，CUDA/cuDNN 随 PyTorch wheel 提供。
+Windows x64 用户可使用独立一键启动器、源码安装包或便携包。当前维护源码为应用 `0.1.6-preview` / 启动器 `0.1.7-preview`；实际可下载的资产版本以发行页为准，历史 `0.1.1-preview` 便携包仍保留原功能集。运行环境固定 Python 3.12.14、PyTorch 2.9.1、Node.js 24.19.0；GTX 10 / Pascal 使用 CUDA 12.6 构建，Blackwell 使用 CUDA 12.8 构建，首次安装按硬件选择其中一套。驱动由系统提供，CUDA/cuDNN 随 PyTorch wheel 提供。
 
 建议安装到独立目录，例如 `C:\DFL-PT-WEBUI`，保留足够空间容纳下载、解压和 PyTorch 依赖。个人视频、aligned、模型和任务状态在本机项目工作区创建，发行包不提供这些材料。
 
@@ -54,3 +54,5 @@ powershell -NoProfile -ExecutionPolicy Bypass -File launcher\install-source.ps1
 使用一键安装器完成安装后，双击项目根目录 `DFL-PT-WEBUI.exe` 并点击“启动 WebUI”。便携包及手动源码安装可继续双击 `启动 WebUI.bat`，打开 <http://127.0.0.1:4173>。传统工具入口为 `传统命令菜单.bat`。首次使用按“下一步”向导先创建项目、导入 SRC/DST 素材，再依据工具与数据状态提帧、提脸和整理数据。WebUI 可启动、工具资源齐备、GPU 可训练是不同条件；不会自动训练或上传素材。完整流程见 [README](../README.md#工作流程)。
 
 本版本已有单卡短程开发证据，尚未将全新用户环境、最终画质、真实双卡及摄像头实时表现作为已通过结果。用户实测中的安装或功能问题请通过 [反馈入口](FEEDBACK.md) 提交。
+
+应用 `0.1.6-preview` / 启动器 `0.1.7-preview` 加强了源码升级完成校验、归档中断恢复、旧版本覆盖保护，以及旧资源包导入状态和失败暂存清理。已有安装请使用匹配的新版启动器执行主动升级；源码升级保留原安装目录中的旧 EXE，不会自动替换它。

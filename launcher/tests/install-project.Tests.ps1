@@ -278,6 +278,39 @@ Describe 'fixed source upgrade transactions' {
         {Invoke-ProjectUpgrade $fixture.target 'apply' $fixture.pin $fixture.archive} | Should Throw '修改'
         [IO.File]::ReadAllText($obsolete) | Should Be 'user modified obsolete source'
     }
+    It 'accepts the canonical source hash of an unchanged obsolete Windows script' {
+        $fixture=New-ProjectUpgradeFixture $TestDrive 'canonical-obsolete'
+        $obsolete=Join-Path $fixture.target 'obsolete-owned.ps1'
+        [IO.File]::WriteAllText($obsolete,"# official`r`n",(New-Object Text.UTF8Encoding($false)))
+        $hasher=[Security.Cryptography.SHA256]::Create()
+        try{$digest=[BitConverter]::ToString($hasher.ComputeHash([Text.Encoding]::UTF8.GetBytes("# official`n"))).Replace('-','').ToLowerInvariant()}finally{$hasher.Dispose()}
+        Write-ProjectInstallJson (Join-Path $fixture.target 'release/source-files.json') @{schemaVersion=1;product='DFL-PT-WEBUI';files=@(@{path='obsolete-owned.ps1';sha256=$digest})}
+        {Invoke-ProjectUpgrade $fixture.target 'apply' $fixture.pin $fixture.archive} | Should Not Throw
+        Test-Path -LiteralPath $obsolete | Should Be $false
+        Invoke-ProjectUpgrade $fixture.target 'rollback' '' ''
+        [IO.File]::ReadAllText($obsolete) | Should Be "# official`r`n"
+    }
+    It 'refuses to commit source or version metadata changed after application' {
+        foreach($relative in @('README.md','release/version.json','release/installation.json')){
+            $fixture=New-ProjectUpgradeFixture $TestDrive ('changed-before-complete-'+$relative.Replace('/','-'))
+            Invoke-ProjectUpgrade $fixture.target 'apply' $fixture.pin $fixture.archive
+            $file=Join-Path $fixture.target $relative
+            if($relative -eq 'README.md'){[IO.File]::AppendAllText($file,'changed after apply')}
+            else{$value=Get-Content -LiteralPath $file -Raw|ConvertFrom-Json;$value|Add-Member NoteProperty version 'unexpected-version' -Force;Write-ProjectInstallJson $file $value}
+            {Invoke-ProjectUpgrade $fixture.target 'complete' '' ''} | Should Throw
+            Test-Path -LiteralPath (Join-Path $fixture.target '.launcher-install/upgrade-current/journal.json') | Should Be $true
+        }
+    }
+    It 'rejects an older fixed application version before downloading or moving dependencies' {
+        $fixture=New-ProjectUpgradeFixture $TestDrive 'reject-downgrade'
+        $version=Get-Content -LiteralPath (Join-Path $fixture.target 'release/version.json') -Raw|ConvertFrom-Json
+        $version.version='0.1.5-preview';Write-ProjectInstallJson (Join-Path $fixture.target 'release/version.json') $version
+        $pin=Get-Content -LiteralPath $fixture.pin -Raw|ConvertFrom-Json
+        $pin.applicationVersion='0.1.3-preview';Write-ProjectInstallJson $fixture.pin $pin
+        Mock Get-VerifiedProjectInstallArchive {throw 'unexpected download'} -ParameterFilter {$State -like '*reject-downgrade-target*'}
+        {Invoke-ProjectUpgrade $fixture.target 'apply' $fixture.pin $fixture.archive} | Should Throw '旧于'
+        Test-Path -LiteralPath (Join-Path $fixture.target '.launcher-install/upgrade-current') | Should Be $false
+    }
     It 'returns a single UTF8 status JSON object for both valid and rejected recovery evidence' {
         $fixture=New-ProjectUpgradeFixture $TestDrive 'status-protocol'
         Invoke-ProjectUpgrade $fixture.target 'apply' $fixture.pin $fixture.archive

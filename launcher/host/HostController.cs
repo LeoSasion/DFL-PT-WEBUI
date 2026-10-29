@@ -81,7 +81,7 @@ namespace DflPtWebUi.Launcher
             LauncherSettings snapshot = settings.Current;
             string projectRoot = ProjectLocator.Resolve(snapshot);
             bool projectReady = ProjectLocator.IsProject(projectRoot);
-            if (!allowPendingUpgrade && File.Exists(Path.Combine(projectRoot, ".launcher-install", "upgrade-current", "journal.json")))
+            if (!allowPendingUpgrade && SourceUpgradePending(projectRoot))
                 return await UpgradeRecoveryStateAsync(projectRoot, projectReady, snapshot);
             if (PythonRepairPending(projectRoot)) {
                 Dictionary<string, object> pending = (Dictionary<string, object>)RuntimeTransitionState(projectRoot, projectReady,
@@ -208,7 +208,7 @@ namespace DflPtWebUi.Launcher
             result["updateAvailable"] = gitStatus.UpdateAvailable;
             result["release"] = await GetReleaseIdentityAsync(projectRoot);
             result["upgradeTarget"] = ReleaseIdentity.UpgradeTarget();
-            result["upgradePending"] = File.Exists(Path.Combine(projectRoot, ".launcher-install", "upgrade-current", "journal.json"));
+            result["upgradePending"] = SourceUpgradePending(projectRoot);
             lock (stateGate) { lastCompleteState = new Dictionary<string, object>(result); }
             return result;
         }
@@ -304,6 +304,23 @@ namespace DflPtWebUi.Launcher
                 return phase != "committed" && phase != "rolled-back";
             }
             catch { return true; }
+        }
+
+        private static bool SourceUpgradePending(string root)
+        {
+            if (File.Exists(ProjectLocator.AssertWritableChildPath(root, ".launcher-install/upgrade-current/journal.json"))) return true;
+            string pointer = ProjectLocator.AssertWritableChildPath(root, ".launcher-install/upgrade-last.json");
+            if (!File.Exists(pointer)) return false;
+            try {
+                if (new FileInfo(pointer).Length > 65536) return true;
+                Dictionary<string, object> state = new JavaScriptSerializer().DeserializeObject(File.ReadAllText(pointer)) as Dictionary<string, object>;
+                if (state == null || !state.ContainsKey("schemaVersion") || Convert.ToString(state["schemaVersion"]) != "1"
+                    || !state.ContainsKey("status") || !state.ContainsKey("history") || !state.ContainsKey("product")
+                    || Convert.ToString(state["product"]) != "DFL-PT-WEBUI"
+                    || !System.Text.RegularExpressions.Regex.IsMatch(Convert.ToString(state["history"]), "^upgrade-(backup|rollback)-[0-9a-f]{32}$")) return true;
+                string status = Convert.ToString(state["status"]);
+                return status != "complete" && status != "rolled-back";
+            } catch { return true; }
         }
 
         private static bool RecoverableSourceInstallation(string root)
@@ -416,7 +433,7 @@ namespace DflPtWebUi.Launcher
             result["logs"] = GetUiLogs();
             if (!result.ContainsKey("release")) result["release"] = ReleaseIdentity.Get(root);
             result["upgradeTarget"] = ReleaseIdentity.UpgradeTarget();
-            result["upgradePending"] = File.Exists(Path.Combine(root, ".launcher-install", "upgrade-current", "journal.json"));
+            result["upgradePending"] = SourceUpgradePending(root);
             return result;
         }
 
@@ -525,7 +542,7 @@ namespace DflPtWebUi.Launcher
                 bool resumeSource = RecoverableSourceInstallation(projectRoot);
                 if (!resumeSource) ProjectLocator.AssertInstallTarget(projectRoot);
                 ProjectLocator.AssertWritableChildPath(projectRoot, ".launcher-install");
-                if (File.Exists(Path.Combine(projectRoot, ".launcher-install", "upgrade-current", "journal.json")))
+                if (SourceUpgradePending(projectRoot))
                     throw new InvalidOperationException("源码升级尚未完成，请先恢复原源码和构建。");
                 repair = repair || PythonRepairPending(projectRoot);
                 await WithPausedRuntimeChecksAsync(projectRoot, async delegate {
@@ -604,7 +621,7 @@ namespace DflPtWebUi.Launcher
                     await RunUpgradeScriptAsync(root, "complete");
                 } catch (Exception error) { updateFailure = error; }
                 if (updateFailure != null) {
-                    if (File.Exists(Path.Combine(root, ".launcher-install", "upgrade-current", "journal.json"))) {
+                    if (SourceUpgradePending(root)) {
                         await WithPausedRuntimeChecksAsync(root, async delegate { await RunUpgradeScriptAsync(root, "rollback"); });
                         logs.Add("updates", "升级失败，已经恢复升级前的源码和构建。", "warning");
                     }
@@ -1040,7 +1057,7 @@ namespace DflPtWebUi.Launcher
         private string RequireProjectRoot()
         {
             string root = ProjectLocator.Resolve(settings.Current);
-            if (File.Exists(Path.Combine(root, ".launcher-install", "upgrade-current", "journal.json")))
+            if (SourceUpgradePending(root))
                 throw new InvalidOperationException("源码升级尚未完成，请先恢复原源码和构建，再启动任务。");
             if (PythonRepairPending(root))
                 throw new InvalidOperationException("Python 环境维护尚未完成，请先恢复运行环境，再启动任务。");

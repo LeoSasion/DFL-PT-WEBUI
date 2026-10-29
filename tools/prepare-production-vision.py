@@ -7,12 +7,13 @@ import argparse
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
-import shutil
 import tempfile
 import urllib.request
 import zipfile
 import os
 import uuid
+import io
+from contextlib import contextmanager
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -46,6 +47,53 @@ def check(path, record):
 
 def selected(manifest, profiles):
     return [group for group in manifest['groups'] if group['profile'] in profiles]
+
+
+def write_resource_report(project, report):
+    path = safe(project, '.launcher-install/vision/resources.json')
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name('resources.' + uuid.uuid4().hex + '.tmp')
+    try:
+        temporary.write_text(json.dumps(report, ensure_ascii=False), encoding='utf-8')
+        os.replace(temporary, path)
+    finally:
+        if temporary.exists(): temporary.unlink()
+
+
+def copy_owned_resource(source, target, written, name):
+    value = hashlib.sha256()
+    with target.open('xb') as output:
+        try:
+            while block := source.read(1024 * 1024):
+                output.write(block)
+                value.update(block)
+        finally:
+            written[name] = value.hexdigest()
+
+
+@contextmanager
+def resource_staging(destination, group_id):
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=group_id + '.staging-', dir=destination.parent))
+    written = {}
+    try:
+        yield staging, written
+    finally:
+        if staging.exists() and not staging.is_symlink() and not staging.is_junction():
+            for name, value in written.items():
+                try: path = safe(staging, name)
+                except ValueError: continue
+                if path.is_file() and digest(path) == value: path.unlink()
+            # Walk only plain directories. Unknown files/links and changed
+            # bytes are retained; cleanup never follows a replacement junction.
+            directories = []; pending = [staging]
+            while pending:
+                parent = pending.pop(); directories.append(parent)
+                for path in parent.iterdir():
+                    if path.is_dir() and not path.is_symlink() and not path.is_junction(): pending.append(path)
+            for path in reversed(directories):
+                try: path.rmdir()
+                except OSError: pass
 
 
 def cached_resource(project, group, record, cache, allow_download):
@@ -89,15 +137,8 @@ def cached_resource(project, group, record, cache, allow_download):
 
 def install(project, manifest, groups, cache, allow_download):
     report = {'schemaVersion': 1, 'complete': False, 'resources': [], 'failed': []}
-    report_path = safe(project, '.launcher-install/vision/resources.json')
-    report_path.parent.mkdir(parents=True, exist_ok=True)
     def save():
-        temporary = report_path.with_name('resources.' + uuid.uuid4().hex + '.tmp')
-        try:
-            temporary.write_text(json.dumps(report, ensure_ascii=False), encoding='utf-8')
-            os.replace(temporary, report_path)
-        finally:
-            if temporary.exists(): temporary.unlink()
+        write_resource_report(project, report)
     save()
     results = []
     for group in groups:
@@ -109,24 +150,21 @@ def install(project, manifest, groups, cache, allow_download):
                 raise ValueError('Existing resource group differs; preserved: ' + str(destination))
             results.append({'id': group['id'], 'status': 'verified-existing'})
             continue
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        staging = Path(tempfile.mkdtemp(prefix=group['id'] + '.staging-', dir=destination.parent))
-        written = {}
-        try:
+        with resource_staging(destination, group['id']) as (staging, written):
             for record in group['files']:
                 output = safe(staging, record['path'])
                 output.parent.mkdir(parents=True, exist_ok=True)
                 try:
                     if 'content' in record:
-                        output.write_bytes(record['content'].encode('utf-8'))
+                        copy_owned_resource(io.BytesIO(record['content'].encode('utf-8')), output, written, record['path'])
                     elif record.get('repositoryFile'):
                         source = safe(ROOT, record['repositoryFile'])
                         if not check(source, record):
                             raise ValueError('Checked-in resource/license differs: ' + record['repositoryFile'])
-                        shutil.copyfile(source, output)
+                        with source.open('rb') as stream: copy_owned_resource(stream, output, written, record['path'])
                     else:
-                        shutil.copyfile(cached_resource(project, group, record, cache, allow_download), output)
-                    written[record['path']] = digest(output)
+                        source = cached_resource(project, group, record, cache, allow_download)
+                        with source.open('rb') as stream: copy_owned_resource(stream, output, written, record['path'])
                     if not check(output, record):
                         raise ValueError('Resource checksum differs: ' + group['id'] + '/' + record['path'])
                 except Exception as error:
@@ -139,18 +177,6 @@ def install(project, manifest, groups, cache, allow_download):
             if all(check(safe(staging, r['path']), r) for r in group['files']):
                 staging.rename(destination)
                 results.append({'id': group['id'], 'status': 'installed', 'fileCount': len(group['files'])})
-        finally:
-            if staging.exists():
-                # Delete only bytes written by this attempt. Unknown edits stay.
-                for name, value in written.items():
-                    path = safe(staging, name)
-                    if path.is_file() and digest(path) == value: path.unlink()
-                for path in sorted(staging.rglob('*'), key=lambda p: -len(p.parts)):
-                    if path.is_dir() and not path.is_symlink() and not path.is_junction():
-                        try: path.rmdir()
-                        except OSError: pass
-                try: staging.rmdir()
-                except OSError: pass
     report.update(resources=results, complete=not report['failed'])
     save()
     print(json.dumps({'ok': report['complete'], **report}, ensure_ascii=False))
@@ -182,7 +208,21 @@ def pack(project, manifest, groups, output, public):
 
 def verify_pack(path, manifest=None):
     with zipfile.ZipFile(path) as archive:
+        if archive.getinfo('RESOURCE-PACK.json').file_size > 4 * 1024 * 1024:
+            raise ValueError('Resource pack metadata exceeds limit')
         record = json.loads(archive.read('RESOURCE-PACK.json'))
+        if (not isinstance(record, dict) or type(record.get('schemaVersion')) is not int
+                or record['schemaVersion'] != 1 or type(record.get('publicDistribution')) is not bool
+                or not isinstance(record.get('groups'), list) or not record['groups']
+                or not all(isinstance(g, str) for g in record['groups']) or len(set(record['groups'])) != len(record['groups'])
+                or not isinstance(record.get('files'), list) or not 0 < len(record['files']) <= 50000):
+            raise ValueError('Unsupported or invalid resource pack schema')
+        for item in record['files']:
+            if (not isinstance(item, dict) or not isinstance(item.get('path'), str)
+                    or not isinstance(item.get('sha256'), str) or len(item['sha256']) != 64
+                    or any(c not in '0123456789abcdef' for c in item['sha256'])
+                    or type(item.get('sizeBytes')) is not int or item['sizeBytes'] < 0):
+                raise ValueError('Invalid resource pack file record')
         expected = {r['path']: r for r in record['files']}
         if manifest is not None:
             if manifest.get('schemaVersion') != 1:
@@ -208,27 +248,39 @@ def verify_pack(path, manifest=None):
 
 
 def install_pack(project, manifest, groups, pack_path):
+    if any(g.get('localInstallationAllowed') is not True for g in groups):
+        raise ValueError('Local resource installation is not admitted')
     verify_pack(pack_path, manifest)
+    report = {'schemaVersion': 1, 'complete': False, 'resources': [], 'failed': []}
     with zipfile.ZipFile(pack_path) as archive:
         record = json.loads(archive.read('RESOURCE-PACK.json'))
         if not {g['id'] for g in groups} <= set(record['groups']):
             raise ValueError('Resource pack does not contain the requested profile')
-        for group in groups:
-            destination = safe(project, group['installRoot'])
-            if destination.exists():
-                if not all(check(safe(destination, r['path']), r) for r in group['files']):
-                    raise ValueError('Existing resource group differs; preserved: ' + str(destination))
-                continue
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            staging = Path(tempfile.mkdtemp(prefix=group['id'] + '.staging-', dir=destination.parent))
-            for item in group['files']:
-                target = safe(staging, item['path'])
-                target.parent.mkdir(parents=True, exist_ok=True)
-                with archive.open(group['installRoot'] + '/' + item['path']) as source, target.open('xb') as output:
-                    shutil.copyfileobj(source, output)
-                if not check(target, item):
-                    raise ValueError('Resource changed during extraction')
-            staging.rename(destination)
+        write_resource_report(project, report)
+        try:
+            for group in groups:
+                destination = safe(project, group['installRoot'])
+                if destination.exists():
+                    if not all(check(safe(destination, r['path']), r) for r in group['files']):
+                        raise ValueError('Existing resource group differs; preserved: ' + str(destination))
+                    report['resources'].append({'id': group['id'], 'status': 'verified-existing'})
+                    continue
+                with resource_staging(destination, group['id']) as (staging, written):
+                    for item in group['files']:
+                        target = safe(staging, item['path'])
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        with archive.open(group['installRoot'] + '/' + item['path']) as source:
+                            copy_owned_resource(source, target, written, item['path'])
+                        if not check(target, item):
+                            raise ValueError('Resource changed during extraction')
+                    staging.rename(destination)
+                report['resources'].append({'id': group['id'], 'status': 'installed', 'fileCount': len(group['files'])})
+            report['complete'] = True
+        except Exception:
+            report['message'] = '辅助资源包安装未完成，请检查资源包和日志后重试；已验证文件保留。'
+            raise
+        finally:
+            write_resource_report(project, report)
     print(json.dumps({'ok': True, 'installedGroups': [g['id'] for g in groups]}))
 
 

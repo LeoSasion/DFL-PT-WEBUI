@@ -85,6 +85,9 @@ class FakeNode {
     It 'recovers a pending source update even when project identity is corrupt' {
         [DflPtWebUi.Launcher.CudaRuntimeColdStartHarness]::Run((Join-Path $TestDrive 'source-recovery'),$script:interpreter,'compatible',$false,$false,'upgrade-recovery') | Should Be $true
     }
+    It 'offers cold recovery after an interrupted upgrade archive rename' {
+        [DflPtWebUi.Launcher.CudaRuntimeColdStartHarness]::Run((Join-Path $TestDrive 'archived-recovery'),$script:interpreter,'compatible',$false,$false,'upgrade-archived-recovery') | Should Be $true
+    }
     It 'rejects duplicate repair requests before they can queue downloads' {
         [DflPtWebUi.Launcher.CudaRuntimeColdStartHarness]::Run((Join-Path $TestDrive 'dedup'),$script:interpreter,'compatible',$false,$false,'operation-dedup') | Should Be $true
     }

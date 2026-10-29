@@ -14,7 +14,8 @@ function Test-ProtectedUpgradePath([string]$Relative) {
             $part -match '^(?i:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)'){return $true}
     }
     return $Relative -match '^(?i:workspace|workspaces|\.git|\.venv|\.runtime|\.launcher-install|release-output)(/|$)' -or
-        $Relative -match '^(?i:_internal/(node|python_base|git|ffmpeg|config\.txt)|webui/(node_modules|\.runtime|\.env[^/]*))(/|$)' -or
+        $Relative -match '^(?i:_internal/(node|python_base|git|ffmpeg|config\.txt|vision_models|model_generic_xseg)|webui/(node_modules|\.runtime|\.env[^/]*))(/|$)' -or
+        $Relative -match '^(?i:_internal/DeepFaceLab/(pretrained/.*\.(pt|pth|safetensors)|facelib/[^/]+\.(npy|pth)))$' -or
         $Relative -match '(?i)(^|/)(\.env[^/]*|DFL-PT-WEBUI\.exe|DFL-PT-WEBUI\.Launcher\.exe)$'
 }
 
@@ -47,6 +48,28 @@ function Get-UpgradeProperty([object]$Value,[string]$Name,$Default=$null) {
     if($Value -is [Collections.IDictionary]){if($Value.Contains($Name)){return $Value[$Name]};return $Default}
     if($Value.PSObject.Properties.Name -contains $Name){return $Value.$Name}
     return $Default
+}
+function Test-ProjectSourceContentHash([string]$Path,[string]$Expected) {
+    if($Expected -cnotmatch '^[0-9a-f]{64}$'){return $false}
+    $bytes=[IO.File]::ReadAllBytes($Path)
+    $hasher=[Security.Cryptography.SHA256]::Create()
+    try {
+        $raw=[BitConverter]::ToString($hasher.ComputeHash($bytes)).Replace('-','').ToLowerInvariant()
+        if($raw -ceq $Expected){return $true}
+        # Match release/source-integrity.mjs: UTF-8 text with no NUL in
+        # its first 8000 bytes uses canonical LF, including Windows scripts.
+        for($i=0;$i -lt [Math]::Min(8000,$bytes.Length);$i++){if($bytes[$i] -eq 0){return $false}}
+        try{$text=(New-Object Text.UTF8Encoding($false,$true)).GetString($bytes)}catch{return $false}
+        $canonical=[Text.Encoding]::UTF8.GetBytes($text.Replace("`r`n","`n"))
+        return [BitConverter]::ToString($hasher.ComputeHash($canonical)).Replace('-','').ToLowerInvariant() -ceq $Expected
+    } finally {$hasher.Dispose()}
+}
+function Get-ProjectNumericVersion([string]$Value) {
+    if($Value -match '^(\d+\.\d+\.\d+)(?:-[a-zA-Z0-9.-]+)?$'){
+        $parsed=$null
+        if([Version]::TryParse($Matches[1],[ref]$parsed)){return $parsed}
+    }
+    return $null
 }
 function Set-UpgradeProperty([object]$Value,[string]$Name,$Content) {
     if($Value -is [Collections.IDictionary]){$Value[$Name]=$Content}
@@ -180,6 +203,16 @@ function Restore-ProjectUpgrade([string]$Root,[string]$State,[string]$Transactio
 function Complete-ProjectUpgrade([string]$Root,[string]$State,[string]$Transaction,[object]$Journal) {
     if($Journal.status -notin @('applied','completing','completed')){throw '升级事务未通过应用检查。'}
     Assert-ProjectInstallIdentity $Root
+    foreach($file in $Journal.files){
+        if($file.path -like 'webui/dist/*'){continue}
+        $publishedUpgradePath=Resolve-ProjectInstallChild $Root $file.path
+        if($file.newSha256){
+            if(-not (Test-Path -LiteralPath $publishedUpgradePath -PathType Leaf) -or
+                (Get-FileHash -LiteralPath $publishedUpgradePath -Algorithm SHA256).Hash.ToLowerInvariant() -cne $file.newSha256){
+                throw '升级应用后的源码或版本记录已变化，不能确认完成；回退备份已保留。'
+            }
+        }elseif(Test-Path -LiteralPath $publishedUpgradePath){throw '已移除的旧源码重新出现，不能确认完成；回退备份已保留。'}
+    }
     $history=Get-UpgradeProperty $Journal 'archiveName'
     if(-not $history){$history='upgrade-backup-'+[Guid]::NewGuid().ToString('N');Set-UpgradeProperty $Journal 'archiveName' $history}
     if($history -cnotmatch '^upgrade-backup-[0-9a-f]{32}$'){throw '升级归档路径不正确。'}
@@ -265,6 +298,11 @@ function Invoke-ProjectUpgrade {
             Move-ProjectInstallEntry $transaction (Resolve-ProjectInstallChild $state ('upgrade-rejected-'+[Guid]::NewGuid().ToString('N')))
         }
         $pin = Read-ProjectSourcePin $PinPath
+        $currentVersion=Get-ProjectNumericVersion ([string](Get-Content -LiteralPath (Join-Path $Root 'release/version.json') -Raw -Encoding UTF8|ConvertFrom-Json).version)
+        $targetVersion=Get-ProjectNumericVersion ([string]$pin.applicationVersion)
+        if($currentVersion -and $targetVersion -and $targetVersion -lt $currentVersion){
+            throw '目标应用版本旧于当前版本，请使用匹配的新版启动器；不会执行源码降级。'
+        }
         New-Item -ItemType Directory -Path $transaction | Out-Null
         Write-ProjectInstallJson (Resolve-ProjectInstallChild $transaction 'preparation.json') @{schemaVersion=1;product='DFL-PT-WEBUI';sourceCommit=$pin.sourceCommit;archiveSha256=$pin.archiveSha256}
         $archive = Get-VerifiedProjectInstallArchive $state $transaction $ArchivePath $false 536870912 $pin
@@ -286,7 +324,7 @@ function Invoke-ProjectUpgrade {
                 if (Test-ProtectedUpgradePath $relative) { throw '旧源码清单包含受保护路径。' }
                 $oldFile = Resolve-ProjectInstallChild $Root $relative
                 if (-not $allFiles.Contains($relative) -and (Test-Path -LiteralPath $oldFile -PathType Leaf)) {
-                    if($record.sha256 -cnotmatch '^[0-9a-f]{64}$' -or (Get-FileHash -LiteralPath $oldFile -Algorithm SHA256).Hash.ToLowerInvariant() -cne $record.sha256){throw '旧源码文件已被修改，升级不会删除这些文件。'}
+                    if(-not (Test-ProjectSourceContentHash $oldFile $record.sha256)){throw '旧源码文件已被修改，升级不会删除这些文件。'}
                     $allFiles.Add($relative) | Out-Null
                     $obsolete += $relative
                 }

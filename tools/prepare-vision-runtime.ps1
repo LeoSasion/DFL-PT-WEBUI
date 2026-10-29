@@ -168,7 +168,3 @@ if ($ResourcePackPath) {
     & $resourcePython -I -B $resourceTool @resourceOptions
 }
 if ($LASTEXITCODE -ne 0) { throw 'Auxiliary resources need attention. See launcher resource guidance or .launcher-install/vision/resources.json; place the listed manual files and retry. Verified downloads are retained.' }
-if ($ResourcePackPath) {
-    & $resourcePython -I -B $resourceTool install --project-root $visionRoot --profiles @resourceProfiles
-    if ($LASTEXITCODE -ne 0) { throw 'Installed resource pack verification failed.' }
-}

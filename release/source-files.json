@@ -1024,7 +1024,7 @@
     },
     {
       "path": "launcher/host/HostController.cs",
-      "sha256": "ce1ee0ccd69278cd1614fbc89ef3905bbc2cb2378dad979bdb87fdaa53eb813f"
+      "sha256": "f847a25c9d0d48b47f5936284ba84f269fafcf7903c89220bb6a944ee3fb203f"
     },
     {
       "path": "launcher/host/LauncherConstants.cs",
@@ -1148,7 +1148,7 @@
     },
     {
       "path": "launcher/runtime-README.md",
-      "sha256": "c553afb3c62f1a6bb44a747e2ff90f45cb8cdf0bc908957ce96409ef9efd3075"
+      "sha256": "18b546ee4d31a4fb8a7ab4ac64ffb17dfdb374622119ed8912aaa01a11516fbd"
     },
     {
       "path": "launcher/runtime-manifest.json",
@@ -1292,7 +1292,7 @@
     },
     {
       "path": "launcher/upgrade-project.ps1",
-      "sha256": "5cee24a8b1fd8f50a397bf4dffcc701e4552f197e9dc93a6ae608c03137d5332"
+      "sha256": "c05717182796d5c2ddbd06c86c85ca63422847ffef4dadc60a56f16f882d7406"
     },
     {
       "path": "legacy-cli/1.1)--- 剪切视频（将视频拖拽到本文件）----------- cut video (drop video on me).bat",
@@ -1588,7 +1588,7 @@
     },
     {
       "path": "release/version.json",
-      "sha256": "bdebb89669d62b76795b8b59430320976c2d4073a557af417d5992c71a285492"
+      "sha256": "33b840734f9123b805a38d777fcf0647b75442fbc5895d56f1a6bf98f932a885"
     },
     {
       "path": "release/version.mjs",
@@ -1692,7 +1692,7 @@
     },
     {
       "path": "tools/prepare-production-vision.py",
-      "sha256": "9e1bbd08d78b3235cc527e286535baae85ca8fef8c0627f9482166deae938368"
+      "sha256": "c10e3c069ea37e184d2cdfbfb213b100d4451eb5d9d07cb765c366f67ec134d6"
     },
     {
       "path": "tools/prepare-vision-candidates.py",
@@ -1700,7 +1700,7 @@
     },
     {
       "path": "tools/prepare-vision-runtime.ps1",
-      "sha256": "cbed1661c5be18c2b09b1c8ae1be9bdecf105b3c153bdad570e527056daba985"
+      "sha256": "839f0a6320ade6cfe270d3c33d5b4dd3f6b28f07087a7525d1120459ea37fcf0"
     },
     {
       "path": "tools/prepare-vision-visual-review.py",

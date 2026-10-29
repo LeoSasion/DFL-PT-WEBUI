@@ -88,3 +88,57 @@ def test_interrupted_response_cleans_only_partial_and_retains_previous_cache(tmp
     assert [p.name for p in cache.iterdir()]==[hashlib.sha256(b'first').hexdigest()]
     report=json.loads((tmp_path/'.launcher-install/vision/resources.json').read_text())
     assert {r['path'] for r in report['failed']}=={'manual.bin','last.bin'}
+
+
+def test_old_pack_clears_stale_pending_report_without_downloading(tmp_path,monkeypatch):
+    manifest,group=fixture();group['files']=[record('file',content='valid')]
+    tool.install(tmp_path/'source',manifest,[group],None,False)
+    pack=tmp_path/'old.zip';tool.pack(tmp_path/'source',manifest,[group],pack,False)
+    pending=tmp_path/'target/.launcher-install/vision/resources.json';pending.parent.mkdir(parents=True)
+    pending.write_text(json.dumps(dict(schemaVersion=1,complete=False,failed=[])))
+    monkeypatch.setattr(tool.urllib.request,'urlopen',lambda *a,**k:pytest.fail('pack reuse must be offline'))
+    tool.install_pack(tmp_path/'target',manifest,[group],pack)
+    assert json.loads(pending.read_text())['complete']
+
+
+def test_interrupted_pack_copy_removes_only_owned_partial(tmp_path,monkeypatch):
+    manifest,group=fixture();group['files']=[record('file',content='valid')]
+    tool.install(tmp_path/'source',manifest,[group],None,False)
+    pack=tmp_path/'old.zip';tool.pack(tmp_path/'source',manifest,[group],pack,False)
+    real_open=tool.zipfile.ZipFile.open
+    class Interrupted(io.BytesIO):
+        def read(self,size=-1):
+            if self.tell():raise OSError('synthetic interrupted archive')
+            return super().read(1)
+    calls=[]
+    def read_once_then_fail(archive,name,*a,**kw):
+        calls.append(name)
+        if name==group['installRoot']+'/file' and calls.count(name)==2:return Interrupted(b'valid')
+        return real_open(archive,name,*a,**kw)
+    monkeypatch.setattr(tool.zipfile.ZipFile,'open',read_once_then_fail)
+    with pytest.raises(OSError,match='synthetic'):tool.install_pack(tmp_path/'target',manifest,[group],pack)
+    assert not list((tmp_path/'target').rglob('*.staging-*'))
+    assert not (tmp_path/'target'/group['installRoot']).exists()
+
+
+@pytest.mark.parametrize('metadata', [[], {'schemaVersion': 2},
+    {'schemaVersion': True, 'publicDistribution': False, 'groups': ['synthetic'], 'files': []},
+    {'schemaVersion': 1, 'publicDistribution': False, 'groups': ['synthetic'], 'files': [None]}])
+def test_invalid_pack_schema_is_rejected_before_installation(tmp_path, metadata):
+    pack=tmp_path/'invalid.zip'
+    with tool.zipfile.ZipFile(pack,'w') as archive:
+        archive.writestr('RESOURCE-PACK.json',json.dumps(metadata))
+    manifest,group=fixture()
+    with pytest.raises(ValueError):tool.install_pack(tmp_path/'target',manifest,[group],pack)
+    assert not (tmp_path/'target').exists()
+
+
+def test_staging_cleanup_retains_unknown_and_modified_files(tmp_path):
+    with tool.resource_staging(tmp_path/'group','synthetic') as (staging,written):
+        tool.copy_owned_resource(io.BytesIO(b'owned'),staging/'owned',written,'owned')
+        tool.copy_owned_resource(io.BytesIO(b'initial'),staging/'changed',written,'changed')
+        (staging/'changed').write_bytes(b'modified outside the copy')
+        (staging/'unknown').write_bytes(b'unknown file')
+    assert not (staging/'owned').exists()
+    assert (staging/'changed').read_bytes()==b'modified outside the copy'
+    assert (staging/'unknown').read_bytes()==b'unknown file'
