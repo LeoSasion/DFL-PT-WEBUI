@@ -30,7 +30,9 @@ Describe 'PyTorch runtime migration' {
         $method=[PtRuntimeTests.RuntimeManifestValidator].GetMethod('ValidateComponent',[Reflection.BindingFlags]'NonPublic,Static')
         foreach($id in @('python','node')){
             $component=$serializer.DeserializeObject('{"id":"'+$id+'","required":true,"install":{"relativePath":"cold-runtime"},"validation":{"files":[{"path":"delayed-check.exe","minBytes":32}],"command":{"path":"delayed-check.exe","arguments":[],"outputRegex":"^COLD_READY$"}}}')
-            $result=$method.Invoke($null,@($TestDrive,$component))
+            $arguments=New-Object object[] 2
+            $arguments[0]=[string]$TestDrive;$arguments[1]=$component
+            $result=$method.Invoke($null,$arguments)
             if($id -eq 'python'){$result.Ready | Should Be $true}
             else{$result.Ready | Should Be $false;$result.Reason | Should Match '超时'}
         }
