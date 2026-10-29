@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "product": "DFL-PT-WEBUI",
   "applicationVersion": "0.1.3-preview",
-  "sourceCommit": "1ff3e9f9f82a20b1b04cfe5515f3ee523f9db5b6",
-  "sourceTree": "c9e1d5a8a697f2814b8573904be6415579c6ee08",
-  "archiveSha256": "18dace74ce91622464933e88e2301d06dc93cbb8cfed37bcacbd46b4c2fd8827",
-  "archiveRoot": "DFL-PT-WEBUI-1ff3e9f9f82a20b1b04cfe5515f3ee523f9db5b6"
+  "sourceCommit": "70a45d67e7334aeec9369c50f434f57912fd52bf",
+  "sourceTree": "00e278220a58692799883b999184a8c878eda5a2",
+  "archiveSha256": "24d85b880354032457e2362fc0d87913c8edc8433ad3a27b04e320482a8ada27",
+  "archiveRoot": "DFL-PT-WEBUI-70a45d67e7334aeec9369c50f434f57912fd52bf"
 }
