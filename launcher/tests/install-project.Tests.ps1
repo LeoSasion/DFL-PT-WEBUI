@@ -300,6 +300,26 @@ Describe 'fixed source upgrade transactions' {
 }
 
 Describe 'bounded PT first-install source acquisition' {
+    It 'installs a fixed archive with foreign inherited PowerShell module paths' {
+        $archiveRoot='DFL-PT-WEBUI-'+('a'*40)
+        $archive=New-ProjectSourceFixture (Join-Path $TestDrive 'foreign-modules.zip') -ArchiveRoot $archiveRoot
+        $pin=Join-Path $TestDrive 'foreign-modules-pin.json'
+        Write-ProjectInstallJson $pin @{schemaVersion=1;product='DFL-PT-WEBUI';applicationVersion='fixture';sourceCommit=('a'*40);archiveRoot=$archiveRoot;archiveSha256=(Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()}
+        $target=Join-Path $TestDrive 'foreign-modules-target'
+        $start=New-Object Diagnostics.ProcessStartInfo
+        $start.FileName=Join-Path $env:WINDIR 'System32/WindowsPowerShell/v1.0/powershell.exe'
+        $start.UseShellExecute=$false;$start.CreateNoWindow=$true;$start.RedirectStandardOutput=$true;$start.RedirectStandardError=$true
+        $start.EnvironmentVariables['PSModulePath']=Join-Path $TestDrive 'foreign-module-search-root'
+        $start.Arguments='-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+[IO.Path]::GetFullPath($script:projectInstallerPath)+'" -ProjectRoot "'+$target+'" -SourceArchivePath "'+$archive+'" -SourcePinPath "'+$pin+'" -NoNetwork'
+        $process=[Diagnostics.Process]::Start($start)
+        try {
+            $stdout=$process.StandardOutput.ReadToEndAsync();$stderr=$process.StandardError.ReadToEndAsync()
+            $process.WaitForExit(30000) | Should Be $true
+            $process.ExitCode | Should Be 0
+            $stdout.Result | Should Match 'complete'
+            Assert-ProjectInstallIdentity $target
+        } finally { if(-not $process.HasExited){$process.Kill();$process.WaitForExit()};$process.Dispose() }
+    }
     It 'preserves unknown session files rather than recursively clearing them' {
         $target=Join-Path $TestDrive 'unknown-session-target';$state=New-OwnedProjectInstallTarget $target
         $session=Join-Path $state ('source-'+[Guid]::NewGuid().ToString('N'));New-Item -ItemType Directory -Path $session | Out-Null

@@ -1128,7 +1128,7 @@
     },
     {
       "path": "launcher/install-project.ps1",
-      "sha256": "8077f072b19399b7d1549f805f6832387d8cc38ae4692f32065bdd137bf2d4db"
+      "sha256": "07f0fc847a6c797d78dbb578b87e45443d2983fa4571b900fa62e428f956a746"
     },
     {
       "path": "launcher/install-source.ps1",

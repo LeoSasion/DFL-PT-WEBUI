@@ -15,6 +15,11 @@ param(
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+# Windows PowerShell may inherit PowerShell 7's incompatible module search
+# paths. Resolve this shell's own commands before hashing or publishing files.
+foreach ($moduleName in @('Microsoft.PowerShell.Utility','Microsoft.PowerShell.Management')) {
+    Import-Module (Join-Path $PSHOME ('Modules/' + $moduleName + '/' + $moduleName + '.psd1')) -Force
+}
 
 function Write-ProjectInstallJson([string]$Path, [object]$Value) {
     $Path = Assert-ProjectInstallPlainPath $Path
