@@ -68,6 +68,9 @@ namespace DflPtWebUi.Launcher
     internal static class RuntimeManifestValidator
     {
         private const int CommandTimeoutMilliseconds = 10000;
+        // Loading Torch and its native DLLs after a fresh install can exceed
+        // the short Node/FFmpeg version probe, especially during disk scans.
+        private const int PythonCommandTimeoutMilliseconds = 60000;
         private static readonly string[] RequiredComponentIds =
         {
             "node", "python", "ffmpeg"
@@ -152,7 +155,8 @@ namespace DflPtWebUi.Launcher
                 {
                     string executable = ResolveChildPath(target, GetString(command, "path"));
                     if (!File.Exists(executable)) return Fail(id, name, target, required, "缺少版本校验程序。", version);
-                    string output = RunValidationCommand(executable, ToArray(GetValue(command, "arguments")), target);
+                    string output = RunValidationCommand(executable, ToArray(GetValue(command, "arguments")), target,
+                        String.Equals(id, "python", StringComparison.OrdinalIgnoreCase) ? PythonCommandTimeoutMilliseconds : CommandTimeoutMilliseconds);
                     string pattern = GetString(command, "outputRegex");
                     if (String.IsNullOrWhiteSpace(pattern) || !Regex.IsMatch(output, pattern, RegexOptions.CultureInvariant))
                         return Fail(id, name, target, required, "版本校验失败（检测到 '" + output + "'）。", output);
@@ -171,7 +175,7 @@ namespace DflPtWebUi.Launcher
             return new RuntimeComponentValidation(id, name, target, required, false, reason, version);
         }
 
-        private static string RunValidationCommand(string executable, object[] rawArguments, string workingDirectory)
+        private static string RunValidationCommand(string executable, object[] rawArguments, string workingDirectory, int timeoutMilliseconds)
         {
             StringBuilder arguments = new StringBuilder();
             for (int index = 0; index < rawArguments.Length; index++)
@@ -188,9 +192,9 @@ namespace DflPtWebUi.Launcher
             {
                 Task<string> stdout = Task.Factory.StartNew(delegate { return process.StandardOutput.ReadToEnd(); });
                 Task<string> stderr = Task.Factory.StartNew(delegate { return process.StandardError.ReadToEnd(); });
-                if (!process.WaitForExit(CommandTimeoutMilliseconds))
+                if (!process.WaitForExit(timeoutMilliseconds))
                 {
-                    try { process.Kill(); } catch { }
+                    try { process.Kill(); process.WaitForExit(2000); } catch { }
                     throw new TimeoutException("版本校验命令超时。");
                 }
                 Task.WaitAll(new Task[] { stdout, stderr });

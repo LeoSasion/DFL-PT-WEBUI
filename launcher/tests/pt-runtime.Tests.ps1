@@ -22,6 +22,19 @@ Describe 'PyTorch runtime migration' {
         $result.Loaded | Should Be $false
         $result.RequiredComponentsReady | Should Be $false
     }
+    It 'accepts slow cold Python startup while retaining the short Node deadline' {
+        $directory=Join-Path $TestDrive 'cold-runtime';New-Item -ItemType Directory -Path $directory | Out-Null
+        $executable=Join-Path $directory 'delayed-check.exe'
+        Add-Type -TypeDefinition 'public class ColdRuntimeProbe { public static void Main(string[] args) { System.Threading.Thread.Sleep(11000); System.Console.WriteLine("COLD_READY"); } }' -OutputType ConsoleApplication -OutputAssembly $executable
+        $serializer=New-Object Web.Script.Serialization.JavaScriptSerializer
+        $method=[PtRuntimeTests.RuntimeManifestValidator].GetMethod('ValidateComponent',[Reflection.BindingFlags]'NonPublic,Static')
+        foreach($id in @('python','node')){
+            $component=$serializer.DeserializeObject('{"id":"'+$id+'","required":true,"install":{"relativePath":"cold-runtime"},"validation":{"files":[{"path":"delayed-check.exe","minBytes":32}],"command":{"path":"delayed-check.exe","arguments":[],"outputRegex":"^COLD_READY$"}}}')
+            $result=$method.Invoke($null,@($TestDrive,$component))
+            if($id -eq 'python'){$result.Ready | Should Be $true}
+            else{$result.Ready | Should Be $false;$result.Reason | Should Match '超时'}
+        }
+    }
     It 'fails closed when FFmpeg is omitted from the new runtime manifest' {
         $manifest = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../runtime-manifest.json') -Raw | ConvertFrom-Json
         $manifest.components = @($manifest.components | Where-Object { $_.id -ne 'ffmpeg' })

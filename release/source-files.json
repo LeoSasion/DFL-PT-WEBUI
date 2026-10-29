@@ -1096,7 +1096,7 @@
     },
     {
       "path": "launcher/host/RuntimeManifestValidator.cs",
-      "sha256": "572c44917a9f15e934b96bc88597a10bba71e0bb5ecc932fea7bd5fa2b4eecfa"
+      "sha256": "7555a051195fc2bcbf4df1ebebcf86881978d38e17787c87a1f35c0691b5b467"
     },
     {
       "path": "launcher/host/RuntimeServiceIdentity.cs",
