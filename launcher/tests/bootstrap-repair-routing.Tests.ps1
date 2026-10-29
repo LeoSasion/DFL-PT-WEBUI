@@ -198,6 +198,18 @@ Describe 'launcher runtime repair routing' {
         Test-Path -LiteralPath (Join-Path $fixture.root 'weights-checked.txt') | Should Be $false
     }
 
+    It 'retries pending auxiliary resources even when the runtimes already exist' {
+        $fixture = New-RepairBootstrapFixture (Join-Path $TestDrive 'resources-pending') -Ready $true
+        $report = Join-Path $fixture.root '.launcher-install/vision/resources.json'
+        New-Item -ItemType Directory -Path (Split-Path -Parent $report) -Force | Out-Null
+        [IO.File]::WriteAllText($report, '{"complete":false}')
+        $result = Invoke-RepairBootstrapFixture $fixture
+        $result.exitCode | Should Be 0
+        $result.calls.Count | Should Be 2
+        $result.calls[1].operation | Should Be 'install'
+        $result.calls[1].skipVisionAssets | Should Be $false
+    }
+
     It 'performs offline checking without invoking a downloading installer even for Repair' {
         $fixture = New-RepairBootstrapFixture (Join-Path $TestDrive 'offline') -Ready $true
         $result = Invoke-RepairBootstrapFixture $fixture -Repair -NoNetwork

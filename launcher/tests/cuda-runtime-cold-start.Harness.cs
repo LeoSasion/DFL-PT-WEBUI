@@ -72,6 +72,12 @@ namespace DflPtWebUi.Launcher
                     if(!failed && !calls.Contains("provenance write"))throw new InvalidOperationException("Build provenance was not verified before publication");
                     return true;
                 }
+                if(lifecycleScenario!=null && lifecycleScenario.StartsWith("resources-")) {
+                    foreach(string name in new[]{"bootstrap.ps1","setup-runtime.ps1","runtime-manifest.json"})
+                        File.WriteAllText(Path.Combine(payload,"bootstrap",name),name.EndsWith(".json") ? "{}" : "# synthetic bootstrap");
+                    string report=Path.Combine(root,".launcher-install/vision/resources.json");Directory.CreateDirectory(Path.GetDirectoryName(report));
+                    File.WriteAllText(report,lifecycleScenario=="resources-pending" ? "{\"schemaVersion\":1,\"complete\":false,\"failed\":[]}" : "{\"schemaVersion\":1,\"complete\":false,\"failed\":\"broken\"}");
+                }
                 if(lifecycleScenario=="maintenance") Set(host,"maintenanceInProgress",true);
                 if(lifecycleScenario=="python-recovery") {
                     string journal=Path.Combine(root,".launcher-install/source/python-repair.json");Directory.CreateDirectory(Path.GetDirectoryName(journal));
@@ -110,6 +116,11 @@ namespace DflPtWebUi.Launcher
                 }
                 Dictionary<string,object> result=(Dictionary<string,object>)host.GetStateAsync().GetAwaiter().GetResult();
                 if(lifecycleScenario!=null) {
+                    if(lifecycleScenario.StartsWith("resources-")) {
+                        Dictionary<string,object> resources=result["resourcePreparation"] as Dictionary<string,object>;
+                        if(resources==null || (bool)resources["complete"] || (string)result["mode"]!="install")throw new InvalidOperationException("Pending resources were hidden");
+                        if(lifecycleScenario=="resources-invalid" && !resources.ContainsKey("message"))throw new InvalidOperationException("Invalid resource report did not offer recovery");
+                    }
                     if(lifecycleScenario=="maintenance" && (string)result["environmentStatus"]!="changing")throw new InvalidOperationException("Maintenance state imported or validated the runtime");
                     if(lifecycleScenario=="python-recovery" && !(bool)result["runtimeRepairPending"])throw new InvalidOperationException("Interrupted Python replacement has no recovery state");
                     if(lifecycleScenario=="upgrade-recovery") {

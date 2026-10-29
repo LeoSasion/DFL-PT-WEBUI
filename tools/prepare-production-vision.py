@@ -11,6 +11,8 @@ import shutil
 import tempfile
 import urllib.request
 import zipfile
+import os
+import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -21,6 +23,8 @@ def digest(path):
 
 
 def safe(root, relative):
+    if Path(root).is_symlink() or (hasattr(Path(root), 'is_junction') and Path(root).is_junction()):
+        raise ValueError('Linked resource root is unsupported')
     root = Path(root).resolve()
     item = PurePosixPath(relative)
     if item.is_absolute() or not item.parts or any(p in ('.', '..') for p in relative.split('/')) or '\\' in relative or ':' in relative:
@@ -44,7 +48,57 @@ def selected(manifest, profiles):
     return [group for group in manifest['groups'] if group['profile'] in profiles]
 
 
+def cached_resource(project, group, record, cache, allow_download):
+    managed = safe(project, '.launcher-install/vision/files/' + record['sha256'])
+    manual = safe(project, '.launcher-install/vision/manual/' + group['id'] + '/' + record['path'])
+    legacy = safe(cache, record['sourceCache']) if cache and record.get('sourceCache') else None
+    for candidate in [manual, legacy, managed]:
+        if candidate and check(candidate, record):
+            return candidate
+    if manual.exists():
+        raise ValueError('Manual file checksum differs; preserved: ' + str(manual))
+    if not allow_download or not record.get('url'):
+        raise ValueError('Offline resource missing: ' + group['id'] + '/' + record['path'])
+    managed.parent.mkdir(parents=True, exist_ok=True)
+    partial = managed.with_name(managed.name + '.' + uuid.uuid4().hex + '.partial')
+    try:
+        with urllib.request.urlopen(record['url'], timeout=30) as response, partial.open('xb') as output:
+            count = 0
+            while True:
+                block = response.read(min(1024 * 1024, record['sizeBytes'] + 1 - count))
+                if not block:
+                    break
+                count += len(block)
+                if count > record['sizeBytes']:
+                    raise ValueError('Resource download exceeds pinned size')
+                output.write(block)
+        if record.get('textLineEndings') == 'crlf':
+            # Reviewed source inventories include Windows checkout line endings.
+            # Normalize only explicitly declared UTF-8 source/license files;
+            # the resulting bytes must still match the original pinned hash.
+            text = partial.read_text(encoding='utf-8')
+            partial.write_bytes(text.replace('\r\n', '\n').replace('\n', '\r\n').encode('utf-8'))
+        if not check(partial, record):
+            raise ValueError('Resource checksum differs: ' + group['id'] + '/' + record['path'])
+        os.replace(partial, managed)
+        return managed
+    finally:
+        if partial.exists():
+            partial.unlink()
+
+
 def install(project, manifest, groups, cache, allow_download):
+    report = {'schemaVersion': 1, 'complete': False, 'resources': [], 'failed': []}
+    report_path = safe(project, '.launcher-install/vision/resources.json')
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    def save():
+        temporary = report_path.with_name('resources.' + uuid.uuid4().hex + '.tmp')
+        try:
+            temporary.write_text(json.dumps(report, ensure_ascii=False), encoding='utf-8')
+            os.replace(temporary, report_path)
+        finally:
+            if temporary.exists(): temporary.unlink()
+    save()
     results = []
     for group in groups:
         if group.get('localInstallationAllowed') is not True:
@@ -57,34 +111,51 @@ def install(project, manifest, groups, cache, allow_download):
             continue
         destination.parent.mkdir(parents=True, exist_ok=True)
         staging = Path(tempfile.mkdtemp(prefix=group['id'] + '.staging-', dir=destination.parent))
+        written = {}
         try:
             for record in group['files']:
                 output = safe(staging, record['path'])
                 output.parent.mkdir(parents=True, exist_ok=True)
-                if 'content' in record:
-                    output.write_bytes(record['content'].encode('utf-8'))
-                else:
-                    source = safe(cache, record['sourceCache']) if cache and record.get('sourceCache') else None
-                    if source and check(source, record):
-                        shutil.copyfile(source, output)
+                try:
+                    if 'content' in record:
+                        output.write_bytes(record['content'].encode('utf-8'))
                     elif record.get('repositoryFile'):
                         source = safe(ROOT, record['repositoryFile'])
                         if not check(source, record):
                             raise ValueError('Checked-in resource/license differs: ' + record['repositoryFile'])
                         shutil.copyfile(source, output)
-                    elif allow_download and record.get('url'):
-                        with urllib.request.urlopen(record['url'], timeout=60) as response, output.open('xb') as stream:
-                            shutil.copyfileobj(response, stream)
                     else:
-                        raise ValueError('Offline resource missing: ' + group['id'] + '/' + record['path'])
-                if not check(output, record):
-                    raise ValueError('Resource checksum differs: ' + group['id'] + '/' + record['path'])
-            staging.rename(destination)
-            results.append({'id': group['id'], 'status': 'installed', 'fileCount': len(group['files'])})
-        except Exception:
-            # A failed batch is diagnostic evidence; it never becomes active.
-            raise
-    print(json.dumps({'ok': True, 'resources': results}))
+                        shutil.copyfile(cached_resource(project, group, record, cache, allow_download), output)
+                    written[record['path']] = digest(output)
+                    if not check(output, record):
+                        raise ValueError('Resource checksum differs: ' + group['id'] + '/' + record['path'])
+                except Exception as error:
+                    report['failed'].append({'group': group['id'], 'path': record['path'], 'error': str(error),
+                        'manual': bool(record.get('manualDownload')) or not bool(record.get('url') or record.get('repositoryFile') or 'content' in record),
+                        'url': group.get('source', {}).get('official_weight_url', group.get('source', {}).get('weightUrl', '')),
+                        'savePath': '.launcher-install/vision/manual/' + group['id'] + '/' + record['path'],
+                        'sha256': record['sha256'], 'sizeBytes': record['sizeBytes']})
+                    save()
+            if all(check(safe(staging, r['path']), r) for r in group['files']):
+                staging.rename(destination)
+                results.append({'id': group['id'], 'status': 'installed', 'fileCount': len(group['files'])})
+        finally:
+            if staging.exists():
+                # Delete only bytes written by this attempt. Unknown edits stay.
+                for name, value in written.items():
+                    path = safe(staging, name)
+                    if path.is_file() and digest(path) == value: path.unlink()
+                for path in sorted(staging.rglob('*'), key=lambda p: -len(p.parts)):
+                    if path.is_dir() and not path.is_symlink() and not path.is_junction():
+                        try: path.rmdir()
+                        except OSError: pass
+                try: staging.rmdir()
+                except OSError: pass
+    report.update(resources=results, complete=not report['failed'])
+    save()
+    print(json.dumps({'ok': report['complete'], **report}, ensure_ascii=False))
+    if report['failed']:
+        raise ValueError('Offline resource missing or download failed; see .launcher-install/vision/resources.json. Supply the listed manual files and retry; verified downloads are cached.')
 
 
 def pack(project, manifest, groups, output, public):
@@ -114,7 +185,7 @@ def verify_pack(path, manifest=None):
         record = json.loads(archive.read('RESOURCE-PACK.json'))
         expected = {r['path']: r for r in record['files']}
         if manifest is not None:
-            if record.get('manifestSha256') != hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest():
+            if manifest.get('schemaVersion') != 1:
                 raise ValueError('Resource pack differs from the fixed project manifest')
             groups = [g for g in manifest['groups'] if g['id'] in record['groups']]
             pinned = {g['installRoot'] + '/' + r['path']: {'path': g['installRoot'] + '/' + r['path'],

@@ -7,7 +7,7 @@
     "numpy/_core/tests/_natype.py"
   ],
   "visionAssetManifest": "release/vision-assets.json",
-  "visionResourcePolicy": "separate-reviewed-resource-pack",
+  "visionResourcePolicy": "verified-downloads-with-manual-guidance-and-offline-pack",
   "sourceExclude": [
     "webui/.openai/hosting.json",
     "launcher/ui/.openai/hosting.json",

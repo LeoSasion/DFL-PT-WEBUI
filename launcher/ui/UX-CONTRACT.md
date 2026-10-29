@@ -20,6 +20,7 @@ Version labels and browser previews read `release/version.json` through `src/rel
 | Dialog | `src/components/Dialog.jsx` | This contract; `DESIGN.md` | Feedback, fixed-source upgrade, retained-runtime cleanup | Browser focus, Escape, inert background, async failure |
 | Runtime lifecycle | `src/App.jsx` and `src/components/CudaRuntimeNotice.jsx` | Native runtime-switch state and explicit user actions | Change required, preparation, cleanup choice, retained, error, recovery, unavailable | Browser end-to-end state fixtures and host tests |
 | Status | `CudaRuntimeNotice`, existing log stream | Native events and RPC confirmations | Warning, progress, success, actionable failure | Live-region and failure/retry browser checks |
+| Auxiliary resources | `InstallView` | Host-validated `.launcher-install/vision/resources.json`; `release/vision-assets.json` | Missing manual file with official link, exact path and checksum; download failure and retry; invalid report recovery | Synthetic native browser fixture and native cold-start tests |
 | Scrollbar | `src/runtime.css` using `styles.css` tokens | `DESIGN.md` | Global theme; modal-body stable gutter | Computed-style and narrow-window checks |
 
 The bundled deterministic auditor recognizes a fixed list of capability names including Scrollbar; Dialog, Runtime lifecycle and Status are additional project capabilities. Their complete ownership rows remain here and their executable verification is `tests/cuda-runtime.browser.mjs`, rather than being relabeled as unrelated built-in capabilities to satisfy that parser.
@@ -41,6 +42,8 @@ When an already committed runtime has `cleanupWarning` and `canRetryCleanup`, sh
 On a cold start with `upgradePending`, the install screen offers **恢复未完成的升级** through `rollbackUpdate`, replaces ordinary bootstrap, and shows the host's `upgradeMessage`. When `upgradeCanRollback` is false, recovery and ordinary installation remain disabled rather than overwriting the incomplete upgrade. A separate `runtimeRepairPending` state uses **恢复运行环境** through `repairDependencies`; it never selects source rollback. `environmentStatus: changing` disables new environment actions throughout either surface. Failures remain visible at the recovery action and can be retried.
 
 ## Shared behavior
+
+Incomplete auxiliary preparation stays on the installation screen even when Python and Node are ready. `InstallView` reuses the scrollable component-list panel for the resource guide, leaving the install log and primary action reachable. Official pages use the existing `openExternal` RPC. **重试准备辅助资源** uses `repairDependencies`, deduplicates while pending, and retains visible errors after failure. The installer reuses verified content-addressed downloads; the UI never downloads, hashes weights, accepts arbitrary cleanup paths or publishes resources. The host validates the small report's structure before exposing it; a corrupt report offers retry instead of crashing rendering.
 
 Modals make the background inert, trap Tab and Shift+Tab, provide a visible safe action, and restore focus to the trigger or the next useful runtime action. Escape never confirms a destructive action and does not dismiss a mutation in progress. Multiple modal workflows are not stacked.
 

@@ -63,7 +63,13 @@ try {
                 catch { $needsInstall = $true }
             }
             else { $needsInstall = $true }
-            if ($needsInstall -or $Repair) {
+            $resourceReport = Join-Path $root '.launcher-install/vision/resources.json'
+            $needsResources = $false
+            if (Test-Path -LiteralPath $resourceReport) {
+                try { $needsResources = (Get-Content -LiteralPath $resourceReport -Raw -Encoding UTF8 | ConvertFrom-Json).complete -ne $true }
+                catch { $needsResources = $true }
+            }
+            if ($needsInstall -or $Repair -or $needsResources) {
                 # An EXE carries the installer matching its bootstrap/manifest,
                 # so repairing an older source package also understands the
                 # internal WebUI delegation flag.

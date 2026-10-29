@@ -45,7 +45,7 @@ def test_failed_group_never_publishes(tmp_path):
     with pytest.raises(ValueError, match='Offline resource missing'):
         RESOURCES.install(tmp_path, manifest, [group], None, False)
     assert not (tmp_path / group['installRoot']).exists()
-    assert list((tmp_path / '_internal/vision_models/production').glob('fixture.staging-*'))
+    assert not list((tmp_path / '_internal/vision_models/production').glob('fixture.staging-*'))
 
 
 def test_public_admission_cannot_be_bypassed_by_local_install(tmp_path):

@@ -1,0 +1,37 @@
+{
+  "model": "TUFA",
+  "repository": "https://github.com/Jiahao-UTS/TUFA",
+  "revision": "58b3833ebbd481aeaa72a8500d5cc781e4ab8112",
+  "license": "GPL-2.0",
+  "weights": [
+    {
+      "file": "weights/model.pth",
+      "sha256": "3fe7071bef814af320c6e6ec7d724b4b1bb253677500e1a48a5e2a66aaf10899",
+      "bytes": 143969647
+    }
+  ],
+  "source_files": {
+    "Backbone/__init__.py": "7ed62ab54235003ef1559bdf8b7f6f29b9e83e912448bc9b17bb75c705780860",
+    "Backbone/Decoder.py": "24f877e4a6f93760f87acd716b8b07d7bfb635831db0ca3a52e170df1224f443",
+    "Backbone/DINO.py": "dded0b4bee6066595faf45e35fbd09c3353557b5c6e71965ed5abd5a5b582491",
+    "Backbone/Loss.py": "9dd5d435fd7b681091cf6f50a9d9a5d7e680ac44930aeae41f80f99cb44c49b0",
+    "Backbone/pos_embedding.py": "d86b6ebdf2a0ee1583bfffff306fed0a8b241518bfb385a696ed17e2f420d111",
+    "Camera.py": "bc4d3b1ca8f674283f815cada1b5c94c357040fd0e63991302ffe04f81321c89",
+    "Config/__init__.py": "c5ce61cded62a60c747995965ba6df7eb676d662bab30c07625730c8c5fff467",
+    "Config/default.py": "e7a1adfda8715b592e4f0b5cde902a8c8969d12b34cc6774133be3197e3c031e",
+    "Dataloader/__init__.py": "b78641c996248cd0b4bdbd3e2621da5f5904a4d2613b658cc890a8445fa02a4b",
+    "Dataloader/All.py": "8babb8d42446034cf6763916a423f4055699d165c5960a599456480922487100",
+    "Prompt.py": "164fbff2119c1e2f107845ddbdbded80312bebfee56b3b5628d9269ea3f49c81",
+    "Test.py": "12e3cad35d9a4dcabd86d07bf6b50040fc48efac36434a68aa334b02642850f4",
+    "utils/__init__.py": "276551bbd5b5f02aa32c1a8fd2fbeb67133dc032506ad401e8e5a1e589b8d37b",
+    "utils/Detector.py": "d5e7360bc4085a09e8f8b26139adc789e9024fb6ebb77fbb2656b7382d8bbca8",
+    "utils/get_transforms.py": "a1db8e6d6608ec2898d7e7754326edb29f45cb12ce1d4bcf8c6bf25d549daafc",
+    "Prompt/shape_29.npz": "9561a0849a4ef09ea02c99697f320fa6ac909ed85a23de9ea532471b1175b5cd",
+    "Prompt/shape_314.npz": "61e461e109f13f02628384b7b8d0478ede2dcc279f5e80476e477a0ade6b44c2",
+    "Prompt/shape_68.npz": "c42f58fef5eff4ae44aa1784d7d2cc01827757f4f372eeec4b49862fe21ec53f",
+    "Prompt/shape_98.npz": "014050982e090f1bedf2dd8992ea38c7da938750f3e1d35af4ff8390b28418b8"
+  },
+  "official_weight_url": "https://drive.google.com/file/d/1rRAB3W74QK-J6W_EnjC7HhS-zjT9BuED/view",
+  "source_license_record": "source/LICENSE",
+  "distribution": "ignored-local-evaluation-assets"
+}

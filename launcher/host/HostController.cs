@@ -152,7 +152,25 @@ namespace DflPtWebUi.Launcher
             runtimeItems.Add(RuntimeItem("webui", "WebUI build", buildReady, buildReady ? "已构建" : "尚未构建", webuiBuild, "本地构建", null));
 
             bool runtimesReady = runtimeValidation.RequiredComponentsReady;
-            bool dependenciesReady = runtimesReady && webUiHealth.Ready && buildReady;
+            Dictionary<string, object> resourcePreparation = null;
+            string resourceReport = ProjectLocator.AssertWritableChildPath(projectRoot, ".launcher-install/vision/resources.json");
+            if (File.Exists(resourceReport)) {
+                try {
+                    if (new FileInfo(resourceReport).Length > 1024 * 1024) throw new IOException("Resource report exceeds limit");
+                    resourcePreparation = new JavaScriptSerializer().DeserializeObject(File.ReadAllText(resourceReport)) as Dictionary<string, object>;
+                    if (resourcePreparation == null || !resourcePreparation.ContainsKey("schemaVersion") || Convert.ToString(resourcePreparation["schemaVersion"]) != "1"
+                        || !resourcePreparation.ContainsKey("complete") || !(resourcePreparation["complete"] is bool)
+                        || !resourcePreparation.ContainsKey("failed") || !(resourcePreparation["failed"] is object[])) throw new IOException("Resource report is invalid");
+                    foreach (object item in (object[])resourcePreparation["failed"]) {
+                        Dictionary<string, object> entry = item as Dictionary<string, object>;
+                        if (entry == null || !entry.ContainsKey("manual") || !(entry["manual"] is bool)) throw new IOException("Resource failure is invalid");
+                        foreach (string key in new[] { "group", "path", "error", "url", "savePath", "sha256" })
+                            if (!entry.ContainsKey(key) || !(entry[key] is string)) throw new IOException("Resource failure field is invalid");
+                    }
+                } catch { resourcePreparation = new Dictionary<string, object> { { "complete", false }, { "message", "辅助资源记录无法读取，请重试准备资源。" } }; }
+            }
+            bool resourcesReady = resourcePreparation == null || CudaRuntimeService.Flag(resourcePreparation, "complete");
+            bool dependenciesReady = runtimesReady && webUiHealth.Ready && buildReady && resourcesReady;
             bool environmentReady = projectReady && dependenciesReady;
             List<object> steps = new List<object>();
             steps.Add(Step("environment", "环境检测", "complete"));
@@ -172,6 +190,7 @@ namespace DflPtWebUi.Launcher
             result["gitNetworkLabel"] = GitNetworkOptions.Describe(snapshot);
             result["steps"] = steps;
             result["runtimeItems"] = runtimeItems;
+            result["resourcePreparation"] = resourcePreparation;
             result["runtimeManifest"] = runtimeValidation.Loaded ? "validated" : runtimeValidation.Error;
             result["cudaRuntime"] = cudaStatus;
             result["projectDir"] = projectRoot;

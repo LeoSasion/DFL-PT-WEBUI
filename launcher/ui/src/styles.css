@@ -289,6 +289,16 @@ p { margin: 0; }
 
 .runtime-row:last-child { border-bottom: 0; }
 
+.resource-preparation { display: block; padding: 14px; }
+.resource-preparation h2 { font-size: 15px; margin-bottom: 8px; }
+.resource-preparation p, .resource-preparation details { margin-top: 7px; color: var(--text-3); font-size: 12px; line-height: 1.6; }
+.resource-file { display: flex; flex-wrap: wrap; gap: 12px; padding: 14px 0; border-bottom: 1px solid #10251b; }
+.resource-file:last-child { border-bottom: 0; }
+.resource-file > div { flex: 1 1 340px; min-width: 0; overflow-wrap: anywhere; }
+.resource-file > button { align-self: flex-start; }
+.resource-file code { color: var(--text-2); }
+.resource-file summary { cursor: pointer; }
+
 .runtime-row.is-working {
   position: relative;
   z-index: 1;

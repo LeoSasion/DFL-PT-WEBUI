@@ -73,6 +73,12 @@ class FakeNode {
     It 'serves maintenance progress without importing the environment' {
         [DflPtWebUi.Launcher.CudaRuntimeColdStartHarness]::Run((Join-Path $TestDrive 'maintenance'),$script:interpreter,'compatible',$false,$false,'maintenance') | Should Be $true
     }
+    It 'exposes pending auxiliary resources on cold start' {
+        [DflPtWebUi.Launcher.CudaRuntimeColdStartHarness]::Run((Join-Path $TestDrive 'resources-pending'),$script:interpreter,'compatible',$false,$false,'resources-pending') | Should Be $true
+    }
+    It 'offers retry for a malformed resource report without passing it to the UI' {
+        [DflPtWebUi.Launcher.CudaRuntimeColdStartHarness]::Run((Join-Path $TestDrive 'resources-invalid'),$script:interpreter,'compatible',$false,$false,'resources-invalid') | Should Be $true
+    }
     It 'offers Python replacement recovery before any native validation' {
         [DflPtWebUi.Launcher.CudaRuntimeColdStartHarness]::Run((Join-Path $TestDrive 'python-recovery'),$script:interpreter,'compatible',$false,$false,'python-recovery') | Should Be $true
     }

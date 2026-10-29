@@ -439,7 +439,7 @@ def plan_release(kind: str, config: dict, commit: str, weights: str, *, cuda_run
              "Auxiliary weight policy: " + weights + ".\n"
              + ("Obtain auxiliary weights: powershell -NoProfile -ExecutionPolicy Bypass -File .\\tools\\prepare-vision-runtime.ps1\n" if weights == "download" else "")
              + "Verified generic XSeg inference weights are included under _internal/model_generic_xseg in both archive kinds.\n"
-             + "Default YOLO/TUFA and optional restoration resources use a separate hash-verified resource pack. See release/vision-assets.json; local installation is separate from public distribution admission.\n"
+             + "Online installation fetches available pinned auxiliary resources and caches verified files. The launcher lists any manual files with official links and exact save paths; retry after supplying them. An existing hash-verified resource pack also supports offline installation. See launcher/runtime-README.md and release/vision-assets.json; local installation is separate from public distribution admission.\n"
              "Packaging and file integrity checks do not constitute functional, training, dual-GPU or visual-quality validation.\n").encode("utf-8")
     plan.add(Entry("RELEASE-RUNTIME-NOTES.txt", len(notes), "release-note", data=notes))
     plan.npm()

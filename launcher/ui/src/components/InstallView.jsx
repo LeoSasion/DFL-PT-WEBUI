@@ -153,8 +153,9 @@ export function InstallView({ state, logs, busy, actionError, onAction, onClearL
   const hasError = state.runtimeItems.some((item) => item.status === "error");
   const upgradeRecovery = Boolean(state.upgradePending);
   const runtimeRecovery = !upgradeRecovery && Boolean(state.runtimeRepairPending);
-  const action = upgradeRecovery ? "rollbackUpdate" : runtimeRecovery ? "repairDependencies" : hasError ? "retryBootstrap" : "runBootstrap";
-  const actionLabel = upgradeRecovery ? "恢复未完成的升级" : runtimeRecovery ? "恢复运行环境" : hasError ? "重试安装" : state.projectReady ? "检查并准备环境" : "开始安装";
+  const resourcesPending = state.resourcePreparation && !state.resourcePreparation.complete;
+  const action = upgradeRecovery ? "rollbackUpdate" : runtimeRecovery || resourcesPending ? "repairDependencies" : hasError ? "retryBootstrap" : "runBootstrap";
+  const actionLabel = upgradeRecovery ? "恢复未完成的升级" : runtimeRecovery ? "恢复运行环境" : resourcesPending ? "重试准备辅助资源" : hasError ? "重试安装" : state.projectReady ? "检查并准备环境" : "开始安装";
   const changing = busy || state.environmentStatus === "changing";
 
   return (
@@ -166,13 +167,22 @@ export function InstallView({ state, logs, busy, actionError, onAction, onClearL
           <h1>{upgradeRecovery ? "升级尚未完成" : runtimeRecovery ? "运行环境需要恢复" : "准备本地运行环境"}</h1>
           <p>{upgradeRecovery ? "请先恢复上次升级，再继续准备环境。模型、素材和训练进度保留。" : runtimeRecovery ? "请先恢复中断的运行环境准备，再继续使用项目。模型和素材保留。" : "首次安装会获取 DFL-PT-WEBUI 官方源码并准备独立运行环境；已有项目可直接检查或修复。"}</p>
           {upgradeRecovery ? <p className="install-recovery-message" role="status">{state.upgradeMessage || (state.upgradeCanRollback ? "已找到本项目的升级备份，可以恢复。" : "当前恢复记录不完整，请查看日志；暂时不能继续安装或覆盖现有项目。")}</p> : null}
-          {(upgradeRecovery || runtimeRecovery) && actionError ? <p className="dialog-error" role="alert">{actionError}</p> : null}
+          {(upgradeRecovery || runtimeRecovery || resourcesPending) && actionError ? <p className="dialog-error" role="alert">{actionError}</p> : null}
         </div>
 
-        <section className="runtime-list panel-line" aria-label="运行环境组件">
-          {state.runtimeItems.map((item) => <RuntimeRow item={item} key={item.id} />)}
+        <section className={"runtime-list panel-line" + (resourcesPending ? " resource-preparation" : "")} aria-label={resourcesPending ? "辅助资源准备" : "运行环境组件"}>
+        {resourcesPending ? <>
+          <h2>辅助资源需要处理</h2>
+          <p>可自动获取的文件会先下载并校验。请按下方路径创建目录并保存手动文件，再点击“重试准备辅助资源”；已校验文件会复用。</p>
+          {state.resourcePreparation.message ? <p role="alert">{state.resourcePreparation.message}</p> : null}
+          {(state.resourcePreparation.failed || []).map((item) => <article className="resource-file" key={item.group + "/" + item.path}>
+            <div><strong>{item.group} / {item.path}</strong><p>{item.manual ? "需要从官方页面手动获取" : "下载或校验失败，可重试"}</p>
+              {item.manual ? <><p>保存到：<code>{state.projectDir}/{item.savePath}</code></p><p>文件大小：{formatBytes(item.sizeBytes)} · SHA-256：<code>{item.sha256}</code></p></> : null}
+              <details><summary>查看失败原因</summary><p>{item.error}</p></details></div>
+            {item.manual && item.url ? <button className="text-action" disabled={changing} onClick={() => launcherBridge.request("openExternal", { url: item.url })}>打开官方获取页面 <IconExternalLink size={13} /></button> : null}
+          </article>)}
+        </> : state.runtimeItems.map((item) => <RuntimeRow item={item} key={item.id} />)}
         </section>
-
         <InstallLog logs={logs} onClear={onClearLogs} />
 
         <footer className="install-footer">

@@ -2,11 +2,11 @@
 
 Windows 本地工作台：**ME PyTorch 训练 + WebUI + 数据处理、XSeg、合成和视频工具**。
 
-2026-10-10 已将 H3 训练器替换为 **TAEQI2.1**：Encoder 始终冻结，Decoder 可选冻结／末段／全部训练，配合新的 PyTorch LIAE 双中间层。ME 保留，TAE 使用独立 `tae.pt` 和 WebUI 训练／恢复／合成入口。用法见 [TAEQI2.1 说明](docs/TAE.md)。此项为本地源码改动，尚未发布新发行包。
+2026-10-10 已将 H3 训练器替换为 **TAEQI2.1**：Encoder 始终冻结，Decoder 可选冻结／末段／全部训练，配合新的 PyTorch LIAE 双中间层。ME 保留，TAE 使用独立 `tae.pt` 和 WebUI 训练／恢复／合成入口。用法见 [TAEQI2.1 说明](docs/TAE.md)。当前源码发行包含这套实现；历史便携包保留各自原功能集。
 
 ME 与 TAE 均支持 FP32／BF16 训练，以及独立的「正常导出／极致量化」DFM 选项。极致量化使用 FP8 + NVFP4，需 Blackwell 与 TensorRT；大模型通过外置权重取消 2GB 导出上限。具体兼容要求和命令见 [DFM 导出说明](docs/DFM_EXPORT.md)。
 
-当前源码的应用版本为 **0.1.3-preview**，启动器版本为 **0.1.4-preview**。换脸训练使用 ME/PyTorch 和 TAEQI2.1，XSeg 是辅助遮罩模型；旧 ME 网络权重可以通过显式导入命令迁移。运行环境与项目材料保持独立。源码版本、EXE 版本与已发布便携包分别记录，以发行资产及 provenance 判断实际内容。
+当前源码的应用版本为 **0.1.4-preview**，启动器版本为 **0.1.5-preview**。首次安装自动获取可下载的辅助资源，人工获取项提供官方链接、保存位置和校验信息；失败重试复用已验证缓存。换脸训练使用 ME/PyTorch 和 TAEQI2.1，XSeg 是辅助遮罩模型；旧 ME 网络权重可以通过显式导入命令迁移。运行环境与项目材料保持独立。源码版本、EXE 版本与已发布便携包分别记录，以发行资产及 provenance 判断实际内容。
 
 - [历史 0.1.1-preview 便携包](https://github.com/LeoSasion/DFL-PT-WEBUI/releases/tag/v0.1.1-preview)：保持原功能集及原摘要，随包提供通用 XSeg 推理权重。
 - [启动器及源码发行资产](https://github.com/LeoSasion/DFL-PT-WEBUI/releases)：无需预装 Git、Python 或 Node；新启动器按固定公开提交及 SHA-256 安装。历史 launcher-v0.1.2-preview 跟随安装时的 main；详见[启动器说明](docs/LAUNCHER.md)。

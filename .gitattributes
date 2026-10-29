@@ -22,3 +22,4 @@
 release/generic-xseg-data.dat -text
 release/generic-xseg-original-summary.txt -text whitespace=cr-at-eol
 tools/licenses/GenericXSeg-DeepFaceLab-GPL-3.0.txt -text whitespace=cr-at-eol
+release/vision/tufa-identity.json -text whitespace=cr-at-eol

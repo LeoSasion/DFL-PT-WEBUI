@@ -26,7 +26,13 @@ Python 便携构建包含标准库、`venv` 和 `ensurepip`，无需注册到系
 
 2026-10-07 起安装使用 `release/python-locks/*-win-cp312.txt` 的全传递 SHA-256 锁，见 `release/python-sbom.json`。默认 production 61 包；restoration 78、validation 66、evaluation 89、scene 64 包分别用于修复、ONNX 数值校验、比较工具和场景检测。production 不带 h5py、onnxruntime、BasicSR/GFPGAN、tb-nightly、ffmpeg-python 或 pytest；桌面环境只装 GUI OpenCV wheel，不能叠装 headless。旧 timm 0.4.12 与 BasicSR 1.4.2 在完成同权重数值等价前保留，不把库更新当成质量提升。
 
-YOLO/TUFA/BiSeNet 等安装到 `_internal/vision_models/production/<id>`，源码、权重、许可证、原始来源逐件锁定，多个工作区共用；研究 cache 仅作旧兼容读源，不依赖 active 项目。新项目须提供独立核验资源包：`-ResourcePackPath <vision-local-review.zip>`；可选 `-RuntimeProfile restoration` 准备 MambaIRv2/Real-ESRGAN 人脸链及既有 SwinIR 源帧链。Aligned 与 ME 预测脸只使用 MambaIRv2/Real-ESRGAN，旧 FaceEnhancer 已移除。在线安装不会使推理自动下载。TUFA 的官方 Drive 权重暂无固定无交互下载 URL，缺资源时明确停止，不能静默回退 FAN。离线命令示例：
+YOLO/TUFA/BiSeNet 等安装到 `_internal/vision_models/production/<id>`，源码、权重、许可证、原始来源逐件锁定，多个工作区共用；研究 cache 仅作显式指定的旧兼容读源，不依赖 active 项目。首次在线安装会先获取所有可自动下载的生产资源；TUFA/BiSeNet 的文本源码按清单转换为已审核的 Windows 换行格式，再核对原始固定哈希，二进制资源保持原字节。可选 `-RuntimeProfile restoration` 准备 MambaIRv2/Real-ESRGAN 人脸链及既有 SwinIR 源帧链。Aligned 与 ME 预测脸只使用 MambaIRv2/Real-ESRGAN，旧 FaceEnhancer 已移除。推理流程不自动下载，也不静默回退 FAN。
+
+TUFA 官方 Drive 权重当前会返回需要人工确认的页面，启动器列出官方链接、准确文件名、保存位置和 SHA-256。请按显示路径创建目录并保存原文件，再点击 **重试准备辅助资源**。例如 TUFA 权重应保存为 `<项目目录>/.launcher-install/vision/manual/tufa/weights/model.pth`；若 BiSeNet 自动下载受限，则保存为 `<项目目录>/.launcher-install/vision/manual/bisenet-celebamaskhq/79999_iter.pth`。错误文件不会覆盖已安装资源，也不会被当作有效缓存。
+
+已验证的自动下载缓存在 `.launcher-install/vision/files/<SHA-256>`，后续重试先复用缓存；资源缺失不会阻止其他文件下载。网络错误、截断、大小超限或校验失败会清除本次不完整下载和本次已知临时文件，并将逐文件结果写入 `.launcher-install/vision/resources.json`。启动器据此显示缺失项，补齐后重试；运行时已就绪也不会跳过未完成的辅助资源。缓存位于项目安装区，不读写用户工作区。
+
+已有独立核验资源包仍可通过 `-ResourcePackPath <vision-local-review.zip>` 离线使用；只改下载地址、缓存位置或换行获取方式不会使文件清单与固定哈希仍一致的旧资源包失效。离线命令示例：
 
 ```powershell
 .\launcher\install-source.ps1 -NoNetwork -WheelhousePath <wheelhouse> -ResourcePackPath <resource-pack>
@@ -56,7 +62,7 @@ Python 和 FFmpeg 散列来自相应 GitHub 上游发行资产的 SHA-256 digest
 
 WebUI 依赖输入使用包清单、锁文件和 Node 身份回执。输入和依赖均健康时，显式修复只重建界面，不重复安装包；需要替换时先备份依赖、构建与回执，安装或构建失败后恢复。已提交新版的备份清理失败不会撤销新版，后续准备会继续清理。失败替换树可能包含期间产生的未知写入，会保留在 `.launcher-install/webui-preparation` 的事务目录中，并在日志显示位置。
 
-安装器与源码必须提供匹配的运行环境接口。应用 `0.1.3-preview` / 启动器 `0.1.4-preview` 使用包含事务安装、CUDA 解析和私有验证接口的匹配源码；实际公开提交、代码树及官方 ZIP SHA-256 记录在 `release/source-pin.json`，启动器内嵌同一记录。来源记录在获取公开归档并验证后生成，避免把本地构建误当成已发布源码。缺少必要接口的旧源码仍会在下载大型运行环境前被明确拒绝。
+安装器与源码必须提供匹配的运行环境接口。应用 `0.1.4-preview` / 启动器 `0.1.5-preview` 使用包含事务安装、CUDA 解析和私有验证接口的匹配源码；实际公开提交、代码树及官方 ZIP SHA-256 记录在 `release/source-pin.json`，启动器内嵌同一记录。来源记录在获取公开归档并验证后生成，避免把本地构建误当成已发布源码。缺少必要接口的旧源码仍会在下载大型运行环境前被明确拒绝。
 
 ## 离线使用
 

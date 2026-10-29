@@ -992,7 +992,7 @@
     },
     {
       "path": "launcher/bootstrap.ps1",
-      "sha256": "a08f201b1cf7edf4ff5a89a770ad83668fdb9ec775476f1c80ddd2a08bbb2b9c"
+      "sha256": "8f503764e8a5f937070e68ae37257b4dd54bc5ea7dd2af3b3faf7c7ef73d444d"
     },
     {
       "path": "launcher/build-host.ps1",
@@ -1004,7 +1004,7 @@
     },
     {
       "path": "launcher/host/AssemblyInfo.cs",
-      "sha256": "a3acc701ce52a825df282b88461a90f6128afb3da385679646185b44cf0baf77"
+      "sha256": "17a5a271684100512e8758c13bdd14c3fd8fb5cabf4d378cd037281b8b4f387d"
     },
     {
       "path": "launcher/host/CudaRuntimeService.cs",
@@ -1024,7 +1024,7 @@
     },
     {
       "path": "launcher/host/HostController.cs",
-      "sha256": "0939013ee9f768ea6c588b5aa9dd7b67a9430712433d60f8d5ad753481b2a35e"
+      "sha256": "ce1ee0ccd69278cd1614fbc89ef3905bbc2cb2378dad979bdb87fdaa53eb813f"
     },
     {
       "path": "launcher/host/LauncherConstants.cs",
@@ -1148,7 +1148,7 @@
     },
     {
       "path": "launcher/runtime-README.md",
-      "sha256": "3894a7e81c968440126f53fbaa4ecc8b661422e1f8b66d49efdf11e75749b5e1"
+      "sha256": "b26ac078b671dff33037fb7b01c0466734802ad36e2c69dbd1ac58a230e40902"
     },
     {
       "path": "launcher/runtime-manifest.json",
@@ -1188,7 +1188,7 @@
     },
     {
       "path": "launcher/ui/UX-CONTRACT.md",
-      "sha256": "169b4824986a3887e961e9b5293136d4a60ba487238a3521fe94fd42e89427d3"
+      "sha256": "631574358462e07dbf23e3e190735970e533e8060d33ed1be0c102637b4b34db"
     },
     {
       "path": "launcher/ui/index.html",
@@ -1232,7 +1232,7 @@
     },
     {
       "path": "launcher/ui/src/components/InstallView.jsx",
-      "sha256": "4fcd9e3299a7e930963026214230b16675e143a9f6b0f77b0cd349b26dca64d5"
+      "sha256": "11f22b2f61b98ff1e362a6d1a5fd11b3ff9cbc49d047d12a6763a02546399c3d"
     },
     {
       "path": "launcher/ui/src/components/PlainLog.jsx",
@@ -1272,7 +1272,7 @@
     },
     {
       "path": "launcher/ui/src/styles.css",
-      "sha256": "e80d96341964438462f04611436f6853c685dc4a0d3d99e16bb19d05ef692ace"
+      "sha256": "a63518c5575abeea10db906bcd4bef3c01c94c14ef0cc4490fca7373599b258c"
     },
     {
       "path": "launcher/ui/vite.config.mjs",
@@ -1284,7 +1284,7 @@
     },
     {
       "path": "launcher/update-channel.json",
-      "sha256": "7bbd757580700dcbb2459083f90bd98f68321e649e70ffe674b962bcd5c288c3"
+      "sha256": "3ac6eb74937fd5aefde859ea4e4003582f070814761f4df7d362a97996fc86c4"
     },
     {
       "path": "launcher/update-signing-policy.json",
@@ -1552,7 +1552,7 @@
     },
     {
       "path": "release/package-config.json",
-      "sha256": "df5f5bcaedc62195a3ee9079d683bbdb917ac186187f27b619614bb11e5c006c"
+      "sha256": "52f178a87c1449d5e45d0a0f7537e5d1f038df0ed35bd540023b6a00f4f3aae4"
     },
     {
       "path": "release/python-locks/evaluation-win-cp312.txt",
@@ -1588,7 +1588,7 @@
     },
     {
       "path": "release/version.json",
-      "sha256": "11a6f8d47d2f0d127ee8a3a10021ae9780c6913f219ab86148cab34462e1552f"
+      "sha256": "2a4077b862229178988fdd1f2c20d93596b99f05582b1f069d34fa7a4b290923"
     },
     {
       "path": "release/version.mjs",
@@ -1596,7 +1596,11 @@
     },
     {
       "path": "release/vision-assets.json",
-      "sha256": "6fc4f5a777b62faa50fa58661f684af6689226c5b8cf6391b459bcc713151013"
+      "sha256": "8a6b424ba1f99d3f7fde8dc93ea08a7d30b08352fd7fd556625312cc86eca5f8"
+    },
+    {
+      "path": "release/vision/tufa-identity.json",
+      "sha256": "3438db5b943b7c25c632ae30422353208f5d8036ee1ea3e23f0da35cd9d7b149"
     },
     {
       "path": "tools/aligned-enhancement-benchmark.py",
@@ -1604,7 +1608,7 @@
     },
     {
       "path": "tools/build-release.py",
-      "sha256": "4009de89774efe58c28e578cb67ad46414e4f9b1b3b9191bda536ba2d9b79d1d"
+      "sha256": "a793e9edd0ca06bb6bab347ded9584188ca5ae4973a6d9aa9f0414e0ea80e14a"
     },
     {
       "path": "tools/check-i18n.mjs",
@@ -1676,7 +1680,7 @@
     },
     {
       "path": "tools/package-launcher.py",
-      "sha256": "424e5c1eba209ad55cfbccd0428be54cee6d783eeacbbbb0205d667c0f5fcb4c"
+      "sha256": "2598abfe11d78f7e0cff2e8aee2a7fe3a7071531ffb43bf9fd7013db9a554069"
     },
     {
       "path": "tools/package_release.ps1",
@@ -1688,7 +1692,7 @@
     },
     {
       "path": "tools/prepare-production-vision.py",
-      "sha256": "a28f02bc0563a4df88ebc12fe2e4859e7a0b15f5ad5308426adebf872eef6bd2"
+      "sha256": "9e1bbd08d78b3235cc527e286535baae85ca8fef8c0627f9482166deae938368"
     },
     {
       "path": "tools/prepare-vision-candidates.py",
@@ -1696,7 +1700,7 @@
     },
     {
       "path": "tools/prepare-vision-runtime.ps1",
-      "sha256": "157129743ffa71cf76a9bd6db35203f346dec1202292c4897b654b88c3d43f4f"
+      "sha256": "cbed1661c5be18c2b09b1c8ae1be9bdecf105b3c153bdad570e527056daba985"
     },
     {
       "path": "tools/prepare-vision-visual-review.py",

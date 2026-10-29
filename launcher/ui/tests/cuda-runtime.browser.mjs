@@ -66,6 +66,7 @@ async function nativeFixture(runtime, extra = {}, controls = {}) {
       api.requests.push(request);
       if (request.method === "getState") queueMicrotask(() => api.emit({ id: request.id, result: { state } }));
       else if (request.method === "checkCudaRuntime") api.held.push(request);
+      else if (request.method === "openExternal") queueMicrotask(() => api.answer(request, { opened: true }));
       else if ((controls.holdMutations && /^(prepare|keep|delete|recover)CudaRuntime$/.test(request.method))
         || (controls.holdLifecycle && ["rollbackUpdate", "repairDependencies", "runBootstrap", "retryBootstrap"].includes(request.method))) {
         api.mutations.push(request);
@@ -385,6 +386,32 @@ try {
     await native.evaluate(() => window.__native.answer(window.__native.mutations[0], { state: { mode: "ready", environmentStatus: "ready", runtimeRepairPending: false, cudaRuntime: null } }));
     await native.getByRole("heading", { name: "交互终端" }).waitFor();
     assert.equal((await native.evaluate(() => window.__native.requests)).filter((item) => ["runBootstrap", "retryBootstrap", "rollbackUpdate"].includes(item.method)).length, 0);
+    await native.close();
+  });
+  await check("missing auxiliary resources show official guidance, preserve cache on retry and report failures", async () => {
+    const resource = { complete: false, failed: [{ group: "tufa", path: "weights/model.pth", manual: true,
+      url: "https://drive.google.com/file/d/1rRAB3W74QK-J6W_EnjC7HhS-zjT9BuED/view", savePath: ".launcher-install/vision/manual/tufa/weights/model.pth",
+      sha256: "3fe7071bef814af320c6e6ec7d724b4b1bb253677500e1a48a5e2a66aaf10899", sizeBytes: 143969647, error: "Synthetic download unavailable" }] };
+    const native = await nativeFixture(null, { mode: "install", environmentStatus: "incomplete", resourcePreparation: resource }, { holdLifecycle: true });
+    const panel = native.getByRole("region", { name: "辅助资源准备" });
+    assert.match(await panel.innerText(), /已校验文件会复用/);
+    assert.match(await panel.innerText(), /manual\/tufa\/weights\/model.pth/);
+    await panel.getByRole("button", { name: "打开官方获取页面" }).click();
+    assert.equal((await native.evaluate(() => window.__native.requests)).find((item) => item.method === "openExternal").params.url, resource.failed[0].url);
+    const retry = native.getByRole("button", { name: "重试准备辅助资源", exact: true });
+    await retry.evaluate((button) => { button.click(); button.click(); });
+    assert.equal(await native.evaluate(() => window.__native.mutations.length), 1);
+    assert.equal((await native.evaluate(() => window.__native.mutations))[0].method, "repairDependencies");
+    await native.evaluate(() => window.__native.answer(window.__native.mutations[0], null, "辅助资源仍缺失，可以重试。"));
+    await native.getByRole("alert").filter({ hasText: "辅助资源仍缺失" }).waitFor();
+    assert.equal(await retry.isEnabled(), true);
+    await native.setViewportSize({ width: 1000, height: 720 });
+    await retry.scrollIntoViewIfNeeded();
+    assert.equal(await retry.isVisible(), true);
+    await native.screenshot({ path: path.join(evidence, "screenshots", "12-resource-guidance.png") });
+    await retry.click();
+    await native.evaluate(() => window.__native.answer(window.__native.mutations[1], { state: { mode: "ready", environmentStatus: "ready", resourcePreparation: { complete: true, failed: [] }, cudaRuntime: null } }));
+    await native.getByRole("heading", { name: "交互终端" }).waitFor();
     await native.close();
   });
   assert.deepEqual(report.errors, []);

@@ -168,112 +168,128 @@
           "path": "identity.json",
           "sha256": "5e0df59f586737551e9a067e53086bc8a38174323e987ecf204a3cbecd352545",
           "sizeBytes": 2365,
-          "sourceCache": "landmarks/TUFA/identity.json"
+          "sourceCache": "landmarks/TUFA/identity.json",
+          "repositoryFile": "release/vision/tufa-identity.json"
         },
         {
           "path": "source/Backbone/__init__.py",
           "sha256": "7ed62ab54235003ef1559bdf8b7f6f29b9e83e912448bc9b17bb75c705780860",
           "sizeBytes": 249,
           "sourceCache": "landmarks/TUFA/source/Backbone/__init__.py",
-          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Backbone/__init__.py"
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Backbone/__init__.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "source/Backbone/Decoder.py",
           "sha256": "24f877e4a6f93760f87acd716b8b07d7bfb635831db0ca3a52e170df1224f443",
           "sizeBytes": 7888,
           "sourceCache": "landmarks/TUFA/source/Backbone/Decoder.py",
-          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Backbone/Decoder.py"
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Backbone/Decoder.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "source/Backbone/DINO.py",
           "sha256": "dded0b4bee6066595faf45e35fbd09c3353557b5c6e71965ed5abd5a5b582491",
           "sizeBytes": 13240,
           "sourceCache": "landmarks/TUFA/source/Backbone/DINO.py",
-          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Backbone/DINO.py"
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Backbone/DINO.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "source/Backbone/Loss.py",
           "sha256": "9dd5d435fd7b681091cf6f50a9d9a5d7e680ac44930aeae41f80f99cb44c49b0",
           "sizeBytes": 1139,
           "sourceCache": "landmarks/TUFA/source/Backbone/Loss.py",
-          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Backbone/Loss.py"
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Backbone/Loss.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "source/Backbone/pos_embedding.py",
           "sha256": "d86b6ebdf2a0ee1583bfffff306fed0a8b241518bfb385a696ed17e2f420d111",
           "sizeBytes": 6490,
           "sourceCache": "landmarks/TUFA/source/Backbone/pos_embedding.py",
-          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Backbone/pos_embedding.py"
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Backbone/pos_embedding.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "source/Camera.py",
           "sha256": "bc4d3b1ca8f674283f815cada1b5c94c357040fd0e63991302ffe04f81321c89",
           "sizeBytes": 6393,
           "sourceCache": "landmarks/TUFA/source/Camera.py",
-          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Camera.py"
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Camera.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "source/Config/__init__.py",
           "sha256": "c5ce61cded62a60c747995965ba6df7eb676d662bab30c07625730c8c5fff467",
           "sizeBytes": 32,
           "sourceCache": "landmarks/TUFA/source/Config/__init__.py",
-          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Config/__init__.py"
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Config/__init__.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "source/Config/default.py",
           "sha256": "e7a1adfda8715b592e4f0b5cde902a8c8969d12b34cc6774133be3197e3c031e",
           "sizeBytes": 708,
           "sourceCache": "landmarks/TUFA/source/Config/default.py",
-          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Config/default.py"
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Config/default.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "source/Dataloader/__init__.py",
           "sha256": "b78641c996248cd0b4bdbd3e2621da5f5904a4d2613b658cc890a8445fa02a4b",
           "sizeBytes": 30,
           "sourceCache": "landmarks/TUFA/source/Dataloader/__init__.py",
-          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Dataloader/__init__.py"
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Dataloader/__init__.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "source/Dataloader/All.py",
           "sha256": "8babb8d42446034cf6763916a423f4055699d165c5960a599456480922487100",
           "sizeBytes": 5618,
           "sourceCache": "landmarks/TUFA/source/Dataloader/All.py",
-          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Dataloader/All.py"
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Dataloader/All.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "source/Prompt.py",
           "sha256": "164fbff2119c1e2f107845ddbdbded80312bebfee56b3b5628d9269ea3f49c81",
           "sizeBytes": 1624,
           "sourceCache": "landmarks/TUFA/source/Prompt.py",
-          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Prompt.py"
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Prompt.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "source/Test.py",
           "sha256": "12e3cad35d9a4dcabd86d07bf6b50040fc48efac36434a68aa334b02642850f4",
           "sizeBytes": 3611,
           "sourceCache": "landmarks/TUFA/source/Test.py",
-          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Test.py"
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/Test.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "source/utils/__init__.py",
           "sha256": "276551bbd5b5f02aa32c1a8fd2fbeb67133dc032506ad401e8e5a1e589b8d37b",
           "sizeBytes": 177,
           "sourceCache": "landmarks/TUFA/source/utils/__init__.py",
-          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/utils/__init__.py"
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/utils/__init__.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "source/utils/Detector.py",
           "sha256": "d5e7360bc4085a09e8f8b26139adc789e9024fb6ebb77fbb2656b7382d8bbca8",
           "sizeBytes": 6243,
           "sourceCache": "landmarks/TUFA/source/utils/Detector.py",
-          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/utils/Detector.py"
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/utils/Detector.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "source/utils/get_transforms.py",
           "sha256": "a1db8e6d6608ec2898d7e7754326edb29f45cb12ce1d4bcf8c6bf25d549daafc",
           "sizeBytes": 2229,
           "sourceCache": "landmarks/TUFA/source/utils/get_transforms.py",
-          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/utils/get_transforms.py"
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/utils/get_transforms.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "source/Prompt/shape_29.npz",
@@ -308,7 +324,8 @@
           "sha256": "189b1af95d661151e054cea10c91b3d754e4de4d3fecfb074c1fb29476f7167b",
           "sizeBytes": 18431,
           "sourceCache": "landmarks/TUFA/source/LICENSE",
-          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/LICENSE"
+          "url": "https://raw.githubusercontent.com/Jiahao-UTS/TUFA/58b3833ebbd481aeaa72a8500d5cc781e4ab8112/LICENSE",
+          "textLineEndings": "crlf"
         },
         {
           "path": "weights/model.pth",
@@ -351,127 +368,169 @@
           "path": "79999_iter.pth",
           "sha256": "468e13ca13a9b43cc0881a9f99083a430e9c0a38abd935431d1c28ee94b26567",
           "sizeBytes": 53289463,
-          "sourceCache": "masks/79999_iter.pth"
+          "sourceCache": "masks/79999_iter.pth",
+          "url": "https://drive.google.com/uc?export=download&id=154JgKpzCPW82qINcVieuPH3fZ2e0P812",
+          "manualDownload": true
         },
         {
           "path": "bisenet-source/evaluate.py",
           "sha256": "a218c20ccce683ebe7804b6324589c8b3780fe645e8faf80435d442204bb02e3",
           "sizeBytes": 3195,
-          "sourceCache": "masks/bisenet-source/evaluate.py"
+          "sourceCache": "masks/bisenet-source/evaluate.py",
+          "url": "https://raw.githubusercontent.com/zllrunning/face-parsing.PyTorch/d2e684cf1588b46145635e8fe7bcc29544e5537e/evaluate.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "bisenet-source/face_dataset.py",
           "sha256": "f345b3c405d0611bd50c3039281e367c064b7f4193c5e43fbd5cfe951edb414f",
           "sizeBytes": 3113,
-          "sourceCache": "masks/bisenet-source/face_dataset.py"
+          "sourceCache": "masks/bisenet-source/face_dataset.py",
+          "url": "https://raw.githubusercontent.com/zllrunning/face-parsing.PyTorch/d2e684cf1588b46145635e8fe7bcc29544e5537e/face_dataset.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "bisenet-source/logger.py",
           "sha256": "3632cfe9599d6fa43af6f404799e3582d69fd730b682aaa44929ca5792eca898",
           "sizeBytes": 621,
-          "sourceCache": "masks/bisenet-source/logger.py"
+          "sourceCache": "masks/bisenet-source/logger.py",
+          "url": "https://raw.githubusercontent.com/zllrunning/face-parsing.PyTorch/d2e684cf1588b46145635e8fe7bcc29544e5537e/logger.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "bisenet-source/loss.py",
           "sha256": "27ac2f06113734ba95018b6d512884c47c59d4d74b2aff06e7c2eb36bbed27cd",
           "sizeBytes": 2391,
-          "sourceCache": "masks/bisenet-source/loss.py"
+          "sourceCache": "masks/bisenet-source/loss.py",
+          "url": "https://raw.githubusercontent.com/zllrunning/face-parsing.PyTorch/d2e684cf1588b46145635e8fe7bcc29544e5537e/loss.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "bisenet-source/makeup.py",
           "sha256": "5308f438d4fec0455b8ce8a9af0d5130684397ca7cc238b8f9ef4875ac954b4d",
           "sizeBytes": 3469,
-          "sourceCache": "masks/bisenet-source/makeup.py"
+          "sourceCache": "masks/bisenet-source/makeup.py",
+          "url": "https://raw.githubusercontent.com/zllrunning/face-parsing.PyTorch/d2e684cf1588b46145635e8fe7bcc29544e5537e/makeup.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "bisenet-source/model.py",
           "sha256": "9322ed99ae5539bc8f2f404be744dbedc976198d1d04fda93573a43c713a10e0",
           "sizeBytes": 10876,
-          "sourceCache": "masks/bisenet-source/model.py"
+          "sourceCache": "masks/bisenet-source/model.py",
+          "url": "https://raw.githubusercontent.com/zllrunning/face-parsing.PyTorch/d2e684cf1588b46145635e8fe7bcc29544e5537e/model.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "bisenet-source/modules/__init__.py",
           "sha256": "d92673753e318bcb4f5324d72b0a6cac611a7d2d79b12c431c4b3ff6bc704752",
           "sizeBytes": 240,
-          "sourceCache": "masks/bisenet-source/modules/__init__.py"
+          "sourceCache": "masks/bisenet-source/modules/__init__.py",
+          "url": "https://raw.githubusercontent.com/zllrunning/face-parsing.PyTorch/d2e684cf1588b46145635e8fe7bcc29544e5537e/modules/__init__.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "bisenet-source/modules/bn.py",
           "sha256": "650a6a6618f99ebc5ebe1975047cecedbce1c2870051b3abfb30efcfbc95aca1",
           "sizeBytes": 5047,
-          "sourceCache": "masks/bisenet-source/modules/bn.py"
+          "sourceCache": "masks/bisenet-source/modules/bn.py",
+          "url": "https://raw.githubusercontent.com/zllrunning/face-parsing.PyTorch/d2e684cf1588b46145635e8fe7bcc29544e5537e/modules/bn.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "bisenet-source/modules/deeplab.py",
           "sha256": "7d7a91c0eb55d39804639132d1de7935188a799b42a73d46b7e96db880342ed3",
           "sizeBytes": 3573,
-          "sourceCache": "masks/bisenet-source/modules/deeplab.py"
+          "sourceCache": "masks/bisenet-source/modules/deeplab.py",
+          "url": "https://raw.githubusercontent.com/zllrunning/face-parsing.PyTorch/d2e684cf1588b46145635e8fe7bcc29544e5537e/modules/deeplab.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "bisenet-source/modules/dense.py",
           "sha256": "27638b0b3bf406d71107b09f0ba71d177f14e7978731dbcc7819ab96260fa6d3",
           "sizeBytes": 1457,
-          "sourceCache": "masks/bisenet-source/modules/dense.py"
+          "sourceCache": "masks/bisenet-source/modules/dense.py",
+          "url": "https://raw.githubusercontent.com/zllrunning/face-parsing.PyTorch/d2e684cf1588b46145635e8fe7bcc29544e5537e/modules/dense.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "bisenet-source/modules/functions.py",
           "sha256": "1ead7623b52f8fca575c396aab11efb0d11456d5e92c0a00c89596c9d8972011",
           "sizeBytes": 7874,
-          "sourceCache": "masks/bisenet-source/modules/functions.py"
+          "sourceCache": "masks/bisenet-source/modules/functions.py",
+          "url": "https://raw.githubusercontent.com/zllrunning/face-parsing.PyTorch/d2e684cf1588b46145635e8fe7bcc29544e5537e/modules/functions.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "bisenet-source/modules/misc.py",
           "sha256": "7be28ab1ef82a086f19633a20920c86d20dd81ca5bcea8167c979ca68413597f",
           "sizeBytes": 622,
-          "sourceCache": "masks/bisenet-source/modules/misc.py"
+          "sourceCache": "masks/bisenet-source/modules/misc.py",
+          "url": "https://raw.githubusercontent.com/zllrunning/face-parsing.PyTorch/d2e684cf1588b46145635e8fe7bcc29544e5537e/modules/misc.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "bisenet-source/modules/residual.py",
           "sha256": "590902080db61c967e9851e6635ed93d7eea19352ca730a2b966ef765e3b82a9",
           "sizeBytes": 3610,
-          "sourceCache": "masks/bisenet-source/modules/residual.py"
+          "sourceCache": "masks/bisenet-source/modules/residual.py",
+          "url": "https://raw.githubusercontent.com/zllrunning/face-parsing.PyTorch/d2e684cf1588b46145635e8fe7bcc29544e5537e/modules/residual.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "bisenet-source/optimizer.py",
           "sha256": "e17e50ba4160ea13b796c23c71d8b9eab06b09c1a45b69251b32a1fd19e198ad",
           "sizeBytes": 2214,
-          "sourceCache": "masks/bisenet-source/optimizer.py"
+          "sourceCache": "masks/bisenet-source/optimizer.py",
+          "url": "https://raw.githubusercontent.com/zllrunning/face-parsing.PyTorch/d2e684cf1588b46145635e8fe7bcc29544e5537e/optimizer.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "bisenet-source/prepropess_data.py",
           "sha256": "087ca7db783c87222547f7903a817b5cc81d984ebf55dace9c715e0fdf11c08a",
           "sizeBytes": 1181,
-          "sourceCache": "masks/bisenet-source/prepropess_data.py"
+          "sourceCache": "masks/bisenet-source/prepropess_data.py",
+          "url": "https://raw.githubusercontent.com/zllrunning/face-parsing.PyTorch/d2e684cf1588b46145635e8fe7bcc29544e5537e/prepropess_data.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "bisenet-source/resnet.py",
           "sha256": "3f4c136303b332733f1226902e066acc3cdcd0af6bb963a7a064bc76f90c1ca7",
           "sizeBytes": 3757,
-          "sourceCache": "masks/bisenet-source/resnet.py"
+          "sourceCache": "masks/bisenet-source/resnet.py",
+          "url": "https://raw.githubusercontent.com/zllrunning/face-parsing.PyTorch/d2e684cf1588b46145635e8fe7bcc29544e5537e/resnet.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "bisenet-source/test.py",
           "sha256": "8d9e4c1089da4b0ae99637b90c20f6c6504fcf700aa21123823e5c94b1acd9eb",
           "sizeBytes": 3139,
-          "sourceCache": "masks/bisenet-source/test.py"
+          "sourceCache": "masks/bisenet-source/test.py",
+          "url": "https://raw.githubusercontent.com/zllrunning/face-parsing.PyTorch/d2e684cf1588b46145635e8fe7bcc29544e5537e/test.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "bisenet-source/train.py",
           "sha256": "e8f007c82736776190478a38bb8e1140389a99c35a2b068c5f9ed2a67c4021af",
           "sizeBytes": 5386,
-          "sourceCache": "masks/bisenet-source/train.py"
+          "sourceCache": "masks/bisenet-source/train.py",
+          "url": "https://raw.githubusercontent.com/zllrunning/face-parsing.PyTorch/d2e684cf1588b46145635e8fe7bcc29544e5537e/train.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "bisenet-source/transform.py",
           "sha256": "48947758e820839ce2b68b8ee6ffadfb6d09eb5c309dc772b8d3b5020a84049e",
           "sizeBytes": 4270,
-          "sourceCache": "masks/bisenet-source/transform.py"
+          "sourceCache": "masks/bisenet-source/transform.py",
+          "url": "https://raw.githubusercontent.com/zllrunning/face-parsing.PyTorch/d2e684cf1588b46145635e8fe7bcc29544e5537e/transform.py",
+          "textLineEndings": "crlf"
         },
         {
           "path": "bisenet-source/LICENSE",
           "sha256": "69cbe123bddc6c22ef171e83226f2bfd1dbc158853074ff0aa398bfce4332aa4",
           "sizeBytes": 1081,
-          "sourceCache": "masks/bisenet-source/LICENSE"
+          "sourceCache": "masks/bisenet-source/LICENSE",
+          "url": "https://raw.githubusercontent.com/zllrunning/face-parsing.PyTorch/d2e684cf1588b46145635e8fe7bcc29544e5537e/LICENSE",
+          "textLineEndings": "crlf"
         },
         {
           "path": "SOURCE.json",

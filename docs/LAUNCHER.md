@@ -1,6 +1,6 @@
 # Windows 一键启动器
 
-从[DFL-PT-WEBUI 发行页](https://github.com/LeoSasion/DFL-PT-WEBUI/releases)下载启动器，双击后选择独立空目录并开始安装。当前源码中的应用版本为 `0.1.3-preview`，启动器版本为 `0.1.4-preview`，二者独立显示。首次安装无需预装 Git、Python 或 Node；安装完成后，启动器保留在项目根目录 `DFL-PT-WEBUI.exe`。以后双击它，点击“启动 WebUI”即可使用。源码版本不代表同版本 EXE 或便携包已经发布，请以发行页资产和 provenance 为准。
+从[DFL-PT-WEBUI 发行页](https://github.com/LeoSasion/DFL-PT-WEBUI/releases)下载启动器，双击后选择独立空目录并开始安装。当前源码中的应用版本为 `0.1.4-preview`，启动器版本为 `0.1.5-preview`，二者独立显示。首次安装无需预装 Git、Python 或 Node；安装完成后，启动器保留在项目根目录 `DFL-PT-WEBUI.exe`。以后双击它，点击“启动 WebUI”即可使用。源码版本不代表同版本 EXE 或便携包已经发布，请以发行页资产和 provenance 为准。
 
 启动器也可以选择已有的完整 PT 项目，检查本地运行环境并启动 WebUI。原版 DFL-WEBUI 与 PT 版必须使用不同目录，不共享 Python 环境、启动器配置或工作区。两个项目默认使用相同端口；切换时先在另一个项目中停止 WebUI。启动器不会结束其他项目的服务。
 
@@ -12,7 +12,7 @@
 
 运行条件是 Windows 10/11 x64、.NET Framework 4.8。若缺少 WebView2 Runtime，启动器会下载并验证 Microsoft 官方签名的安装程序。GPU 训练另外需要支持 CUDA 12.8 的 NVIDIA 驱动；CUDA/cuDNN 来自 PyTorch wheel。
 
-安装失败时保留日志和已完成的依赖下载，处理界面指出的网络、空间或环境问题后重试。请在 PT 安装目录内补齐环境。安装日志及复用规则见[运行环境说明](../launcher/runtime-README.md#已有环境与失败重试)。
+安装失败时保留日志和已完成的依赖下载，处理界面指出的网络、空间或环境问题后重试。辅助资源先获取可下载项；需要人工获取的文件显示官方页面、准确保存路径、大小和哈希，补齐后点击“重试准备辅助资源”。已校验缓存会复用；Python/Node 已安装也不会跳过未完成的辅助资源。请在 PT 安装目录内补齐环境。安装日志及复用规则见[运行环境说明](../launcher/runtime-README.md#已有环境与失败重试)。
 
 ## 安装后的使用与更新
 
@@ -44,4 +44,4 @@ EXE 自动更新继续关闭。用户下载并运行新版启动器后，点击�
 .\.venv\Scripts\python.exe tools\package-launcher.py --source-revision codex/public-preview
 ```
 
-输出默认位于 `release-output/launcher-v0.1.4-preview`。先公开审查后的应用源码提交 P，获取其官方 codeload ZIP 并固定 SHA-256，再将来源记录接到公开提交 Q 并构建启动器。启动器 provenance 记录 Q；实际下载的应用安装记录保持 P。源码/便携构建则记录该归档实际对应的公开提交和代码树。打包脚本只验证并写入新资产，不安装运行时、不启动程序、不发布 GitHub release，也不覆盖已有发行文件。
+输出默认位于 `release-output/launcher-v0.1.5-preview`。先公开审查后的应用源码提交 P，获取其官方 codeload ZIP 并固定 SHA-256，再将来源记录接到公开提交 Q 并构建启动器。启动器 provenance 记录 Q；实际下载的应用安装记录保持 P。源码/便携构建则记录该归档实际对应的公开提交和代码树。打包脚本只验证并写入新资产，不安装运行时、不启动程序、不发布 GitHub release，也不覆盖已有发行文件。

@@ -36,9 +36,13 @@ function Get-Verified([string]$Name, [string]$Url, [string]$Sha256) {
     if ($NoNetwork) { throw "Offline helper archive / weight missing or checksum mismatch: $cached" }
     $partial = $cached + '.' + [Guid]::NewGuid().ToString('N') + '.partial'
     Write-Host "Downloading $Name"
-    Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $partial
-    if (-not (Test-Hash $partial $Sha256)) { throw "SHA-256 mismatch: $Name" }
-    Move-Item -LiteralPath $partial -Destination $cached -Force
+    try {
+        Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $partial -TimeoutSec 60
+        if (-not (Test-Hash $partial $Sha256)) { throw "SHA-256 mismatch: $Name" }
+        Move-Item -LiteralPath $partial -Destination $cached -Force
+    } finally {
+        if (Test-Path -LiteralPath $partial -PathType Leaf) { Remove-Item -LiteralPath $partial -Force }
+    }
     return $cached
 }
 function Install-Verified([string]$Source, [string]$Relative, [string]$Sha256) {
@@ -155,12 +159,16 @@ $resourceProfiles = @('production')
 if ($IncludeRestoration) { $resourceProfiles += 'restoration' }
 if ($IncludeScene) { $resourceProfiles += 'scene' }
 if ($ResourcePackPath) {
-    & $resourcePython -I $resourceTool install-pack --project-root $visionRoot --output $ResourcePackPath --profiles @resourceProfiles
+    & $resourcePython -I -B $resourceTool install-pack --project-root $visionRoot --output $ResourcePackPath --profiles @resourceProfiles
 } else {
     $resourceOptions = @('install','--project-root',$visionRoot,'--profiles') + $resourceProfiles
-    if (-not $VisionCacheRoot) { $VisionCacheRoot = Join-Path $visionRoot 'workspace/.vision-models' }
+    if (-not $VisionCacheRoot) { $VisionCacheRoot = Join-Path $visionRoot '.launcher-install/vision' }
     $resourceOptions += @('--cache-root',$VisionCacheRoot)
     if (-not $NoNetwork) { $resourceOptions += '--allow-download' }
-    & $resourcePython -I $resourceTool @resourceOptions
+    & $resourcePython -I -B $resourceTool @resourceOptions
 }
-if ($LASTEXITCODE -ne 0) { throw 'Production vision resources incomplete. Supply a verified separate ResourcePackPath (TUFA official weights require explicit acquisition); no fallback or automatic inference download is permitted.' }
+if ($LASTEXITCODE -ne 0) { throw 'Auxiliary resources need attention. See launcher resource guidance or .launcher-install/vision/resources.json; place the listed manual files and retry. Verified downloads are retained.' }
+if ($ResourcePackPath) {
+    & $resourcePython -I -B $resourceTool install --project-root $visionRoot --profiles @resourceProfiles
+    if ($LASTEXITCODE -ne 0) { throw 'Installed resource pack verification failed.' }
+}
