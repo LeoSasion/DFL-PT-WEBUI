@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "product": "DFL-PT-WEBUI Launcher",
+  "version": "0.1.8",
+  "sha256": "7f8a218a7e960a20c8c54a0ab8687bda2ed55b234817ee89e24c47862a336cd8",
+  "size": 2498560,
+  "sources": [
+    {
+      "provider": "github",
+      "url": "https://github.com/LeoSasion/DFL-PT-WEBUI/releases/download/launcher-v0.1.8-preview/DFL-PT-WEBUI.Launcher.exe"
+    },
+    {
+      "provider": "gitee",
+      "url": "https://gitee.com/LeoSasion/DFL-PT-WEBUI/releases/download/v0.1.7-preview/DFL-PT-WEBUI.Launcher.exe"
+    }
+  ]
+}
