@@ -16,7 +16,14 @@ function Get-DflDownloadUrls([string]$Url) {
     }
     if($env:DFL_MIRROR -eq 'official'){return $Url}
     if($env:DFL_MIRROR -eq 'china' -and $urls.Count -gt 1){return @($urls|Select-Object -Skip 1)+@($Url)}
-    return @($urls|Sort-Object @{Expression={if($script:DflDownloadFailures.ContainsKey(([Uri]$_).Host) -and $script:DflDownloadFailures[([Uri]$_).Host] -gt [DateTime]::UtcNow){1}else{0}}})
+    # Windows PowerShell's Sort-Object is not stable for equal priorities.
+    $ready=@();$cooling=@();$now=[DateTime]::UtcNow
+    foreach($source in $urls){
+        $hostName=([Uri]$source).Host
+        if($script:DflDownloadFailures.ContainsKey($hostName) -and $script:DflDownloadFailures[$hostName] -gt $now){$cooling+=$source}
+        else{$ready+=$source}
+    }
+    return $ready+$cooling
 }
 function Invoke-DflPinnedDownload([string]$Url,[string]$Destination,[string]$Sha256) {
     if(Test-Path -LiteralPath $Destination){throw 'Download target already exists'}

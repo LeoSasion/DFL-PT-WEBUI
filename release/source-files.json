@@ -1004,7 +1004,7 @@
     },
     {
       "path": "launcher/download-sources.ps1",
-      "sha256": "b1ca7b4654caad4c518b94e95e6574db4e6f7b12467c2a2cbfeb8a24e8f794ea"
+      "sha256": "80bdfb3da3f2c72a8d6f5656197a62f46f4a5f6c11be59c46514b2803aca305d"
     },
     {
       "path": "launcher/host/AppSettings.cs",
