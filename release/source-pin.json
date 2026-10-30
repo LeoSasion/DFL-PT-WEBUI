@@ -1,9 +1,12 @@
 {
   "schemaVersion": 1,
   "product": "DFL-PT-WEBUI",
-  "applicationVersion": "0.1.6-preview",
-  "sourceCommit": "7703fa1e9d9dd71d3dca797f4ce317ae20681f69",
-  "sourceTree": "fd55c455a7b27ddd09246224b1e6602f467c88e4",
-  "archiveSha256": "1efedfd56a3dea12f4dc52017be09bb3b20a21e4e20e9557e84262ae70d15e34",
-  "archiveRoot": "DFL-PT-WEBUI-7703fa1e9d9dd71d3dca797f4ce317ae20681f69"
+  "applicationVersion": "0.1.7-preview",
+  "sourceCommit": "efa04d4c5df031611c6e9a6dcecc38f6858aa3ee",
+  "sourceTree": "5d035b8f49ed22df0d6e5471d92ff05efef583f6",
+  "archiveMirrors": [
+    "https://gitee.com/LeoSasion/DFL-PT-WEBUI/releases/download/v0.1.7-preview/fixed-source.zip"
+  ],
+  "archiveSha256": "4122df5f147ea14399d6fc070e9eb2fff42593a048e5a1a28ee20fa7d6f1ea74",
+  "archiveRoot": "DFL-PT-WEBUI-efa04d4c5df031611c6e9a6dcecc38f6858aa3ee"
 }
