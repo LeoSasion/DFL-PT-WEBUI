@@ -1060,7 +1060,7 @@
     },
     {
       "path": "launcher/host/LogBuffer.cs",
-      "sha256": "f025c5f7b27cf878203a07d80d55234b70da9e94ddd63beb80c667a45a38564e"
+      "sha256": "7da8e3ccf7d1afcd38e2e5ebd7228f5d7685ffd5b224f0d30ab44a3a4ef18387"
     },
     {
       "path": "launcher/host/MainWindow.cs",

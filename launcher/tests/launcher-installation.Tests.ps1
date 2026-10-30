@@ -66,7 +66,7 @@ namespace DflPtWebUi.Launcher {
         $exe = Join-Path $fixture 'download.exe'
         $project = Join-Path $fixture 'project with spaces'
         $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
-        & $compiler /nologo /target:winexe "/out:$exe" $programPath (Join-Path $PSScriptRoot '..\host\LauncherInstallation.cs') (Join-Path $PSScriptRoot '..\host\LogBuffer.cs')
+        & $compiler /nologo /target:winexe "/out:$exe" $programPath (Join-Path $PSScriptRoot '..\host\LauncherInstallation.cs') (Join-Path $PSScriptRoot '..\host\LogBuffer.cs') (Join-Path $PSScriptRoot '..\host\LauncherConstants.cs')
         $LASTEXITCODE | Should Be 0
         $process = Start-Process -FilePath $exe -ArgumentList ('"' + $project + '"') -WindowStyle Hidden -PassThru
         try {

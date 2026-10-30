@@ -27,7 +27,7 @@ namespace DflPtWebUi.Launcher
         private readonly List<LogEntry> entries = new List<LogEntry>();
         private long nextSequence = 1;
         private readonly string session = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
-        private readonly string fallback = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DFL-PT-WEBUI", "Launcher", "logs");
+        private readonly string fallback = Path.Combine(LauncherConstants.SettingsDirectory, "logs");
         public string DirectoryPath { get; private set; }
 
         public LogBuffer()

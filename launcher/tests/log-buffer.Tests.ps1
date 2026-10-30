@@ -1,6 +1,8 @@
 Describe "durable launcher logs" {
     BeforeAll {
         $source = (Get-Content (Join-Path $PSScriptRoot '..\host\LogBuffer.cs') -Raw -Encoding UTF8).Replace('namespace DflPtWebUi.Launcher', 'namespace DurableLogTests').Replace('internal sealed class', 'public sealed class')
+        $constants = Get-Content (Join-Path $PSScriptRoot '..\host\LauncherConstants.cs') -Raw -Encoding UTF8
+        $source += ([regex]::Replace($constants, '(?m)^using [^;]+;\r?\n', '')).Replace('namespace DflPtWebUi.Launcher', 'namespace DurableLogTests')
         Add-Type -TypeDefinition $source
     }
 

@@ -4,6 +4,8 @@ Describe "process error log classification" {
         $runner = Get-Content (Join-Path $PSScriptRoot '..\host\ProcessRunner.cs') -Raw -Encoding UTF8
         $runner = [regex]::Replace($runner, '(?m)^using [^;]+;\r?\n', '')
         $source = ('using System.Diagnostics; using System.Threading.Tasks;' + $log + $runner).Replace('namespace DflPtWebUi.Launcher', 'namespace ProcessLogTests').Replace('internal sealed class', 'public sealed class')
+        $constants = Get-Content (Join-Path $PSScriptRoot '..\host\LauncherConstants.cs') -Raw -Encoding UTF8
+        $source += ([regex]::Replace($constants, '(?m)^using [^;]+;\r?\n', '')).Replace('namespace DflPtWebUi.Launcher', 'namespace ProcessLogTests')
         Add-Type -TypeDefinition $source
     }
 
