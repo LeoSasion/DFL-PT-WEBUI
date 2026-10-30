@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "pythonIndexes": ["https://pypi.org/simple", "https://pypi.tuna.tsinghua.edu.cn/simple"],
+  "torchIndexes": ["https://download.pytorch.org/whl/{runtime}", "https://mirror.sjtu.edu.cn/pytorch-wheels/{runtime}/"],
+  "npmRegistries": ["https://registry.npmjs.org", "https://registry.npmmirror.com"],
+  "rules": [
+    {"prefix": "https://nodejs.org/dist/", "mirror": "https://registry.npmmirror.com/-/binary/node/"},
+    {"prefix": "https://download.pytorch.org/whl/", "mirror": "https://mirror.sjtu.edu.cn/pytorch-wheels/"},
+    {"prefix": "https://download-r2.pytorch.org/whl/", "mirror": "https://mirror.sjtu.edu.cn/pytorch-wheels/"},
+    {"prefix": "https://huggingface.co/", "mirror": "https://hf-mirror.com/"},
+    {"prefix": "https://github.com/", "mirror": "https://gh-proxy.com/https://github.com/"},
+    {"prefix": "https://raw.githubusercontent.com/", "mirror": "https://gh-proxy.com/https://raw.githubusercontent.com/"},
+    {"prefix": "https://media.githubusercontent.com/", "mirror": "https://gh-proxy.com/https://media.githubusercontent.com/"},
+    {"prefix": "https://codeload.github.com/", "mirror": "https://gh-proxy.com/https://codeload.github.com/"}
+  ]
+}

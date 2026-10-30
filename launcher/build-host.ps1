@@ -428,6 +428,8 @@ $payloadSources = @(
     [PSCustomObject]@{ RelativePath = "bootstrap/runtime-install.py"; FilePath = $RuntimeInstaller },
     [PSCustomObject]@{ RelativePath = "bootstrap/install-project.ps1"; FilePath = $ProjectSetup },
     [PSCustomObject]@{ RelativePath = "bootstrap/install-source.ps1"; FilePath = $SourceSetup },
+    [PSCustomObject]@{ RelativePath = "bootstrap/download-sources.ps1"; FilePath = (Join-Path $LauncherRoot "download-sources.ps1") },
+    [PSCustomObject]@{ RelativePath = "bootstrap/download-sources.json"; FilePath = (Join-Path $RepositoryRoot "release/download-sources.json") },
     [PSCustomObject]@{ RelativePath = "bootstrap/upgrade-project.ps1"; FilePath = (Join-Path $LauncherRoot "upgrade-project.ps1") },
     [PSCustomObject]@{ RelativePath = "bootstrap/source-pin.json"; FilePath = (Join-Path $RepositoryRoot "release/source-pin.json") },
     [PSCustomObject]@{ RelativePath = "bootstrap/version.json"; FilePath = (Join-Path $RepositoryRoot "release/version.json") },

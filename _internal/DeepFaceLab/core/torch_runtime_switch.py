@@ -24,6 +24,7 @@ import uuid
 import zipfile
 
 from .gpu_runtime import architecture_supported, installed_runtime, load_manifest, runtime_sbom
+from .download_sources import download as download_pinned
 
 REPARSE = getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x400)
 NAMES = ('torch', 'torchvision')
@@ -549,27 +550,20 @@ class RuntimeSwitch:
         if partial.exists():
             partial.unlink()
         received, last = 0, time.monotonic()
-        digest = hashlib.sha256()
-        with urllib.request.urlopen(url, timeout=60) as response, partial.open('xb') as output:
-            final = urllib.parse.urlsplit(response.url)
-            if final.scheme != 'https' or final.hostname not in {'download.pytorch.org', 'download-r2.pytorch.org'}:
-                raise ValueError('Unexpected PyTorch download redirect')
-            for block in iter(lambda: response.read(4 * 1024**2), b''):
-                received += len(block)
-                if received > wheel['sizeBytes']:
-                    raise ValueError('Downloaded wheel exceeds the pinned size')
-                output.write(block)
-                digest.update(block)
-                if time.monotonic() - last > 1:
-                    self._emit(state, 'downloading', '正在下载匹配的运行环境。', downloadedBytes=state.get('completedDownloadBytes', 0)+received,
-                               downloadBytes=state['downloadBytes'])
-                    last = time.monotonic()
-            output.flush()
-            os.fsync(output.fileno())
-        if received != wheel['sizeBytes'] or digest.hexdigest() != wheel['sha256']:
+        def progress(count, source):
+            nonlocal last, received
+            received = count
+            if time.monotonic() - last > 1:
+                self._emit(state, 'downloading', '正在下载匹配的运行环境。', downloadedBytes=state.get('completedDownloadBytes', 0)+received,
+                    downloadBytes=state['downloadBytes'], sourceHost=urllib.parse.urlsplit(source).hostname)
+                last = time.monotonic()
+        try:
+            download_pinned(url, partial, wheel['sha256'], wheel['sizeBytes'], opener=urllib.request.urlopen,
+                progress=progress, allowed_redirect_hosts={'download.pytorch.org','download-r2.pytorch.org','mirror.sjtu.edu.cn'})
+        except (OSError,ValueError):
             self._write(self._state_path(state['work'])/(name+'-download-failure.json'),
-                dict(expectedBytes=wheel['sizeBytes'],actualBytes=received,expectedSha256=wheel['sha256'],actualSha256=digest.hexdigest()))
-            raise ValueError('Official wheel size or SHA-256 verification failed: ' + name)
+                dict(expectedBytes=wheel['sizeBytes'],actualBytes=received,expectedSha256=wheel['sha256']))
+            raise
         os.replace(partial, target)
         self._record_cached_wheel(state['targetRuntime'],wheel,target)
         return target

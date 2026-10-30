@@ -199,6 +199,10 @@
       "sha256": "8a324a532e88070dcd55f3e87ad170a419a75d259bb7fd8c5b8f8b8704ab4a11"
     },
     {
+      "path": "_internal/DeepFaceLab/core/download_sources.py",
+      "sha256": "a603967b4c9a80c6ea206e1fa18fe0756c5273226bed82ffade603b24f86e3df"
+    },
+    {
       "path": "_internal/DeepFaceLab/core/faceset_transaction.py",
       "sha256": "e919e1f9b4121756901b3e8881d4ec358824fdbbed8a8cf12f902481aab688a5"
     },
@@ -536,7 +540,7 @@
     },
     {
       "path": "_internal/DeepFaceLab/core/torch_runtime_switch.py",
-      "sha256": "82303b7d06044b6caf4083952289bc697225d8d7429d1a322adddfa48e6d8a27"
+      "sha256": "44a2b8c0ec7e1879b3f94c8d4dce87deb197784406d397e36ba02cc857afe9b5"
     },
     {
       "path": "_internal/DeepFaceLab/dfm_export/__init__.py",
@@ -992,11 +996,15 @@
     },
     {
       "path": "launcher/bootstrap.ps1",
-      "sha256": "8f503764e8a5f937070e68ae37257b4dd54bc5ea7dd2af3b3faf7c7ef73d444d"
+      "sha256": "655389a6b611a7b563bf8bac70c0b72b4cc1d82f14aacaefbc4edeef7ab1d7fd"
     },
     {
       "path": "launcher/build-host.ps1",
-      "sha256": "09e449ca9edfff5783c5626da4fe8467ec6215496ef063308d07433178bd5937"
+      "sha256": "d7a075f5a23780a3fb60612bc769c3499ecd80056c7c46a53082cc4e4f28fa4b"
+    },
+    {
+      "path": "launcher/download-sources.ps1",
+      "sha256": "b1ca7b4654caad4c518b94e95e6574db4e6f7b12467c2a2cbfeb8a24e8f794ea"
     },
     {
       "path": "launcher/host/AppSettings.cs",
@@ -1004,7 +1012,7 @@
     },
     {
       "path": "launcher/host/AssemblyInfo.cs",
-      "sha256": "b8acad4a60047e27bd5c7d5a9a2087a5326dd45d67b69e9d1cfa26d48efd0e4f"
+      "sha256": "59e937568485d9f6e6dd3e6bff135133fc9d3afcb992ea4493286852089faf42"
     },
     {
       "path": "launcher/host/CudaRuntimeService.cs",
@@ -1013,6 +1021,10 @@
     {
       "path": "launcher/host/DflEnvironment.cs",
       "sha256": "989c1f3e6a000b4f86e89f89c4f05b703f6dc0c24b8697880d28522230d33240"
+    },
+    {
+      "path": "launcher/host/DownloadSources.cs",
+      "sha256": "ac2f475c1d82230c8744e27a6ac28430c48519f7fdd6c01d9dbb1c3f8e93be26"
     },
     {
       "path": "launcher/host/GitNetworkOptions.cs",
@@ -1024,11 +1036,11 @@
     },
     {
       "path": "launcher/host/HostController.cs",
-      "sha256": "f847a25c9d0d48b47f5936284ba84f269fafcf7903c89220bb6a944ee3fb203f"
+      "sha256": "c12977ad4c6208f1c47f1ad893346a1f099917cd3bc248c1255b1daa711359b1"
     },
     {
       "path": "launcher/host/LauncherConstants.cs",
-      "sha256": "42f10458e21c38ded0be82b85a1fb6b958af2a7b01e90965f0f1316302612a01"
+      "sha256": "651dd7830b7c11efef401d2541bad02b5d7f95dabd6944765c43360a83a785ed"
     },
     {
       "path": "launcher/host/LauncherInstallation.cs",
@@ -1036,7 +1048,7 @@
     },
     {
       "path": "launcher/host/LauncherSelfUpdater.cs",
-      "sha256": "94d96c03959b5592f1526a0d0ee1bda2634010106f86dbdcbdba58d5ce3266ac"
+      "sha256": "cc65d3c39de09fec398145da3a908b2a23c45c6a61ada63a388ec9f28f1bba62"
     },
     {
       "path": "launcher/host/LauncherUpdateFileSystem.cs",
@@ -1044,7 +1056,7 @@
     },
     {
       "path": "launcher/host/LauncherUpdateMetadata.cs",
-      "sha256": "45240aae22ddff372f315df71baa7e7d6d3f94f786f3c5f23f07a5166b19d1f5"
+      "sha256": "d903c6637ee48d3fbb15f7abbba48b52db29beee152c782c4dab70766e456c24"
     },
     {
       "path": "launcher/host/LogBuffer.cs",
@@ -1052,7 +1064,7 @@
     },
     {
       "path": "launcher/host/MainWindow.cs",
-      "sha256": "3d7048a327ff0f62f90cd8bef4861b66badef3e22f3a38e1f66583652c703a57"
+      "sha256": "b53755fbd93bcafd0ff4bd1c7491cb9d563152e039fe87fd95068cefc8f02110"
     },
     {
       "path": "launcher/host/PayloadRuntime.cs",
@@ -1072,7 +1084,7 @@
     },
     {
       "path": "launcher/host/Program.cs",
-      "sha256": "3acea417f6497bc32634271a0cf1a3526c63ae687a676ceeda3e52262345669e"
+      "sha256": "a014c2705213ae2f118b2d81f21d11522e489d202ea46d07e3934b847e29f090"
     },
     {
       "path": "launcher/host/ProjectLocator.cs",
@@ -1128,11 +1140,11 @@
     },
     {
       "path": "launcher/install-project.ps1",
-      "sha256": "63e422f4b46833dd5070cef8fbf46a606d5b2b22679f32bd9c99247f7966a256"
+      "sha256": "12412842f5da38d620252a8ae24eb85c2480ac9b704cdba2dac522c2c570af7a"
     },
     {
       "path": "launcher/install-source.ps1",
-      "sha256": "815cd5981a2aa217dd9ecac0403ea591d7cca7fb7303bf798f3d2ad7866a6a33"
+      "sha256": "05be7d54f733cc0b51cc02ecc32ae1e114ab3407877bf6c4b57111308a382c92"
     },
     {
       "path": "launcher/new-update-channel.ps1",
@@ -1152,7 +1164,7 @@
     },
     {
       "path": "launcher/runtime-manifest.json",
-      "sha256": "753c42f8007a29cc4e4a6ac5936d78bd6d01ecea9e8fc5c92f1af778f6cb850c"
+      "sha256": "16d568162e6e4442307090b5d1a1bbde120ec5e0dd90836bb74ce0e087a105d6"
     },
     {
       "path": "launcher/runtime-manifest.schema.json",
@@ -1284,7 +1296,7 @@
     },
     {
       "path": "launcher/update-channel.json",
-      "sha256": "3bb1479920ad55c5bca339e33007347c27024ac21114591f50e7df96eb30a590"
+      "sha256": "28b3e8bc3ad27f6739a4c38b564e2d261bd44a1b625b7f0edf670ffcbf3afde0"
     },
     {
       "path": "launcher/update-signing-policy.json",
@@ -1527,6 +1539,10 @@
       "sha256": "781f28689733314f79beb6665ff061a25ceb3262ccd5f67aee8455ffc28e468b"
     },
     {
+      "path": "release/download-sources.json",
+      "sha256": "19246554e02d8de1bf6ef901ada028977e1f9da9db013df2cd7d5d9c7d079e7a"
+    },
+    {
       "path": "release/feedback-template.json",
       "sha256": "5f5f7a66df73f1c37c1ec49710ecbcd4fd6beaf4ae6177e6a6b859eb86367530"
     },
@@ -1588,7 +1604,7 @@
     },
     {
       "path": "release/version.json",
-      "sha256": "33b840734f9123b805a38d777fcf0647b75442fbc5895d56f1a6bf98f932a885"
+      "sha256": "2ac15a3c777faf8ea5af0df36dc05a7528f4d49c1a37f74cc1178c20fc250e8d"
     },
     {
       "path": "release/version.mjs",
@@ -1680,7 +1696,7 @@
     },
     {
       "path": "tools/package-launcher.py",
-      "sha256": "cb41e16b5d002033255150118e3f30d829b08b29108b3df6745910ad9aeaadd4"
+      "sha256": "ba647c3729d697291cdfe23505c956670047627fd36eed847cfe0439f4d04821"
     },
     {
       "path": "tools/package_release.ps1",
@@ -1692,7 +1708,7 @@
     },
     {
       "path": "tools/prepare-production-vision.py",
-      "sha256": "c10e3c069ea37e184d2cdfbfb213b100d4451eb5d9d07cb765c366f67ec134d6"
+      "sha256": "e4f6db8c5133966925c1fa29fdc20a756fcfb613993aeac81a14babec7eb34c3"
     },
     {
       "path": "tools/prepare-vision-candidates.py",
@@ -1700,7 +1716,7 @@
     },
     {
       "path": "tools/prepare-vision-runtime.ps1",
-      "sha256": "839f0a6320ade6cfe270d3c33d5b4dd3f6b28f07087a7525d1120459ea37fcf0"
+      "sha256": "139f25a05e73f93d27e5a90cdda2a6745a7beb4a471586a430b6038f902b5941"
     },
     {
       "path": "tools/prepare-vision-visual-review.py",
@@ -1724,7 +1740,7 @@
     },
     {
       "path": "tools/runtime-install.py",
-      "sha256": "115fcdecbffe3a44f1b6117d5fbfea2aeb2d70a27505b170c0e1ed5886ac938e"
+      "sha256": "9ef64af8fd1784a9d6c32b0ef17cd75009e4c6e50dcfe2f8ab89253943a5227a"
     },
     {
       "path": "tools/scene-benchmark.py",

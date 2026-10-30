@@ -1,7 +1,10 @@
 {
   "schemaVersion": 1,
-  "enabled": false,
-  "version": "0.1.6-preview",
-  "sources": [],
-  "reason": "Preview releases are distributed manually through GitHub Releases; automatic launcher updates remain disabled."
+  "enabled": true,
+  "version": "0.1.8-preview",
+  "sources": [
+    "https://raw.githubusercontent.com/LeoSasion/DFL-PT-WEBUI/launcher-updates/launcher-update.json",
+    "https://gitee.com/LeoSasion/DFL-PT-WEBUI/raw/launcher-updates/launcher-update.json"
+  ],
+  "reason": "Independent PT launcher channel; source upgrades remain explicit and transactional."
 }

@@ -13,9 +13,12 @@ import zipfile
 import os
 import uuid
 import io
+import sys
 from contextlib import contextmanager
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / '_internal/DeepFaceLab'))
+from core.download_sources import download as download_resource
 
 
 def digest(path):
@@ -110,22 +113,15 @@ def cached_resource(project, group, record, cache, allow_download):
     managed.parent.mkdir(parents=True, exist_ok=True)
     partial = managed.with_name(managed.name + '.' + uuid.uuid4().hex + '.partial')
     try:
-        with urllib.request.urlopen(record['url'], timeout=30) as response, partial.open('xb') as output:
-            count = 0
-            while True:
-                block = response.read(min(1024 * 1024, record['sizeBytes'] + 1 - count))
-                if not block:
-                    break
-                count += len(block)
-                if count > record['sizeBytes']:
-                    raise ValueError('Resource download exceeds pinned size')
-                output.write(block)
-        if record.get('textLineEndings') == 'crlf':
+        def normalize(path):
             # Reviewed source inventories include Windows checkout line endings.
             # Normalize only explicitly declared UTF-8 source/license files;
             # the resulting bytes must still match the original pinned hash.
-            text = partial.read_text(encoding='utf-8')
-            partial.write_bytes(text.replace('\r\n', '\n').replace('\n', '\r\n').encode('utf-8'))
+            text = path.read_text(encoding='utf-8')
+            path.write_bytes(text.replace('\r\n', '\n').replace('\n', '\r\n').encode('utf-8'))
+        download_resource(record['url'], partial, record['sha256'], record['sizeBytes'],
+            root=ROOT, opener=urllib.request.urlopen,
+            transform=normalize if record.get('textLineEndings') == 'crlf' else None)
         if not check(partial, record):
             raise ValueError('Resource checksum differs: ' + group['id'] + '/' + record['path'])
         os.replace(partial, managed)

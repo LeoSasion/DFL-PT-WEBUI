@@ -45,7 +45,7 @@ namespace DflPtWebUi.Launcher
             JavaScriptSerializer serializer = new JavaScriptSerializer();
             serializer.MaxJsonLength = MaximumManifestBytes;
             Dictionary<string, object> root = serializer.DeserializeObject(json) as Dictionary<string, object>;
-            if (root == null || ReadInt32(root, "schemaVersion") != 1)
+            if (root == null || ReadInt32(root, "schemaVersion") != 1 || ReadString(root, "product") != "DFL-PT-WEBUI Launcher")
             {
                 throw new InvalidOperationException("启动器更新清单版本不受支持。");
             }
@@ -101,6 +101,9 @@ namespace DflPtWebUi.Launcher
                 {
                     throw new InvalidOperationException("启动器更新下载地址不可信。");
                 }
+                string expectedHost = provider == "github" ? "github.com" : "gitee.com";
+                if (uri.Host != expectedHost || !uri.AbsolutePath.StartsWith("/LeoSasion/DFL-PT-WEBUI/releases/download/", StringComparison.Ordinal))
+                    throw new InvalidOperationException("启动器更新来源必须属于独立 PT 仓库。");
                 sources.Add(new LauncherUpdateSource(provider, uri));
             }
             if (sources.Count == 0 || sources.Count > 4)

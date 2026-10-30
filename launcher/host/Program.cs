@@ -18,8 +18,6 @@ namespace DflPtWebUi.Launcher
                 {
                     return applyUpdateResult.Value;
                 }
-                LauncherSelfUpdater.ScheduleCleanup(args);
-
                 application = new Application();
                 application.ShutdownMode = ShutdownMode.OnExplicitShutdown;
                 if (!LauncherSelfUpdater.ShouldSkipStartupCheck(args) &&

@@ -18,6 +18,7 @@ param(
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+. (Join-Path $PSScriptRoot 'download-sources.ps1')
 if ([string]::IsNullOrWhiteSpace($ProjectRoot)) { $ProjectRoot = Split-Path -Parent $PSScriptRoot }
 $root = [IO.Path]::GetFullPath($ProjectRoot).TrimEnd('\', '/')
 $rootPrefix = $root + [IO.Path]::DirectorySeparatorChar
@@ -98,7 +99,7 @@ function Get-VerifiedArchive([string]$Name, [string]$Url, [string]$Sha256) {
         $download = Assert-ProjectPath (Join-Path $cache ('download-' + [Guid]::NewGuid().ToString('N') + '.partial'))
         Write-Host "[source-install] Downloading $Name from $Url"
         try {
-            Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $download
+            Invoke-DflPinnedDownload $Url $download $Sha256
             $actual = (Get-FileHash -LiteralPath $download -Algorithm SHA256).Hash
             if ($actual -ne $Sha256) { throw "SHA-256 mismatch for $Name. Expected $Sha256, got $actual." }
             # User-supplied offline directories are read-only inputs. Downloads
@@ -304,8 +305,16 @@ try {
             if ($NoNetwork) { throw 'Offline WebUI setup requires existing webui/node_modules. Prepare it online in this checkout first, or use the complete portable package.' }
             New-Item -ItemType Directory -Path $modules | Out-Null
             $createdModules = $true
-            & $node $corepack pnpm install --frozen-lockfile --registry=https://registry.npmjs.org --store-dir (Join-Path $cache 'pnpm-store')
-            Assert-Exit 'Locked WebUI dependency installation (see runtime-README.md for node-pty build prerequisites)'
+            $installed=$false
+            foreach($registry in Get-DflNpmRegistries){
+                Set-InstallEnvironment 'COREPACK_NPM_REGISTRY' $registry
+                Set-InstallEnvironment 'npm_config_registry' $registry
+                Set-InstallEnvironment 'npm_config_disturl' $(if($registry -eq 'https://registry.npmmirror.com'){'https://registry.npmmirror.com/-/binary/node'}else{'https://nodejs.org/download/release'})
+                & $node $corepack pnpm install --frozen-lockfile --prefer-offline --registry=$registry --fetch-retries=0 --fetch-timeout=12000 --store-dir (Join-Path $cache 'pnpm-store')
+                if($LASTEXITCODE -eq 0){$installed=$true;break}
+                Write-Host ('[source-install] Dependency route failed; trying next registry after '+$registry)
+            }
+            if(-not $installed){throw 'All locked WebUI dependency download routes failed; verified store is retained.'}
         }
         & $node -e "for (const name of ['react','vite','ws']) require.resolve(name); require('node-pty'); console.log('WebUI dependencies / node-pty native module ready');"
         Assert-Exit 'WebUI dependency / native module validation'

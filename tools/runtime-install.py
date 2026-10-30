@@ -13,6 +13,7 @@ import subprocess
 import sys
 import uuid
 import zipfile
+import importlib.util
 
 TOKEN=re.compile(r'^[0-9a-f]{32}$')
 PHASES={'preparing','moving-old','creating','installing','verifying','committed','restoring','rolled-back'}
@@ -224,8 +225,18 @@ class Installer:
         if missing:
             if self.offline:raise ValueError('Offline wheelhouse/cache is incomplete; the existing environment was preserved')
             lock=session/'missing.txt';lock.write_text('\n'.join(f"{record['name']}=={record['version']} --hash=sha256:{record['wheel']['sha256']}" for _,record in missing)+'\n',encoding='utf-8')
-            self.pip(self.base,['download','--disable-pip-version-check','--no-cache-dir','--only-binary=:all:','--no-deps','--require-hashes',
-                '--dest',directory,'--index-url','https://pypi.org/simple','--extra-index-url','https://download.pytorch.org/whl/'+state['cudaRuntime'],'-r',lock],state,'download.log')
+            module_path=self.checked(self.root/'_internal/DeepFaceLab/core/download_sources.py')
+            spec=importlib.util.spec_from_file_location('dfl_download_sources',module_path)
+            downloads=importlib.util.module_from_spec(spec);spec.loader.exec_module(downloads)
+            failures=[]
+            for index,(pypi,torch) in enumerate(downloads.pip_routes(state['cudaRuntime'],self.root)):
+                try:
+                    self.pip(self.base,['download','--disable-pip-version-check','--no-cache-dir','--only-binary=:all:','--no-deps','--require-hashes',
+                        '--retries','0','--timeout','12','--dest',directory,'--index-url',pypi,'--extra-index-url',torch,'-r',lock],state,'download-'+str(index)+'.log')
+                    break
+                except (subprocess.SubprocessError,RuntimeError,ValueError) as error:
+                    failures.append(str(error))
+            else:raise ValueError('All locked package download routes failed: '+'; '.join(failures))
             for name,record in missing:
                 wheel=record['wheel'];path=self.checked(directory/wheel['file'])
                 with path.open('rb') as source:digest=hashlib.file_digest(source,'sha256').hexdigest()

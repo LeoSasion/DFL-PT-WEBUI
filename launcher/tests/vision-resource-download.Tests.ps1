@@ -1,6 +1,7 @@
 $script:visionSource = Join-Path $PSScriptRoot '../../tools/prepare-vision-runtime.ps1'
 
 function Invoke-VisionDownloadFixture([string]$Cache, [string]$Failure, [switch]$Repeat) {
+    . (Join-Path $PSScriptRoot '../download-sources.ps1')
     $tokens=$null; $errors=$null
     $ast=[Management.Automation.Language.Parser]::ParseFile([IO.Path]::GetFullPath($script:visionSource),[ref]$tokens,[ref]$errors)
     foreach($name in @('Test-Hash','Get-Verified')) {

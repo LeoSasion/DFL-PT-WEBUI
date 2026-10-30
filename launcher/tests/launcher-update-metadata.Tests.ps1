@@ -17,6 +17,7 @@ Describe "launcher self-update metadata" {
         $json = @'
 {
   "schemaVersion": 1,
+  "product": "DFL-PT-WEBUI Launcher",
   "version": "0.2.0",
   "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "size": 2419712,
@@ -60,11 +61,12 @@ Describe "launcher self-update metadata" {
             [Version]"0.2.0.0") | Should Be $false
     }
 
-    It "keeps automatic updates disabled while the launcher is distributed separately" {
+    It "uses independent PT manifest endpoints without enabling source auto-updates" {
         $channelJson = Get-Content -LiteralPath $channelPath -Raw -Encoding UTF8
         $channel = $channelJson | ConvertFrom-Json
-        $channel.enabled | Should Be $false
-        @($channel.sources).Count | Should Be 0
+        $channel.enabled | Should Be $true
+        @($channel.sources).Count | Should Be 2
+        foreach($url in $channel.sources){$url | Should Match '/LeoSasion/DFL-PT-WEBUI/'}
         { [DflPtWebUi.Launcher.LauncherUpdateManifest]::Parse($channelJson) } | Should Throw
     }
 }

@@ -26,10 +26,11 @@ namespace DflPtWebUi.Launcher
         private const string CleanupBackupArgument = "--cleanup-update-backup";
         private const string CleanupRequestArgument = "--cleanup-update-request";
         private const string HelperProcessArgument = "--update-helper-pid";
+        private static int readyReceiptWritten;
 
         public static bool ShouldSkipStartupCheck(string[] args)
         {
-            return !LauncherConstants.OnlineUpdatesEnabled || HasArgument(args, SkipUpdateArgument) ||
+            return !LauncherConstants.LauncherSelfUpdatesEnabled || HasArgument(args, SkipUpdateArgument) ||
                 String.Equals(
                     Environment.GetEnvironmentVariable("DFLSN_LAUNCHER_SKIP_UPDATE"),
                     "1",
@@ -81,6 +82,13 @@ namespace DflPtWebUi.Launcher
                 return;
             }
 
+            // A new process alone is not readiness. This runs only after the
+            // embedded page loaded and its initial native state was delivered.
+            if (Interlocked.CompareExchange(ref readyReceiptWritten, 1, 0) != 0) return;
+            string readyPath = requestPath + ".ready";
+            File.WriteAllText(readyPath, Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture)
+                + "|" + ComputeFileSha256(currentExecutable), new UTF8Encoding(false));
+
             Task.Run(delegate
             {
                 WaitForProcessExit(helperPid, 120000);
@@ -101,7 +109,7 @@ namespace DflPtWebUi.Launcher
             Version currentVersion,
             IProgress<LauncherUpdateProgress> progress)
         {
-            if (!LauncherConstants.OnlineUpdatesEnabled) return new LauncherUpdateCheckResult(null, false);
+            if (!LauncherConstants.LauncherSelfUpdatesEnabled) return new LauncherUpdateCheckResult(null, false);
             Report(progress, "checking", "正在检查启动器更新…", -1, 0, 0, "GitHub / Gitee 双源");
             Task<LauncherUpdateManifest> github = TryFetchManifestAsync(
                 new Uri(LauncherConstants.LauncherUpdateManifestGitHub));
@@ -142,31 +150,24 @@ namespace DflPtWebUi.Launcher
             LauncherUpdateManifest manifest,
             IProgress<LauncherUpdateProgress> progress)
         {
-            if (!LauncherConstants.OnlineUpdatesEnabled) throw new InvalidOperationException("在线更新通道尚未配置。");
+            if (!LauncherConstants.LauncherSelfUpdatesEnabled) throw new InvalidOperationException("在线更新通道尚未配置。");
             string versionDirectory = Path.Combine(UpdatesDirectory, manifest.VersionText);
             Directory.CreateDirectory(versionDirectory);
-            List<Task<LauncherDownloadAttempt>> attempts = new List<Task<LauncherDownloadAttempt>>();
+            string cached = Path.Combine(versionDirectory, "launcher-" + manifest.Sha256 + ".exe");
+            if (File.Exists(cached) && new FileInfo(cached).Length == manifest.Size
+                && String.Equals(ComputeFileSha256(cached), manifest.Sha256, StringComparison.OrdinalIgnoreCase)) return cached;
+            List<string> errors = new List<string>();
             for (int index = 0; index < manifest.Sources.Count; index++)
             {
                 LauncherUpdateSource source = manifest.Sources[index];
-                attempts.Add(DownloadFromSourceAsync(manifest, source, versionDirectory, progress));
-            }
-
-            List<string> errors = new List<string>();
-            while (attempts.Count > 0)
-            {
-                Task<LauncherDownloadAttempt> completed = await Task.WhenAny(attempts);
-                attempts.Remove(completed);
-                LauncherDownloadAttempt result = await completed;
+                LauncherDownloadAttempt result = await DownloadFromSourceAsync(manifest, source, versionDirectory, progress);
                 if (result.Succeeded)
                 {
-                    for (int index = 0; index < attempts.Count; index++)
-                    {
-                        CleanupUnusedAttempt(attempts[index]);
-                    }
+                    if (!File.Exists(cached)) { File.Move(result.Path, cached); }
+                    else cached = result.Path; // Preserve an unknown/changed cache entry.
                     Report(progress, "verified", "启动器更新已通过 SHA-256 校验", 100,
                         manifest.Size, manifest.Size, result.Provider + " 下载完成");
-                    return result.Path;
+                    return cached;
                 }
                 errors.Add(result.Provider + "：" + result.Error);
             }
@@ -198,6 +199,7 @@ namespace DflPtWebUi.Launcher
             startInfo.Arguments = ApplyUpdateArgument + " " + QuoteArgument(requestPath);
             startInfo.WorkingDirectory = Path.GetDirectoryName(request.HelperPath);
             startInfo.UseShellExecute = false;
+            startInfo.CreateNoWindow = true;
             if (Process.Start(startInfo) == null)
             {
                 throw new InvalidOperationException("无法启动新版启动器替换程序。");
@@ -329,17 +331,6 @@ namespace DflPtWebUi.Launcher
             });
         }
 
-        private static void CleanupUnusedAttempt(Task<LauncherDownloadAttempt> attempt)
-        {
-            attempt.ContinueWith(delegate(Task<LauncherDownloadAttempt> completed)
-            {
-                if (completed.Status == TaskStatus.RanToCompletion && completed.Result.Succeeded)
-                {
-                    TryDeleteFile(completed.Result.Path);
-                }
-            }, TaskScheduler.Default);
-        }
-
         private static void ApplyUpdate(string requestPath)
         {
             string requestFullPath = Path.GetFullPath(requestPath);
@@ -369,6 +360,7 @@ namespace DflPtWebUi.Launcher
             string stagingPath = Path.Combine(targetDirectory, targetName + ".updating-" + token + ".tmp");
             string backupPath = Path.Combine(targetDirectory, targetName + ".previous-" + token + ".exe");
             bool replaced = false;
+            Process replacement = null;
             try
             {
                 File.Copy(request.HelperPath, stagingPath, false);
@@ -403,13 +395,31 @@ namespace DflPtWebUi.Launcher
                     Process.GetCurrentProcess().Id);
                 startInfo.WorkingDirectory = targetDirectory;
                 startInfo.UseShellExecute = false;
-                if (Process.Start(startInfo) == null)
+                startInfo.CreateNoWindow = true;
+                replacement = Process.Start(startInfo);
+                if (replacement == null)
                 {
                     throw new InvalidOperationException("新版启动器替换成功，但无法自动重启。");
                 }
+                Stopwatch readyTimer = Stopwatch.StartNew();
+                bool ready = false;
+                string expectedReady = replacement.Id.ToString(CultureInfo.InvariantCulture) + "|" + request.ExpectedNewSha256;
+                while (!replacement.HasExited && readyTimer.ElapsedMilliseconds < 60000) {
+                    string readyPath = requestFullPath + ".ready";
+                    try {
+                        if (File.Exists(readyPath) && new FileInfo(readyPath).Length < 256
+                            && File.ReadAllText(readyPath, Encoding.UTF8) == expectedReady) { ready = true; break; }
+                    } catch (IOException) { }
+                    Thread.Sleep(100);
+                }
+                if (!ready) throw new InvalidOperationException("新版启动器未完成界面启动，正在恢复旧版。");
             }
             catch
             {
+                if (replacement != null && !replacement.HasExited) {
+                    replacement.Kill();
+                    replacement.WaitForExit(5000);
+                }
                 if (replaced && File.Exists(backupPath))
                 {
                     LauncherUpdateFileSystem.RestoreBackup(request.TargetPath, backupPath);
@@ -418,7 +428,9 @@ namespace DflPtWebUi.Launcher
             }
             finally
             {
+                if (replacement != null) replacement.Dispose();
                 TryDeleteFile(stagingPath);
+                TryDeleteFile(requestFullPath + ".ready");
             }
         }
 
@@ -975,7 +987,7 @@ namespace DflPtWebUi.Launcher
                 }
 
                 status.Text = "发现启动器 " + manifest.VersionText;
-                detail.Text = "GitHub / Gitee 并行下载，任一可信源成功即可";
+                detail.Text = "正在选择可用下载线路；失败自动切换，已验证文件直接复用";
                 string downloaded = await LauncherSelfUpdater.DownloadUpdateAsync(manifest, reporter);
                 status.Text = "正在切换到新版启动器…";
                 detail.Text = "当前窗口将关闭，新版会自动继续启动";

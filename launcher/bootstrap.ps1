@@ -6,6 +6,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+$env:DFL_MIRROR = $Mirror
 [Console]::OutputEncoding = New-Object Text.UTF8Encoding($false)
 $root = [IO.Path]::GetFullPath($ProjectRoot).TrimEnd('\','/')
 if ($root -eq [IO.Path]::GetPathRoot($root).TrimEnd('\','/')) { throw 'ProjectRoot must be an independent project directory.' }

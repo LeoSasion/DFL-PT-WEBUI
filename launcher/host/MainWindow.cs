@@ -165,6 +165,7 @@ namespace DflPtWebUi.Launcher
                 return;
             }
             await bridge.PushStateAsync();
+            LauncherSelfUpdater.ScheduleCleanup(Environment.GetCommandLineArgs());
             LauncherInstallation.CompleteStartup(logs);
         }
 

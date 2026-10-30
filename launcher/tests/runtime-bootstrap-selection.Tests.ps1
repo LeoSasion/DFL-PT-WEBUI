@@ -26,7 +26,7 @@ Describe 'runtime bootstrap manifest version selection' {
         $result.Embedded | Should Be $false
         $result.RootPath | Should Be $launcher
         $result.ManifestPath | Should Be (Join-Path $launcher 'runtime-manifest.json')
-        ($script:projectManifest | ConvertFrom-Json).manifestVersion | Should Be '2026.10.29.1'
+        ($script:projectManifest | ConvertFrom-Json).manifestVersion | Should Be '2026.10.30.1'
     }
 
     It 'retains the newer embedded fallback when project bootstrap is older' {

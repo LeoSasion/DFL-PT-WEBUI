@@ -33,6 +33,8 @@ FIXED_PAYLOAD = {
     "bootstrap/runtime-install.py": "tools/runtime-install.py",
     "bootstrap/install-project.ps1": "launcher/install-project.ps1",
     "bootstrap/install-source.ps1": "launcher/install-source.ps1",
+    "bootstrap/download-sources.ps1": "launcher/download-sources.ps1",
+    "bootstrap/download-sources.json": "release/download-sources.json",
     "bootstrap/upgrade-project.ps1": "launcher/upgrade-project.ps1",
     "bootstrap/source-pin.json": "release/source-pin.json",
     "bootstrap/version.json": "release/version.json",
@@ -421,7 +423,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-revision", required=True,
                         help="Reviewed sanitized public commit whose tree matches this checkout.")
-    parser.add_argument("--version", default="0.1.6-preview")
+    parser.add_argument("--version", default="0.1.7-preview")
     parser.add_argument("--output", type=Path)
     arguments = parser.parse_args()
     output = arguments.output or ROOT / "release-output" / ("launcher-v" + arguments.version)

@@ -907,7 +907,7 @@ namespace DflPtWebUi.Launcher
                 + ProcessRunner.Quote(resources.ScriptPath)
                 + " -ProjectRoot " + ProcessRunner.Quote(projectRoot)
                 + " -ManifestPath " + ProcessRunner.Quote(resources.ManifestPath)
-                + " -Mirror official";
+                + " -Mirror " + ProcessRunner.Quote(DownloadSources.NormalizeMode(settings.Current.Mirror));
             if (repair)
             {
                 arguments += " -Repair";
@@ -983,10 +983,16 @@ namespace DflPtWebUi.Launcher
                 try {
                 if (installRequired) {
                     logs.Add("bootstrap", "正在按固定锁文件准备 WebUI 依赖，原目录已暂存以便失败恢复。", "info");
-                    CommandResult installed = await runner.RunAsync(node, ProcessRunner.Quote(corepack)
-                        + " pnpm install --frozen-lockfile --prefer-offline --store-dir " + ProcessRunner.Quote(Path.Combine(cache, "pnpm-store")),
-                        webuiRoot, environment, "bootstrap");
-                    EnsureSuccess(installed, "WebUI 依赖安装失败");
+                    bool installed = false;
+                    foreach (string registry in DownloadSources.NpmRegistries(DownloadSources.NormalizeMode(settings.Current.Mirror))) {
+                        DownloadSources.SetNodeRegistry(environment, registry);
+                        CommandResult attempt = await runner.RunAsync(node, ProcessRunner.Quote(corepack)
+                            + " pnpm install --frozen-lockfile --prefer-offline --fetch-retries=0 --fetch-timeout=12000 --registry=" + registry
+                            + " --store-dir " + ProcessRunner.Quote(Path.Combine(cache, "pnpm-store")), webuiRoot, environment, "bootstrap");
+                        if (attempt.Success) { installed = true; break; }
+                        logs.Add("bootstrap", "当前依赖下载线路失败，正在尝试备用线路；已验证缓存继续保留。", "warning");
+                    }
+                    if (!installed) throw new InvalidOperationException("WebUI 依赖的全部下载线路均失败，请稍后重试；原目录将恢复。");
                     if (!await CanLoadWebUiDependenciesAsync(webuiRoot, environment))
                         throw new InvalidOperationException("WebUI 依赖安装后加载验证失败，原目录将恢复。");
                 }
@@ -1046,7 +1052,7 @@ namespace DflPtWebUi.Launcher
             }
 
             // Match the fixed registries used by the PT source installer.
-            environment["DFL_MIRROR"] = "official";
+            environment["DFL_MIRROR"] = DownloadSources.NormalizeMode(settings.Current.Mirror);
             environment["NPM_CONFIG_REGISTRY"] = "https://registry.npmjs.org";
             environment["COREPACK_NPM_REGISTRY"] = "https://registry.npmjs.org";
             environment["PIP_INDEX_URL"] = "https://pypi.org/simple";

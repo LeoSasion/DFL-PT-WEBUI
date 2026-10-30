@@ -129,7 +129,7 @@ def fixture(tmp_path, fake_exe, *, installed=None, selected='cu126',broken=False
         p.write_text('# fixture', encoding='utf-8')
     shutil.copy2(ROOT/'tools/runtime-install.py',project/'tools/runtime-install.py')
     core=project/'_internal/DeepFaceLab/core';core.mkdir()
-    for name in ['gpu_runtime.py','torch_runtime_switch.py']:
+    for name in ['gpu_runtime.py','torch_runtime_switch.py','download_sources.py']:
         shutil.copy2(ROOT/'_internal/DeepFaceLab/core'/name,core/name)
     (core/'__init__.py').write_text('',encoding='utf-8')
     for variant in ['cu126','cu128']:
@@ -151,7 +151,7 @@ def fixture(tmp_path, fake_exe, *, installed=None, selected='cu126',broken=False
         p = project / rel
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps(data), encoding='utf-8')
-    for name in ['torch-runtimes.json','python-sbom.json']:shutil.copy2(ROOT/'release'/name,project/'release'/name)
+    for name in ['torch-runtimes.json','python-sbom.json','download-sources.json']:shutil.copy2(ROOT/'release'/name,project/'release'/name)
     if installed:
         p = project / '.venv/Scripts/python.exe'
         p.parent.mkdir(parents=True)
@@ -468,7 +468,7 @@ $ast=[Management.Automation.Language.Parser]::ParseFile('INSTALLER',[ref]$null,[
 foreach($name in @('Assert-ProjectPath','Get-VerifiedArchive')) {
   Invoke-Expression ($ast.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name},$true)[0].Extent.Text)
 }
-function Invoke-WebRequest { param([switch]$UseBasicParsing,$Uri,$OutFile) $script:DownloadCount++;Copy-Item -LiteralPath $source -Destination $OutFile }
+    function Invoke-DflPinnedDownload { param($Url,$OutFile,$Sha256) $script:DownloadCount++;Copy-Item -LiteralPath $source -Destination $OutFile }
 function Get-FileHash {
   param($LiteralPath,$Algorithm) $script:HashCount++
   $inputFile=[IO.File]::OpenRead($LiteralPath);$digest=[Security.Cryptography.SHA256]::Create()
@@ -525,7 +525,7 @@ def test_manifest_accepts_paired_variants_and_rejects_crossed_cuda_versions():
     manifest = json.loads((ROOT / 'launcher/runtime-manifest.json').read_text(encoding='utf-8'))
     python = next(c for c in manifest['components'] if c['id'] == 'python')
     pattern = python['validation']['command']['outputRegex']
-    assert manifest['manifestVersion'] == '2026.10.29.1'
+    assert manifest['manifestVersion'] == '2026.10.30.1'
     for variant, cuda in [('cu126','12.6'), ('cu128','12.8')]:
         assert re.fullmatch(pattern, f'DFL_PT_RUNTIME_OK|3.12.14|2.9.1+{variant}|{cuda}')
     assert not re.fullmatch(pattern, 'DFL_PT_RUNTIME_OK|3.12.14|2.9.1+cu126|12.8')

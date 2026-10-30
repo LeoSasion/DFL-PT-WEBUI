@@ -333,11 +333,12 @@ Describe 'fixed source upgrade transactions' {
 }
 
 Describe 'bounded PT first-install source acquisition' {
-    It 'bounds fixed-source headers and body reads without following redirects' {
+    It 'bounds fixed-source headers, reads and CDN redirects' {
         $request=New-ProjectInstallSourceRequest @{sourceCommit=('a'*40)}
         try {
             $request.RequestUri.AbsoluteUri | Should Be ('https://codeload.github.com/LeoSasion/DFL-PT-WEBUI/zip/'+('a'*40))
-            $request.AllowAutoRedirect | Should Be $false
+            $request.AllowAutoRedirect | Should Be $true
+            $request.MaximumAutomaticRedirections | Should Be 5
             ($request.Timeout -gt 0 -and $request.Timeout -le 30000) | Should Be $true
             ($request.ReadWriteTimeout -gt 0 -and $request.ReadWriteTimeout -le 30000) | Should Be $true
         } finally { $request.Abort() }

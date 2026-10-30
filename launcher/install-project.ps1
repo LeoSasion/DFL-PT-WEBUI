@@ -15,6 +15,7 @@ param(
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+. (Join-Path $PSScriptRoot 'download-sources.ps1')
 # Windows PowerShell may inherit PowerShell 7's incompatible module search
 # paths. Resolve this shell's own commands before hashing or publishing files.
 foreach ($moduleName in @('Microsoft.PowerShell.Utility','Microsoft.PowerShell.Management')) {
@@ -166,19 +167,21 @@ function Assert-ProjectInstallTarget([string]$Path) {
     }
 }
 
-function New-ProjectInstallSourceRequest([object]$Pin) {
+function New-ProjectInstallSourceRequest([object]$Pin,[string]$SourceUrl='') {
     # Use the same Windows proxy/TLS transport as the runtime archive installer.
     # HttpClient in Windows PowerShell can stall before receiving headers on
     # otherwise working system proxies. Bound headers and stream reads alike.
-    $request=[Net.HttpWebRequest]::Create('https://codeload.github.com/LeoSasion/DFL-PT-WEBUI/zip/'+$Pin.sourceCommit)
-    $request.AllowAutoRedirect=$false
-    $request.Timeout=30000
-    $request.ReadWriteTimeout=30000
+    if(-not $SourceUrl){$SourceUrl='https://codeload.github.com/LeoSasion/DFL-PT-WEBUI/zip/'+$Pin.sourceCommit}
+    $request=[Net.HttpWebRequest]::Create($SourceUrl)
+    $request.AllowAutoRedirect=$true
+    $request.MaximumAutomaticRedirections=5
+    $request.Timeout=12000
+    $request.ReadWriteTimeout=12000
     $request.UserAgent='DFL-PT-WEBUI-Launcher/1.0'
     return $request
 }
 
-function Get-ProjectInstallArchive([string]$Destination, [string]$OfflineArchive, [bool]$Offline, [long]$Limit, [object]$Pin=$null) {
+function Get-ProjectInstallArchiveFromSource([string]$Destination, [string]$OfflineArchive, [bool]$Offline, [long]$Limit, [object]$Pin=$null,[string]$SourceUrl='') {
     if (-not [string]::IsNullOrWhiteSpace($OfflineArchive)) {
         $inputPath = Assert-ProjectInstallPlainPath $OfflineArchive
         if (-not (Test-Path -LiteralPath $inputPath -PathType Leaf) -or
@@ -189,8 +192,8 @@ function Get-ProjectInstallArchive([string]$Destination, [string]$OfflineArchive
     }
     if ($Offline) { throw '离线模式需要提供 SourceArchivePath 源码 ZIP。' }
     if (-not $Pin) { throw '在线安装必须指定固定源码快照。' }
-    # Disable redirects and apply finite timeouts. Never accept an
-    # alternate source host from downloaded content, command-line input or Git.
+    # Only committed routes are accepted. CDN redirects must retain HTTPS,
+    # and the complete archive must match the pinned SHA before extraction.
     $previousTls = [Net.ServicePointManager]::SecurityProtocol
     $request = $null
     $response = $null
@@ -198,8 +201,9 @@ function Get-ProjectInstallArchive([string]$Destination, [string]$OfflineArchive
     $outputStream = $null
     try {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        $request=New-ProjectInstallSourceRequest $Pin
+        $request=New-ProjectInstallSourceRequest $Pin $SourceUrl
         $response=$request.GetResponse()
+        if ($response.ResponseUri.Scheme -cne 'https') { throw 'Source redirect must retain HTTPS.' }
         if ([int]$response.StatusCode -ne 200) { throw "官方源码下载失败（HTTP $([int]$response.StatusCode)）。" }
         if ($response.ContentLength -gt $Limit) {
             throw '官方源码包超过大小上限。'
@@ -224,6 +228,31 @@ function Get-ProjectInstallArchive([string]$Destination, [string]$OfflineArchive
         if ($request) { $request.Abort() }
         [Net.ServicePointManager]::SecurityProtocol = $previousTls
     }
+}
+
+function Get-ProjectInstallArchive([string]$Destination,[string]$OfflineArchive,[bool]$Offline,[long]$Limit,[object]$Pin=$null) {
+    if($OfflineArchive -or $Offline -or -not $Pin){Get-ProjectInstallArchiveFromSource $Destination $OfflineArchive $Offline $Limit $Pin;return}
+    $url='https://codeload.github.com/LeoSasion/DFL-PT-WEBUI/zip/'+$Pin.sourceCommit
+    $urls=@(Get-DflDownloadUrls $url)
+    if($env:DFL_MIRROR -ne 'official' -and $Pin.PSObject.Properties.Name -contains 'archiveMirrors'){
+        foreach($mirror in $Pin.archiveMirrors){
+            if($mirror -notmatch '^https://gitee\.com/LeoSasion/DFL-PT-WEBUI/releases/download/[A-Za-z0-9._/-]+$'){throw 'Untrusted PT source mirror'}
+            $urls=@($urls[0])+@($mirror)+@($urls|Select-Object -Skip 1)
+        }
+    }
+    if(Test-Path -LiteralPath $Destination){throw 'Source download target already exists'}
+    $errors=@()
+    foreach($candidate in $urls){
+        try{
+            Get-ProjectInstallArchiveFromSource $Destination '' $false $Limit $Pin $candidate
+            if((Get-FileHash -LiteralPath $Destination -Algorithm SHA256).Hash.ToLowerInvariant() -cne $Pin.archiveSha256){throw 'Pinned source SHA-256 mismatch'}
+            return
+        }catch{
+            $errors+=(([Uri]$candidate).Host+': '+$_.Exception.Message)
+            if(Test-Path -LiteralPath $Destination -PathType Leaf){Remove-Item -LiteralPath (Assert-ProjectInstallPlainPath $Destination) -Force}
+        }
+    }
+    throw ('All fixed source download routes failed: '+($errors -join '; '))
 }
 
 function Expand-ProjectInstallArchive([string]$ZipPath, [string]$Destination, [long]$ExpandedLimit, [long]$EntryLimit, [int]$EntryCountLimit, [string]$ArchiveRoot='DFL-PT-WEBUI-main', [string]$OwnershipPath='') {

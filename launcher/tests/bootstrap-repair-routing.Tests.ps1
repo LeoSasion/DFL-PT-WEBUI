@@ -105,6 +105,7 @@ function Invoke-RepairBootstrapFixture([hashtable]$Fixture, [switch]$Repair, [sw
 }
 
 function Invoke-IsolatedWebuiPreparation([string]$Root, [bool]$SkipPreparation, [bool]$SkipBuild, [bool]$DamagedModules=$false) {
+    . (Join-Path $PSScriptRoot '../download-sources.ps1')
     # Execute the actual guarded installer block with a local function standing
     # in for Node, so no dependencies, registry, training or runtime are touched.
     $nodeCalls = New-Object 'System.Collections.Generic.List[object]'

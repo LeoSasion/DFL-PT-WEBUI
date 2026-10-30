@@ -10,6 +10,7 @@ param(
     [switch]$IncludeScene
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path (Split-Path -Parent $PSScriptRoot) 'launcher/download-sources.ps1')
 # A Node process launched from PowerShell 7 can pass incompatible module paths
 # to Windows PowerShell 5.1. Load the running shell's own bundled modules.
 Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Utility/Microsoft.PowerShell.Utility.psd1') -Force
@@ -37,7 +38,7 @@ function Get-Verified([string]$Name, [string]$Url, [string]$Sha256) {
     $partial = $cached + '.' + [Guid]::NewGuid().ToString('N') + '.partial'
     Write-Host "Downloading $Name"
     try {
-        Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $partial -TimeoutSec 60
+        Invoke-DflPinnedDownload $Url $partial $Sha256
         if (-not (Test-Hash $partial $Sha256)) { throw "SHA-256 mismatch: $Name" }
         Move-Item -LiteralPath $partial -Destination $cached -Force
     } finally {
